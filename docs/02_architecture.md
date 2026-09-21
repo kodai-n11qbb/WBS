@@ -20,42 +20,50 @@
 +-------------------+---------------------------------------+-----------------------------+
                     | (Interfaces)                          | (Interfaces)
 +-------------------v-------------+         +---------------+-----------------------------+
-|       P2P Transport Layer       |         |       Git-like Storage Layer                |
-|    (Discovery, Socket, Mesh)    |         |    (JSONL File, InMemory, DB)               |
+|       P2P Transport Layer       |         |   State Snapshot & Git-like Storage Layer   |
+|    (Discovery, Socket, Mesh)    |         |  (data/state.json, data/events.jsonl, DB)   |
 +---------------------------------+         +---------------------------------------------+
 ```
 
 ## 2. コンポーネントインターフェース定義（抽象ポート）
 
 ### (1) Screen-Floating Layer & Pure Tree View Port (浮遊層＆樹状ツリービューポート)
-- **役割**: 画面上を優しく漂う未分類フローズンカードと高度なツリー構造の描画・操作。
+- **役割**: 画面上を優しく漂う独立ルートタスクカードと高度なツリー構造の描画・操作。
 - **機能**:
-  - 親を持たない未分類タスクを画面上の空きスペースに浮遊描画 (`.floating-unclassified-card`)。
+  - 親を指定せずに作成されたタスクは自動生成コンテナに入らず、そのまま独立したルートタスク (`parentId: null`) として生成。
+  - 親を持たない独立ルートタスクを画面上の空きスペースに浮遊描画 (`.floating-unclassified-card`)。
   - ドラッグしてツリー内のタスク枠内へ重ね合わせることで、直感的に子要素化。
   - 親タスクの背景グラデーション (`linear-gradient`) による省スペース進捗 fill 描画。
   - 視覚的DOM描画順に従う統一キーボードナビゲーション (`ArrowUp` / `ArrowDown` / `ArrowLeft` / `ArrowRight`)。
 
-### (2) Obsidian Spring Physics Renderer Port (グラフレンダラーポート)
+### (2) State Snapshot & Event Storage Port (最新状態スナップショット＆イベントリポジトリポート)
+- **役割**: 変更履歴 (`events.jsonl`) のバックグラウンド記録と、ディレクトリ直下への最新状態ファイル (`data/state.json`) のリアルタイム自動永続化。
+- **機能**:
+  - `data/state.json` に最新の全タスク状態（Materialized Snapshot）を常時出力し、アプリ起動速度 $O(1)$ および他ツール・手動参照の可視性を実現。
+  - `data/events.jsonl` により P2P ネットワーク差分マージ (`SYNC_REQUEST` / `SYNC_RESPONSE`) と改ざん防止ハッシュチェーンを維持。
+
+### (3) Obsidian Spring Physics Renderer Port (グラフレンダラーポート)
 - **役割**: タスクの親子ネットワークを Obsidian 風のノードとバネ物理（Spring Elasticity）で描画するプレゼンテーションポート。
 - **機能**:
   - ノードドラッグ時のバネ弾性連動（接続ノードが引きずられて滑らかに追従）。
   - ノードの円盤枠内（半径45px）へのドラッグ＆ドロップによる「親子化確認モーダルダイアログ」トリガー。
   - ノードクリックによるツリー/カンバン表示の対象タスクカードへのフォーカス連動。
 
-### (3) Status Aggregator & Single-Parent Hierarchy Port (進捗算出・単一親構造ポート)
+### (4) Status Aggregator & Single-Parent Hierarchy Port (進捗算出・単一親構造ポート)
 - **役割**:
   - 子タスクの状態から親タスクの進捗率（Completion Rate: 例 `33.3%`）を動的算出。
   - 1:Nの単一親ツリー構造 (`parentId?: string | null`) を厳守し、巡回（Cycle）参照の発生を防止。
 
-### (4) Standalone Executable Packaging Adapter (単体実行バイナリ)
+### (5) Standalone Executable Packaging Adapter (単体実行バイナリ)
 - **役割**: Node.js, Python, Cargo 等が入っていない環境でも、単一バイナリ (`.exe` / `.app`) をダブルクリックするだけでローカル Web サーバーが立ち上がり画面を自動オープンするアダプター構造。
 
 ---
 
 ## 3. Dependency Injection (DI) 方針
-- `ObsidianPhysicsRenderer` および `StatusAggregator` もドメインコアから分離された独立ポートとして外部注入（DI）可能とします。
+- `StateSnapshotStorage` および `ObsidianPhysicsRenderer` もドメインコアから分離された独立ポートとして外部注入（DI）可能とします。
 
 ---
 
 [次へ: データモデルと同期仕様](./03_data_sync.md)
+
 

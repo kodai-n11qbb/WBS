@@ -17,6 +17,7 @@ export interface Task {
   priority: TaskPriority;
   status: TaskStatus;
   orderIndex: number;
+  isCollapsed?: boolean;
   assignedNodeId?: string;
   updatedAt: number;
   authorNodeId: string;
@@ -34,6 +35,7 @@ export type EventType =
   | 'TASK_STATUS_UPDATED'
   | 'TASK_REORDERED'
   | 'TASK_PARENT_CHANGED'
+  | 'TASK_COLLAPSE_TOGGLED'
   | 'TASK_DELETED';
 
 export interface SyncEvent {

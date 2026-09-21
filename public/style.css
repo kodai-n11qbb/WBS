@@ -28,17 +28,15 @@ body {
 
 /* Background Blobs */
 .background-blobs {
-  position: fixed;
-  top: 0; left: 0; width: 100vw; height: 100vh;
+  position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
   z-index: -1; overflow: hidden; filter: blur(80px); opacity: 0.4;
 }
-
 .blob { position: absolute; border-radius: 50%; }
 .blob-1 { width: 400px; height: 400px; background: radial-gradient(circle, #6366f1, #3b82f6); top: -100px; left: -100px; }
 .blob-2 { width: 500px; height: 500px; background: radial-gradient(circle, #a855f7, #ec4899); bottom: -150px; right: -100px; }
 .blob-3 { width: 300px; height: 300px; background: radial-gradient(circle, #10b981, #06b6d4); top: 40%; left: 50%; }
 
-.app-container { max-width: 1240px; margin: 0 auto; padding: 2rem 1.5rem; }
+.app-container { max-width: 1280px; margin: 0 auto; padding: 2rem 1.5rem; }
 
 /* Header */
 .app-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
@@ -60,18 +58,17 @@ h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; }
   padding: 0.5rem 1rem; border-radius: 9999px; font-size: 0.85rem; color: var(--text-secondary);
   backdrop-filter: blur(10px);
 }
-
 .status-dot { width: 8px; height: 8px; border-radius: 50%; }
 .status-dot.online { background-color: var(--accent-green); box-shadow: 0 0 10px var(--accent-green); }
 
-/* Glassmorphism Card */
+/* Glassmorphism Base */
 .glass-card {
   background: var(--card-bg); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--card-border); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg);
 }
 
 /* Quick Input Section */
-.task-input-section { margin-bottom: 2rem; }
+.task-input-section { margin-bottom: 1.5rem; }
 .input-card { display: flex; gap: 0.75rem; padding: 0.75rem 1rem; align-items: center; }
 
 input[type="text"] {
@@ -95,6 +92,8 @@ input[type="text"]::placeholder { color: var(--text-secondary); }
 }
 .btn-secondary:hover { background: rgba(255, 255, 255, 0.15); }
 
+.kb-hint { font-size: 0.75rem; color: var(--accent-blue); padding: 0.4rem 0.8rem; background: rgba(56, 189, 248, 0.08); border-radius: 99px; }
+
 /* Toast */
 .toast {
   position: fixed; top: 1.5rem; right: 1.5rem; background: rgba(239, 68, 68, 0.9);
@@ -105,11 +104,11 @@ input[type="text"]::placeholder { color: var(--text-secondary); }
 
 /* Kanban Board Layout */
 .kanban-board {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 1.5rem;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 1.5rem;
 }
 
 .kanban-column {
-  padding: 1.25rem; display: flex; flex-direction: column; min-height: 550px;
+  padding: 1.25rem; display: flex; flex-direction: column; min-height: 580px;
   transition: border-color 0.2s ease, background 0.2s ease;
 }
 .kanban-column.drag-over { border-color: var(--accent-blue); background: rgba(56, 189, 248, 0.08); }
@@ -131,26 +130,58 @@ input[type="text"]::placeholder { color: var(--text-secondary); }
   padding: 0.2rem 0.6rem; border-radius: 999px; color: var(--text-secondary);
 }
 
-.task-list { display: flex; flex-direction: column; gap: 1rem; flex: 1; min-height: 100px; }
+.task-list { display: flex; flex-direction: column; gap: 0.85rem; flex: 1; min-height: 100px; }
 
-/* Task Item Card */
+/* Visual Tree Item Styling */
+.task-tree-node {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  position: relative;
+}
+
+/* Subtask Indentation & Tree Connector Line */
+.task-tree-node.is-subtask {
+  margin-left: 1.5rem;
+  border-left: 2px dashed rgba(99, 102, 241, 0.4);
+  padding-left: 0.85rem;
+}
+
 .task-item {
-  background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 1rem; border-radius: var(--radius-md); cursor: grab; user-select: none;
-  transition: all 0.2s ease; display: flex; flex-direction: column; gap: 0.65rem;
+  background: rgba(15, 23, 42, 0.75); border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 0.85rem 1rem; border-radius: var(--radius-md); cursor: grab; user-select: none;
+  transition: all 0.2s ease; display: flex; flex-direction: column; gap: 0.5rem;
+  position: relative;
 }
 .task-item:active { cursor: grabbing; }
 .task-item.dragging { opacity: 0.4; transform: scale(0.98); }
-.task-item:hover { border-color: rgba(255, 255, 255, 0.2); transform: translateY(-2px); box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3); }
 
-/* Parent Tree Badge */
-.parent-badge {
-  font-size: 0.75rem; color: var(--accent-blue); background: rgba(56, 189, 248, 0.1);
-  padding: 0.2rem 0.5rem; border-radius: var(--radius-sm); align-self: flex-start;
-  font-weight: 500; display: inline-flex; align-items: center; gap: 0.3rem;
+/* Focused keyboard navigation state */
+.task-item.focused {
+  border-color: var(--accent-blue) !important;
+  box-shadow: 0 0 14px rgba(56, 189, 248, 0.5) !important;
+  transform: translateY(-2px);
 }
 
+/* Drag over parent card highlight for parenting */
+.task-item.drop-target-parent {
+  border-color: var(--accent-purple) !important;
+  background: rgba(129, 140, 248, 0.15) !important;
+  box-shadow: 0 0 16px rgba(129, 140, 248, 0.6) !important;
+}
+
+.task-item:hover { border-color: rgba(255, 255, 255, 0.2); transform: translateY(-2px); box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3); }
+
 .task-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem; }
+.task-title-group { display: flex; align-items: center; gap: 0.5rem; flex: 1; }
+
+.btn-toggle-tree {
+  background: rgba(255, 255, 255, 0.05); border: 1px solid var(--card-border);
+  color: var(--accent-blue); font-size: 0.75rem; padding: 0.15rem 0.4rem;
+  border-radius: 4px; cursor: pointer; transition: background 0.15s ease;
+}
+.btn-toggle-tree:hover { background: rgba(56, 189, 248, 0.2); }
+
 .task-title { font-size: 0.95rem; font-weight: 600; line-height: 1.4; color: var(--text-primary); }
 
 .btn-delete {
@@ -160,18 +191,13 @@ input[type="text"]::placeholder { color: var(--text-secondary); }
 .btn-delete:hover { color: var(--accent-red); background: rgba(248, 113, 113, 0.1); }
 
 .task-intent {
-  font-size: 0.825rem; color: var(--text-secondary); background: rgba(255, 255, 255, 0.03);
-  padding: 0.5rem 0.75rem; border-radius: var(--radius-sm); border-left: 3px solid var(--accent-purple); line-height: 1.4;
+  font-size: 0.8rem; color: var(--text-secondary); background: rgba(255, 255, 255, 0.03);
+  padding: 0.4rem 0.65rem; border-radius: var(--radius-sm); border-left: 3px solid var(--accent-purple); line-height: 1.35;
 }
-
-.dod-section { display: flex; flex-direction: column; gap: 0.35rem; margin-top: 0.25rem; }
-.dod-header { font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; }
-.dod-item { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; color: var(--text-secondary); }
-.dod-item.completed { text-decoration: line-through; opacity: 0.6; }
 
 .task-footer {
   display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem;
-  color: var(--text-secondary); padding-top: 0.5rem; border-top: 1px solid rgba(255, 255, 255, 0.05);
+  color: var(--text-secondary); padding-top: 0.4rem; border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .priority-tag { font-size: 0.7rem; font-weight: 700; padding: 0.15rem 0.4rem; border-radius: 4px; }
@@ -190,7 +216,6 @@ input[type="text"]::placeholder { color: var(--text-secondary); }
 .btn-close { background: transparent; border: none; color: var(--text-secondary); font-size: 1.5rem; cursor: pointer; }
 .form-group { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1.25rem; }
 .form-group label { font-size: 0.85rem; font-weight: 600; color: var(--text-primary); }
-.optional { font-size: 0.75rem; color: var(--text-secondary); font-weight: normal; }
 
 input[type="text"], textarea, select {
   background: rgba(15, 23, 42, 0.8); border: 1px solid var(--card-border);
@@ -198,8 +223,5 @@ input[type="text"], textarea, select {
   font-family: inherit; font-size: 0.9rem; outline: none;
 }
 input[type="text"]:focus, textarea:focus, select:focus { border-color: var(--accent-blue); }
-
-.dod-input-row { display: flex; gap: 0.5rem; margin-bottom: 0.5rem; }
-.dod-input-row input { flex: 1; }
 
 .modal-footer { display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.5rem; }

@@ -19,7 +19,7 @@ const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 const NODE_ID = process.env.NODE_ID || `node-${crypto.randomUUID().slice(0, 6)}`;
 const UDP_PORT = process.env.UDP_PORT ? parseInt(process.env.UDP_PORT, 10) : 41234;
 
-// 1. Dependency Injection setup with JSONL File Persistence according to DEV_POLICY_v1.0518.md
+// 1. Dependency Injection setup according to DEV_POLICY_v1.0518.md
 const repository = new JsonlFileRepository(DATA_FILE);
 const transport = new UdpPeerTransport({ nodeId: NODE_ID, port: UDP_PORT });
 const syncEngine = new SyncEngine();
@@ -149,6 +149,9 @@ wss.on('connection', async (ws) => {
         await broadcastStateToUI();
       } else if (data.action === 'CHANGE_PARENT') {
         await nodeService.changeTaskParent(activeProjectId, data.taskId, data.newParentId);
+        await broadcastStateToUI();
+      } else if (data.action === 'TOGGLE_COLLAPSE') {
+        await nodeService.toggleTaskCollapse(activeProjectId, data.taskId, data.isCollapsed);
         await broadcastStateToUI();
       } else if (data.action === 'DELETE_TASK') {
         await nodeService.deleteTask(activeProjectId, data.taskId);

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Share-Log | LAN P2P Tracker (JSONL & Tree)</title>
+  <title>Share-Log | LAN P2P Interactive Tree Tracker</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -19,14 +19,15 @@
   <div class="app-container">
     <header class="app-header">
       <div class="header-left">
-        <div class="logo-badge">JSONL</div>
+        <div class="logo-badge">TREE</div>
         <div>
           <h1 id="project-title">LAN Share-Log Tracker</h1>
-          <p class="subtitle">GitライクJSONL永続化 ＆ ツリー構造タスクシステム</p>
+          <p class="subtitle">ビジュアルツリー ＆ 十字キーアクセシビリティ ＆ 自動ステータス同期</p>
         </div>
       </div>
 
       <div class="header-right">
+        <div class="kb-hint">💡 十字キー (↑↓←→) で爆速移動</div>
         <div class="node-pill">
           <span class="status-dot online"></span>
           <span id="node-id-display">Node: Connecting...</span>
@@ -44,7 +45,7 @@
           <input 
             type="text" 
             id="quick-title-input" 
-            placeholder="タスク名のみで即作成 (Enter) ... (例: 親タスク/サブタスクの検証)" 
+            placeholder="タスク名を入力してEnter... (ドラッグ＆ドロップまたはモーダルで親子化)" 
             required 
             autocomplete="off"
           />
@@ -56,7 +57,7 @@
             追加
           </button>
           <button type="button" id="btn-open-modal" class="btn-secondary">
-            + オプション入力 (親タスク/DoD)
+            + オプション入力 (親タスク/Why)
           </button>
         </form>
       </section>
@@ -102,11 +103,11 @@
     </main>
   </div>
 
-  <!-- Detailed Modal (Optional Attributes & Parent Task) -->
+  <!-- Detailed Modal -->
   <div id="task-modal" class="modal-overlay hidden">
     <div class="modal-card glass-card">
       <div class="modal-header">
-        <h2>タスク作成（オプション項目設定）</h2>
+        <h2>タスク作成（オプション設定）</h2>
         <button id="btn-close-modal" class="btn-close">&times;</button>
       </div>
       <form id="detailed-task-form">
@@ -116,7 +117,7 @@
         </div>
 
         <div class="form-group">
-          <label for="select-parent-task">親タスク (ツリー構造) <span class="optional">(任意)</span></label>
+          <label for="select-parent-task">親タスク (ツリー階層) <span class="optional">(任意)</span></label>
           <select id="select-parent-task">
             <option value="">(親タスクなし - ルートタスク)</option>
           </select>
@@ -134,12 +135,6 @@
             <option value="HIGH">HIGH (高)</option>
             <option value="LOW">LOW (低)</option>
           </select>
-        </div>
-
-        <div class="form-group">
-          <label>完了定義 (Definition of Done: DoD) <span class="optional">(任意)</span></label>
-          <div id="dod-list" class="dod-input-list"></div>
-          <button type="button" id="btn-add-dod" class="btn-secondary">+ DoD項目を追加</button>
         </div>
 
         <div class="modal-footer">

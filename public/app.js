@@ -2,6 +2,7 @@
   let socket = null;
   let currentTasks = [];
   let draggedTaskId = null;
+  let focusedTaskId = null;
 
   // DOM Elements
   const nodeDisplay = document.getElementById('node-id-display');
@@ -20,8 +21,6 @@
   const selectParentTask = document.getElementById('select-parent-task');
   const inputIntent = document.getElementById('input-intent');
   const selectPriority = document.getElementById('select-priority');
-  const dodListContainer = document.getElementById('dod-list');
-  const btnAddDod = document.getElementById('btn-add-dod');
 
   const listTodo = document.getElementById('list-todo');
   const listInProgress = document.getElementById('list-in-progress');
@@ -50,7 +49,7 @@
           nodeDisplay.textContent = `Node: ${data.nodeId}`;
           currentTasks = data.state.tasks || [];
           updateParentTaskOptions();
-          renderTasks();
+          renderTreeBoard();
         } else if (data.type === 'ERROR') {
           showErrorToast(data.message);
         }
@@ -83,58 +82,150 @@
     });
   }
 
-  function renderTasks() {
+  // Render Visual Tree Board
+  function renderTreeBoard() {
     listTodo.innerHTML = '';
     listInProgress.innerHTML = '';
     listDone.innerHTML = '';
 
-    const todoTasks = currentTasks.filter((t) => t.status === 'TODO').sort((a, b) => a.orderIndex - b.orderIndex);
-    const inProgressTasks = currentTasks.filter((t) => t.status === 'IN_PROGRESS').sort((a, b) => a.orderIndex - b.orderIndex);
-    const doneTasks = currentTasks.filter((t) => t.status === 'DONE').sort((a, b) => a.orderIndex - b.orderIndex);
+    const rootTasks = currentTasks.filter((t) => !t.parentId).sort((a, b) => a.orderIndex - b.orderIndex);
 
-    countTodo.textContent = todoTasks.length;
-    countInProgress.textContent = inProgressTasks.length;
-    countDone.textContent = doneTasks.length;
+    let todoCount = 0;
+    let inProgressCount = 0;
+    let doneCount = 0;
 
-    todoTasks.forEach((t) => listTodo.appendChild(createTaskCard(t)));
-    inProgressTasks.forEach((t) => listInProgress.appendChild(createTaskCard(t)));
-    doneTasks.forEach((t) => listDone.appendChild(createTaskCard(t)));
+    currentTasks.forEach((t) => {
+      if (t.status === 'TODO') todoCount++;
+      if (t.status === 'IN_PROGRESS') inProgressCount++;
+      if (t.status === 'DONE') doneCount++;
+    });
+
+    countTodo.textContent = todoCount;
+    countInProgress.textContent = inProgressCount;
+    countDone.textContent = doneCount;
+
+    // Render Root tasks and their children recursively into columns
+    rootTasks.forEach((rootTask) => {
+      const nodeEl = renderTaskTreeNode(rootTask);
+      appendNodeToColumn(nodeEl, rootTask.status);
+    });
+
+    // Ensure focused card maintains highlight if still exists
+    if (focusedTaskId) {
+      const el = document.querySelector(`[data-task-id="${focusedTaskId}"]`);
+      if (el) el.classList.add('focused');
+    }
+  }
+
+  function appendNodeToColumn(nodeEl, status) {
+    if (status === 'TODO') listTodo.appendChild(nodeEl);
+    else if (status === 'IN_PROGRESS') listInProgress.appendChild(nodeEl);
+    else if (status === 'DONE') listDone.appendChild(nodeEl);
+  }
+
+  function renderTaskTreeNode(task) {
+    const nodeWrapper = document.createElement('div');
+    nodeWrapper.className = `task-tree-node ${task.parentId ? 'is-subtask' : ''}`;
+
+    const card = createTaskCard(task);
+    nodeWrapper.appendChild(card);
+
+    // Render Subtasks if not collapsed
+    const children = currentTasks.filter((t) => t.parentId === task.id).sort((a, b) => a.orderIndex - b.orderIndex);
+    if (children.length > 0 && !task.isCollapsed) {
+      const childrenContainer = document.createElement('div');
+      childrenContainer.className = 'tree-children-container';
+      childrenContainer.style.display = 'flex';
+      childrenContainer.style.flexDirection = 'column';
+      childrenContainer.style.gap = '0.75rem';
+      childrenContainer.style.marginTop = '0.5rem';
+
+      children.forEach((childTask) => {
+        childrenContainer.appendChild(renderTaskTreeNode(childTask));
+      });
+
+      nodeWrapper.appendChild(childrenContainer);
+    }
+
+    return nodeWrapper;
   }
 
   function createTaskCard(task) {
     const item = document.createElement('div');
-    item.className = 'task-item';
+    item.className = `task-item ${focusedTaskId === task.id ? 'focused' : ''}`;
     item.setAttribute('draggable', 'true');
     item.dataset.taskId = task.id;
 
-    // Drag events
+    item.addEventListener('click', (e) => {
+      e.stopPropagation();
+      setFocusedTask(task.id);
+    });
+
+    // HTML5 Drag & Drop Events
     item.addEventListener('dragstart', (e) => {
+      e.stopPropagation();
       draggedTaskId = task.id;
       item.classList.add('dragging');
       e.dataTransfer.setData('text/plain', task.id);
     });
 
-    item.addEventListener('dragend', () => {
+    item.addEventListener('dragend', (e) => {
+      e.stopPropagation();
       draggedTaskId = null;
       item.classList.remove('dragging');
+      document.querySelectorAll('.drop-target-parent').forEach((el) => el.classList.remove('drop-target-parent'));
     });
 
-    // Parent Tree Badge
-    if (task.parentId) {
-      const parentTask = currentTasks.find((pt) => pt.id === task.parentId);
-      const parentBadge = document.createElement('div');
-      parentBadge.className = 'parent-badge';
-      parentBadge.textContent = `📁 親: ${parentTask ? parentTask.title : '指定タスク'}`;
-      item.appendChild(parentBadge);
-    }
+    // Parenting Drop Target handling (dropping a card onto another card to set parentId)
+    item.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (draggedTaskId && draggedTaskId !== task.id) {
+        item.classList.add('drop-target-parent');
+      }
+    });
 
-    // Card Top (Title + Delete)
+    item.addEventListener('dragleave', (e) => {
+      e.stopPropagation();
+      item.classList.remove('drop-target-parent');
+    });
+
+    item.addEventListener('drop', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      item.classList.remove('drop-target-parent');
+      const sourceTaskId = e.dataTransfer.getData('text/plain') || draggedTaskId;
+
+      if (sourceTaskId && sourceTaskId !== task.id) {
+        // Change parentId to task.id
+        changeTaskParent(sourceTaskId, task.id);
+      }
+    });
+
+    // Card Top (Title + Toggle + Delete)
     const top = document.createElement('div');
     top.className = 'task-top';
+
+    const titleGroup = document.createElement('div');
+    titleGroup.className = 'task-title-group';
+
+    const children = currentTasks.filter((t) => t.parentId === task.id);
+    if (children.length > 0) {
+      const btnToggle = document.createElement('button');
+      btnToggle.className = 'btn-toggle-tree';
+      btnToggle.textContent = task.isCollapsed ? '▶' : '▼';
+      btnToggle.title = task.isCollapsed ? '子タスクを展開' : '子タスクを折りたたむ';
+      btnToggle.onclick = (e) => {
+        e.stopPropagation();
+        toggleTaskCollapse(task.id, !task.isCollapsed);
+      };
+      titleGroup.appendChild(btnToggle);
+    }
 
     const titleEl = document.createElement('div');
     titleEl.className = 'task-title';
     titleEl.textContent = task.title;
+    titleGroup.appendChild(titleEl);
 
     const btnDelete = document.createElement('button');
     btnDelete.className = 'btn-delete';
@@ -147,7 +238,7 @@
       }
     };
 
-    top.appendChild(titleEl);
+    top.appendChild(titleGroup);
     top.appendChild(btnDelete);
     item.appendChild(top);
 
@@ -157,24 +248,6 @@
       intentEl.className = 'task-intent';
       intentEl.textContent = `🎯 目的: ${task.intent}`;
       item.appendChild(intentEl);
-    }
-
-    // DoD Section (Optional)
-    if (Array.isArray(task.definitionOfDone) && task.definitionOfDone.length > 0) {
-      const dodSection = document.createElement('div');
-      dodSection.className = 'dod-section';
-      const dodHeader = document.createElement('div');
-      dodHeader.className = 'dod-header';
-      dodHeader.textContent = '完了定義 (DoD)';
-      dodSection.appendChild(dodHeader);
-
-      task.definitionOfDone.forEach((itemDod) => {
-        const dodRow = document.createElement('div');
-        dodRow.className = `dod-item ${itemDod.completed ? 'completed' : ''}`;
-        dodRow.textContent = `${itemDod.completed ? '✓' : '○'} ${itemDod.text}`;
-        dodSection.appendChild(dodRow);
-      });
-      item.appendChild(dodSection);
     }
 
     // Card Footer
@@ -195,7 +268,18 @@
     return item;
   }
 
-  // Setup HTML5 Drag & Drop
+  function setFocusedTask(taskId) {
+    focusedTaskId = taskId;
+    document.querySelectorAll('.task-item').forEach((el) => {
+      if (el.dataset.taskId === taskId) {
+        el.classList.add('focused');
+      } else {
+        el.classList.remove('focused');
+      }
+    });
+  }
+
+  // Setup Drag & Drop for Kanban Columns
   function setupDragAndDrop() {
     columns.forEach((col) => {
       col.addEventListener('dragover', (e) => {
@@ -220,6 +304,48 @@
     });
   }
 
+  // Setup Keyboard Arrow Keys Navigation
+  function setupKeyboardNavigation() {
+    window.addEventListener('keydown', (e) => {
+      // Don't capture keys if typing in input/textarea
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) {
+        return;
+      }
+
+      if (!currentTasks || currentTasks.length === 0) return;
+
+      if (!focusedTaskId) {
+        focusedTaskId = currentTasks[0].id;
+        renderTreeBoard();
+        return;
+      }
+
+      const currentIndex = currentTasks.findIndex((t) => t.id === focusedTaskId);
+      if (currentIndex === -1) return;
+
+      const currentTask = currentTasks[currentIndex];
+
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        const prevIndex = (currentIndex - 1 + currentTasks.length) % currentTasks.length;
+        setFocusedTask(currentTasks[prevIndex].id);
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        const nextIndex = (currentIndex + 1) % currentTasks.length;
+        setFocusedTask(currentTasks[nextIndex].id);
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        if (currentTask.status === 'TODO') updateTaskStatus(currentTask.id, 'IN_PROGRESS');
+        else if (currentTask.status === 'IN_PROGRESS') updateTaskStatus(currentTask.id, 'DONE');
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        if (currentTask.status === 'DONE') updateTaskStatus(currentTask.id, 'IN_PROGRESS');
+        else if (currentTask.status === 'IN_PROGRESS') updateTaskStatus(currentTask.id, 'TODO');
+      }
+    });
+  }
+
+  // Socket Emitters
   function updateTaskStatus(taskId, newStatus) {
     if (socket && socket.readyState === WebSocket.OPEN) {
       socket.send(
@@ -228,6 +354,30 @@
           taskId,
           status: newStatus,
           newOrderIndex: Date.now(),
+        })
+      );
+    }
+  }
+
+  function changeTaskParent(taskId, newParentId) {
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(
+        JSON.stringify({
+          action: 'CHANGE_PARENT',
+          taskId,
+          newParentId,
+        })
+      );
+    }
+  }
+
+  function toggleTaskCollapse(taskId, isCollapsed) {
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(
+        JSON.stringify({
+          action: 'TOGGLE_COLLAPSE',
+          taskId,
+          isCollapsed,
         })
       );
     }
@@ -259,7 +409,6 @@
     }
   }
 
-  // Quick Form Submit (Title Only)
   quickForm.addEventListener('submit', (e) => {
     e.preventDefault();
     const title = quickInputTitle.value.trim();
@@ -269,30 +418,7 @@
     }
   });
 
-  // Modal & Detailed Form Handling
-  function addDodInputRow(textValue = '') {
-    const row = document.createElement('div');
-    row.className = 'dod-input-row';
-
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.className = 'dod-text-input';
-    input.placeholder = '完了条件を入力 (任意)...';
-    input.value = textValue;
-
-    const btnRemove = document.createElement('button');
-    btnRemove.type = 'button';
-    btnRemove.className = 'btn-action';
-    btnRemove.textContent = '✕';
-    btnRemove.onclick = () => row.remove();
-
-    row.appendChild(input);
-    row.appendChild(btnRemove);
-    dodListContainer.appendChild(row);
-  }
-
   function openModal() {
-    dodListContainer.innerHTML = '';
     inputModalTitle.value = quickInputTitle.value.trim();
     modal.classList.remove('hidden');
     inputModalTitle.focus();
@@ -307,32 +433,21 @@
   btnCloseModal.addEventListener('click', closeModal);
   btnCancelModal.addEventListener('click', closeModal);
 
-  btnAddDod.addEventListener('click', () => addDodInputRow());
-
   detailedForm.addEventListener('submit', (e) => {
     e.preventDefault();
-
     const title = inputModalTitle.value.trim();
     const parentId = selectParentTask.value || null;
     const intent = inputIntent.value.trim();
     const priority = selectPriority.value;
 
-    const dodInputs = dodListContainer.querySelectorAll('.dod-text-input');
-    const definitionOfDone = Array.from(dodInputs)
-      .map((inp, idx) => ({
-        id: `dod-${idx + 1}-${Date.now()}`,
-        text: inp.value.trim(),
-        completed: false,
-      }))
-      .filter((item) => item.text.length > 0);
-
     if (title) {
-      sendCreateTask(title, parentId, intent, definitionOfDone, priority);
+      sendCreateTask(title, parentId, intent, [], priority);
       closeModal();
       quickInputTitle.value = '';
     }
   });
 
   setupDragAndDrop();
+  setupKeyboardNavigation();
   initWebSocket();
 })();

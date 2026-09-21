@@ -1,6 +1,13 @@
 import { ProjectState, SyncEvent, Task } from './types.js';
+import { StatusAggregatorPort, StatusAggregator } from './status_aggregator.js';
 
 export class SyncEngine {
+  private statusAggregator: StatusAggregatorPort;
+
+  constructor(statusAggregator?: StatusAggregatorPort) {
+    this.statusAggregator = statusAggregator || new StatusAggregator();
+  }
+
   /**
    * Sorts events deterministically based on Timestamp -> Sequence -> AuthorNodeId -> EventId
    */
@@ -21,7 +28,7 @@ export class SyncEngine {
 
   /**
    * Reduces an array of SyncEvents into a consolidated ProjectState.
-   * Handles deduplication, Tombstone deletion, parentId hierarchy, and LWW.
+   * Handles deduplication, Tombstone deletion, parentId hierarchy, collapse toggling, and auto status aggregation.
    */
   public reduceEvents(events: SyncEvent[]): ProjectState {
     const eventMap = new Map<string, SyncEvent>();
@@ -56,6 +63,7 @@ export class SyncEngine {
             priority,
             status,
             orderIndex,
+            isCollapsed,
             assignedNodeId,
           } = event.payload;
           state.tasks.set(taskId, {
@@ -68,6 +76,7 @@ export class SyncEngine {
             priority: priority || 'MEDIUM',
             status: status || 'TODO',
             orderIndex: typeof orderIndex === 'number' ? orderIndex : 0,
+            isCollapsed: Boolean(isCollapsed),
             assignedNodeId,
             updatedAt: event.timestamp,
             authorNodeId: event.authorNodeId,
@@ -108,6 +117,16 @@ export class SyncEngine {
           break;
         }
 
+        case 'TASK_COLLAPSE_TOGGLED': {
+          const { taskId, isCollapsed } = event.payload;
+          const existing = state.tasks.get(taskId);
+          if (existing) {
+            existing.isCollapsed = typeof isCollapsed === 'boolean' ? isCollapsed : !existing.isCollapsed;
+            existing.updatedAt = event.timestamp;
+          }
+          break;
+        }
+
         case 'TASK_DELETED': {
           const { taskId } = event.payload;
           state.tasks.delete(taskId);
@@ -115,6 +134,9 @@ export class SyncEngine {
         }
       }
     }
+
+    // Automatically recalculate parent task statuses based on child tasks
+    this.statusAggregator.recalculateStatuses(state.tasks);
 
     return state;
   }

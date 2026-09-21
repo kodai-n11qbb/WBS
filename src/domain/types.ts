@@ -1,19 +1,11 @@
 export type TaskStatus = 'TODO' | 'IN_PROGRESS' | 'DONE';
 export type TaskPriority = 'HIGH' | 'MEDIUM' | 'LOW';
 
-export interface DefinitionOfDoneItem {
-  id: string;
-  text: string;
-  completed: boolean;
-}
-
 export interface Task {
   id: string;
   projectId: string;
   parentId?: string | null;
   title: string;
-  intent?: string;
-  definitionOfDone?: DefinitionOfDoneItem[];
   priority: TaskPriority;
   status: TaskStatus;
   orderIndex: number;

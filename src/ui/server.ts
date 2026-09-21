@@ -45,7 +45,6 @@ async function bootstrap() {
 
     const parentEvent = await nodeService.createTask(activeProjectId, {
       title: '親タスク: LAN内P2Pローカルファースト開発',
-      intent: '中央サーバーに依存せずLAN内ノード同士で分散同期する。',
       priority: 'HIGH',
       status: 'IN_PROGRESS',
     });
@@ -55,7 +54,6 @@ async function bootstrap() {
     await nodeService.createTask(activeProjectId, {
       parentId,
       title: '子タスク 1: JSONLファイル永続化の検証',
-      intent: 'data/events.jsonl に記録し再起動しても復元されるか確認する。',
       status: 'DONE',
     });
 
@@ -122,8 +120,6 @@ wss.on('connection', async (ws) => {
           await nodeService.createTask(activeProjectId, {
             parentId: data.parentId || null,
             title: data.title,
-            intent: data.intent,
-            definitionOfDone: data.definitionOfDone,
             priority: data.priority,
             status: data.status || 'TODO',
           });

@@ -3,25 +3,21 @@
   let currentTasks = [];
   let draggedTaskId = null;
   let focusedTaskId = null;
+  let currentViewMode = 'TREE_VIEW'; // 'TREE_VIEW' | 'KANBAN_VIEW'
 
   // DOM Elements
   const nodeDisplay = document.getElementById('node-id-display');
   const errorToast = document.getElementById('error-toast');
 
+  const btnToggleView = document.getElementById('btn-toggle-view');
+  const viewModeIcon = document.getElementById('view-mode-icon');
+  const viewModeLabel = document.getElementById('view-mode-label');
+
   const quickForm = document.getElementById('quick-task-form');
   const quickInputTitle = document.getElementById('quick-title-input');
+  const selectQuickParent = document.getElementById('select-quick-parent');
 
-  const modal = document.getElementById('task-modal');
-  const btnOpenModal = document.getElementById('btn-open-modal');
-  const btnCloseModal = document.getElementById('btn-close-modal');
-  const btnCancelModal = document.getElementById('btn-cancel-modal');
-  const detailedForm = document.getElementById('detailed-task-form');
-
-  const inputModalTitle = document.getElementById('input-modal-title');
-  const selectParentTask = document.getElementById('select-parent-task');
-  const inputIntent = document.getElementById('input-intent');
-  const selectPriority = document.getElementById('select-priority');
-
+  const mainBoard = document.getElementById('main-board');
   const listTodo = document.getElementById('list-todo');
   const listInProgress = document.getElementById('list-in-progress');
   const listDone = document.getElementById('list-done');
@@ -49,7 +45,7 @@
           nodeDisplay.textContent = `Node: ${data.nodeId}`;
           currentTasks = data.state.tasks || [];
           updateParentTaskOptions();
-          renderTreeBoard();
+          renderBoard();
         } else if (data.type === 'ERROR') {
           showErrorToast(data.message);
         }
@@ -73,22 +69,33 @@
   }
 
   function updateParentTaskOptions() {
-    selectParentTask.innerHTML = '<option value="">(親タスクなし - ルートタスク)</option>';
+    selectQuickParent.innerHTML = '<option value="">(親タスクなし - ルート)</option>';
     currentTasks.forEach((t) => {
       const opt = document.createElement('option');
       opt.value = t.id;
       opt.textContent = `📁 ${t.title}`;
-      selectParentTask.appendChild(opt);
+      selectQuickParent.appendChild(opt);
     });
   }
 
-  // Render Visual Tree Board
-  function renderTreeBoard() {
+  // Toggle View Mode
+  btnToggleView.addEventListener('click', () => {
+    currentViewMode = currentViewMode === 'TREE_VIEW' ? 'KANBAN_VIEW' : 'TREE_VIEW';
+    if (currentViewMode === 'TREE_VIEW') {
+      viewModeIcon.textContent = '🌳';
+      viewModeLabel.textContent = 'ツリー表示';
+    } else {
+      viewModeIcon.textContent = '📋';
+      viewModeLabel.textContent = 'カンバン表示';
+    }
+    renderBoard();
+  });
+
+  // Render Board based on View Mode
+  function renderBoard() {
     listTodo.innerHTML = '';
     listInProgress.innerHTML = '';
     listDone.innerHTML = '';
-
-    const rootTasks = currentTasks.filter((t) => !t.parentId).sort((a, b) => a.orderIndex - b.orderIndex);
 
     let todoCount = 0;
     let inProgressCount = 0;
@@ -104,13 +111,24 @@
     countInProgress.textContent = inProgressCount;
     countDone.textContent = doneCount;
 
-    // Render Root tasks and their children recursively into columns
-    rootTasks.forEach((rootTask) => {
-      const nodeEl = renderTaskTreeNode(rootTask);
-      appendNodeToColumn(nodeEl, rootTask.status);
-    });
+    if (currentViewMode === 'TREE_VIEW') {
+      // Tree-First View (Plan A)
+      const rootTasks = currentTasks.filter((t) => !t.parentId).sort((a, b) => a.orderIndex - b.orderIndex);
+      rootTasks.forEach((rootTask) => {
+        const nodeEl = renderTaskTreeNode(rootTask);
+        appendNodeToColumn(nodeEl, rootTask.status);
+      });
+    } else {
+      // 3-Column Kanban View
+      const sortedTasks = [...currentTasks].sort((a, b) => a.orderIndex - b.orderIndex);
+      sortedTasks.forEach((task) => {
+        const card = createTaskCard(task);
+        if (task.status === 'TODO') listTodo.appendChild(card);
+        else if (task.status === 'IN_PROGRESS') listInProgress.appendChild(card);
+        else if (task.status === 'DONE') listDone.appendChild(card);
+      });
+    }
 
-    // Ensure focused card maintains highlight if still exists
     if (focusedTaskId) {
       const el = document.querySelector(`[data-task-id="${focusedTaskId}"]`);
       if (el) el.classList.add('focused');
@@ -130,7 +148,6 @@
     const card = createTaskCard(task);
     nodeWrapper.appendChild(card);
 
-    // Render Subtasks if not collapsed
     const children = currentTasks.filter((t) => t.parentId === task.id).sort((a, b) => a.orderIndex - b.orderIndex);
     if (children.length > 0 && !task.isCollapsed) {
       const childrenContainer = document.createElement('div');
@@ -161,7 +178,7 @@
       setFocusedTask(task.id);
     });
 
-    // HTML5 Drag & Drop Events
+    // Drag Events
     item.addEventListener('dragstart', (e) => {
       e.stopPropagation();
       draggedTaskId = task.id;
@@ -176,7 +193,7 @@
       document.querySelectorAll('.drop-target-parent').forEach((el) => el.classList.remove('drop-target-parent'));
     });
 
-    // Parenting Drop Target handling (dropping a card onto another card to set parentId)
+    // Parenting Drop Target
     item.addEventListener('dragover', (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -197,7 +214,6 @@
       const sourceTaskId = e.dataTransfer.getData('text/plain') || draggedTaskId;
 
       if (sourceTaskId && sourceTaskId !== task.id) {
-        // Change parentId to task.id
         changeTaskParent(sourceTaskId, task.id);
       }
     });
@@ -210,7 +226,7 @@
     titleGroup.className = 'task-title-group';
 
     const children = currentTasks.filter((t) => t.parentId === task.id);
-    if (children.length > 0) {
+    if (children.length > 0 && currentViewMode === 'TREE_VIEW') {
       const btnToggle = document.createElement('button');
       btnToggle.className = 'btn-toggle-tree';
       btnToggle.textContent = task.isCollapsed ? '▶' : '▼';
@@ -230,7 +246,7 @@
     const btnDelete = document.createElement('button');
     btnDelete.className = 'btn-delete';
     btnDelete.innerHTML = '🗑️';
-    btnDelete.title = 'タスクを削除 (Tombstone)';
+    btnDelete.title = 'タスクを削除';
     btnDelete.onclick = (e) => {
       e.stopPropagation();
       if (confirm(`タスク「${task.title}」を削除しますか？`)) {
@@ -242,26 +258,61 @@
     top.appendChild(btnDelete);
     item.appendChild(top);
 
-    // Intent (Optional)
-    if (task.intent && task.intent.trim().length > 0) {
-      const intentEl = document.createElement('div');
-      intentEl.className = 'task-intent';
-      intentEl.textContent = `🎯 目的: ${task.intent}`;
-      item.appendChild(intentEl);
+    // Parent Task Progress Bar (if parent task has children)
+    if (children.length > 0) {
+      const completedCount = children.filter((c) => c.status === 'DONE').length;
+      const percentage = Math.round((completedCount / children.length) * 100);
+
+      const progressBox = document.createElement('div');
+      progressBox.className = 'parent-progress-box';
+
+      const labelRow = document.createElement('div');
+      labelRow.className = 'progress-label-row';
+      labelRow.innerHTML = `<span>進捗率</span><span>${completedCount}/${children.length} 完了 (${percentage}%)</span>`;
+
+      const track = document.createElement('div');
+      track.className = 'progress-bar-track';
+
+      const fill = document.createElement('div');
+      fill.className = 'progress-bar-fill';
+      fill.style.width = `${percentage}%`;
+
+      track.appendChild(fill);
+      progressBox.appendChild(labelRow);
+      progressBox.appendChild(track);
+      item.appendChild(progressBox);
     }
 
-    // Card Footer
+    // Card Footer with All-Level Status Button Selector
     const footer = document.createElement('div');
     footer.className = 'task-footer';
 
-    const prioritySpan = document.createElement('span');
-    prioritySpan.className = `priority-tag priority-${task.priority || 'MEDIUM'}`;
-    prioritySpan.textContent = task.priority || 'MEDIUM';
+    const statusGroup = document.createElement('div');
+    statusGroup.className = 'status-btn-group';
+
+    const statuses = [
+      { key: 'TODO', label: 'TODO' },
+      { key: 'IN_PROGRESS', label: 'PROGRESS' },
+      { key: 'DONE', label: 'DONE' },
+    ];
+
+    statuses.forEach((s) => {
+      const btn = document.createElement('button');
+      btn.className = `status-btn ${task.status === s.key ? `active-${s.key}` : ''}`;
+      btn.textContent = s.label;
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        if (task.status !== s.key) {
+          updateTaskStatus(task.id, s.key);
+        }
+      };
+      statusGroup.appendChild(btn);
+    });
 
     const authorSpan = document.createElement('span');
     authorSpan.textContent = `By: ${task.authorNodeId || 'local'}`;
 
-    footer.appendChild(prioritySpan);
+    footer.appendChild(statusGroup);
     footer.appendChild(authorSpan);
     item.appendChild(footer);
 
@@ -304,10 +355,9 @@
     });
   }
 
-  // Setup Keyboard Arrow Keys Navigation
+  // Setup Keyboard Navigation
   function setupKeyboardNavigation() {
     window.addEventListener('keydown', (e) => {
-      // Don't capture keys if typing in input/textarea
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) {
         return;
       }
@@ -316,7 +366,7 @@
 
       if (!focusedTaskId) {
         focusedTaskId = currentTasks[0].id;
-        renderTreeBoard();
+        renderBoard();
         return;
       }
 
@@ -394,16 +444,13 @@
     }
   }
 
-  function sendCreateTask(title, parentId = null, intent = '', definitionOfDone = [], priority = 'MEDIUM') {
+  function sendCreateTask(title, parentId = null) {
     if (socket && socket.readyState === WebSocket.OPEN) {
       socket.send(
         JSON.stringify({
           action: 'CREATE_TASK',
           title,
           parentId,
-          intent,
-          definitionOfDone,
-          priority,
         })
       );
     }
@@ -412,37 +459,9 @@
   quickForm.addEventListener('submit', (e) => {
     e.preventDefault();
     const title = quickInputTitle.value.trim();
+    const parentId = selectQuickParent.value || null;
     if (title) {
-      sendCreateTask(title);
-      quickInputTitle.value = '';
-    }
-  });
-
-  function openModal() {
-    inputModalTitle.value = quickInputTitle.value.trim();
-    modal.classList.remove('hidden');
-    inputModalTitle.focus();
-  }
-
-  function closeModal() {
-    modal.classList.add('hidden');
-    detailedForm.reset();
-  }
-
-  btnOpenModal.addEventListener('click', openModal);
-  btnCloseModal.addEventListener('click', closeModal);
-  btnCancelModal.addEventListener('click', closeModal);
-
-  detailedForm.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const title = inputModalTitle.value.trim();
-    const parentId = selectParentTask.value || null;
-    const intent = inputIntent.value.trim();
-    const priority = selectPriority.value;
-
-    if (title) {
-      sendCreateTask(title, parentId, intent, [], priority);
-      closeModal();
+      sendCreateTask(title, parentId);
       quickInputTitle.value = '';
     }
   });

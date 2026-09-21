@@ -52,6 +52,15 @@ body {
 h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; }
 .subtitle { font-size: 0.875rem; color: var(--text-secondary); }
 
+.btn-toggle-view {
+  background: rgba(99, 102, 241, 0.2);
+  border: 1px solid rgba(99, 102, 241, 0.4);
+  color: white; padding: 0.55rem 1rem; border-radius: var(--radius-md);
+  font-weight: 600; font-size: 0.85rem; cursor: pointer; display: flex;
+  align-items: center; gap: 0.5rem; transition: all 0.2s ease;
+}
+.btn-toggle-view:hover { background: rgba(99, 102, 241, 0.35); transform: translateY(-1px); }
+
 .node-pill {
   display: flex; align-items: center; gap: 0.5rem;
   background: rgba(30, 41, 59, 0.8); border: 1px solid var(--card-border);
@@ -61,15 +70,19 @@ h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; }
 .status-dot { width: 8px; height: 8px; border-radius: 50%; }
 .status-dot.online { background-color: var(--accent-green); box-shadow: 0 0 10px var(--accent-green); }
 
-/* Glassmorphism Base */
 .glass-card {
   background: var(--card-bg); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--card-border); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg);
 }
 
-/* Quick Input Section */
+/* Minimal Input Section */
 .task-input-section { margin-bottom: 1.5rem; }
 .input-card { display: flex; gap: 0.75rem; padding: 0.75rem 1rem; align-items: center; }
+
+select#select-quick-parent {
+  max-width: 220px; background: rgba(15, 23, 42, 0.8); border: 1px solid var(--card-border);
+  color: var(--text-primary); padding: 0.6rem 0.8rem; border-radius: var(--radius-md); font-size: 0.85rem; outline: none;
+}
 
 input[type="text"] {
   flex: 1; background: transparent; border: none; outline: none;
@@ -85,16 +98,8 @@ input[type="text"]::placeholder { color: var(--text-secondary); }
 }
 .btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
 
-.btn-secondary {
-  background: rgba(255, 255, 255, 0.08); border: 1px solid var(--card-border);
-  color: var(--text-primary); padding: 0.55rem 1rem; border-radius: var(--radius-md);
-  font-size: 0.85rem; cursor: pointer; transition: all 0.15s ease; white-space: nowrap;
-}
-.btn-secondary:hover { background: rgba(255, 255, 255, 0.15); }
-
 .kb-hint { font-size: 0.75rem; color: var(--accent-blue); padding: 0.4rem 0.8rem; background: rgba(56, 189, 248, 0.08); border-radius: 99px; }
 
-/* Toast */
 .toast {
   position: fixed; top: 1.5rem; right: 1.5rem; background: rgba(239, 68, 68, 0.9);
   color: white; padding: 0.75rem 1.25rem; border-radius: var(--radius-md);
@@ -132,15 +137,8 @@ input[type="text"]::placeholder { color: var(--text-secondary); }
 
 .task-list { display: flex; flex-direction: column; gap: 0.85rem; flex: 1; min-height: 100px; }
 
-/* Visual Tree Item Styling */
-.task-tree-node {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  position: relative;
-}
-
-/* Subtask Indentation & Tree Connector Line */
+/* Visual Tree Nodes */
+.task-tree-node { display: flex; flex-direction: column; gap: 0.5rem; position: relative; }
 .task-tree-node.is-subtask {
   margin-left: 1.5rem;
   border-left: 2px dashed rgba(99, 102, 241, 0.4);
@@ -150,27 +148,20 @@ input[type="text"]::placeholder { color: var(--text-secondary); }
 .task-item {
   background: rgba(15, 23, 42, 0.75); border: 1px solid rgba(255, 255, 255, 0.08);
   padding: 0.85rem 1rem; border-radius: var(--radius-md); cursor: grab; user-select: none;
-  transition: all 0.2s ease; display: flex; flex-direction: column; gap: 0.5rem;
-  position: relative;
+  transition: all 0.2s ease; display: flex; flex-direction: column; gap: 0.65rem; position: relative;
 }
 .task-item:active { cursor: grabbing; }
 .task-item.dragging { opacity: 0.4; transform: scale(0.98); }
-
-/* Focused keyboard navigation state */
 .task-item.focused {
   border-color: var(--accent-blue) !important;
   box-shadow: 0 0 14px rgba(56, 189, 248, 0.5) !important;
   transform: translateY(-2px);
 }
-
-/* Drag over parent card highlight for parenting */
 .task-item.drop-target-parent {
   border-color: var(--accent-purple) !important;
   background: rgba(129, 140, 248, 0.15) !important;
   box-shadow: 0 0 16px rgba(129, 140, 248, 0.6) !important;
 }
-
-.task-item:hover { border-color: rgba(255, 255, 255, 0.2); transform: translateY(-2px); box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3); }
 
 .task-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem; }
 .task-title-group { display: flex; align-items: center; gap: 0.5rem; flex: 1; }
@@ -190,38 +181,33 @@ input[type="text"]::placeholder { color: var(--text-secondary); }
 }
 .btn-delete:hover { color: var(--accent-red); background: rgba(248, 113, 113, 0.1); }
 
-.task-intent {
-  font-size: 0.8rem; color: var(--text-secondary); background: rgba(255, 255, 255, 0.03);
-  padding: 0.4rem 0.65rem; border-radius: var(--radius-sm); border-left: 3px solid var(--accent-purple); line-height: 1.35;
+/* Progress Bar Container for Parent Tasks */
+.parent-progress-box {
+  display: flex; flex-direction: column; gap: 0.35rem; margin-top: 0.2rem;
+}
+.progress-label-row { display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-secondary); }
+.progress-bar-track {
+  width: 100%; height: 6px; background: rgba(255, 255, 255, 0.08); border-radius: 99px; overflow: hidden;
+}
+.progress-bar-fill {
+  height: 100%; background: linear-gradient(90deg, var(--accent-amber), var(--accent-green)); transition: width 0.3s ease;
 }
 
+/* All-Level Status Button Selector */
 .task-footer {
   display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem;
-  color: var(--text-secondary); padding-top: 0.4rem; border-top: 1px solid rgba(255, 255, 255, 0.05);
+  color: var(--text-secondary); padding-top: 0.5rem; border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.priority-tag { font-size: 0.7rem; font-weight: 700; padding: 0.15rem 0.4rem; border-radius: 4px; }
-.priority-HIGH { background: rgba(248, 113, 113, 0.2); color: var(--accent-red); }
-.priority-MEDIUM { background: rgba(251, 191, 36, 0.2); color: var(--accent-amber); }
-.priority-LOW { background: rgba(52, 211, 153, 0.2); color: var(--accent-green); }
+.status-btn-group { display: flex; gap: 0.25rem; }
 
-/* Modal */
-.modal-overlay {
-  position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-  background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px);
-  display: flex; justify-content: center; align-items: center; z-index: 999;
+.status-btn {
+  background: rgba(255, 255, 255, 0.04); border: 1px solid var(--card-border);
+  color: var(--text-secondary); padding: 0.2rem 0.5rem; border-radius: var(--radius-sm);
+  font-size: 0.7rem; font-weight: 600; cursor: pointer; transition: all 0.15s ease;
 }
-.modal-card { width: 90%; max-width: 550px; padding: 1.75rem; background: rgba(30, 41, 59, 0.95); border: 1px solid var(--card-border); }
-.modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
-.btn-close { background: transparent; border: none; color: var(--text-secondary); font-size: 1.5rem; cursor: pointer; }
-.form-group { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1.25rem; }
-.form-group label { font-size: 0.85rem; font-weight: 600; color: var(--text-primary); }
+.status-btn:hover { background: rgba(255, 255, 255, 0.12); color: var(--text-primary); }
 
-input[type="text"], textarea, select {
-  background: rgba(15, 23, 42, 0.8); border: 1px solid var(--card-border);
-  color: var(--text-primary); padding: 0.65rem 0.85rem; border-radius: var(--radius-md);
-  font-family: inherit; font-size: 0.9rem; outline: none;
-}
-input[type="text"]:focus, textarea:focus, select:focus { border-color: var(--accent-blue); }
-
-.modal-footer { display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.5rem; }
+.status-btn.active-TODO { background: rgba(148, 163, 184, 0.25); color: #cbd5e1; border-color: rgba(148, 163, 184, 0.5); }
+.status-btn.active-IN_PROGRESS { background: rgba(251, 191, 36, 0.25); color: var(--accent-amber); border-color: rgba(251, 191, 36, 0.5); }
+.status-btn.active-DONE { background: rgba(52, 211, 153, 0.25); color: var(--accent-green); border-color: rgba(52, 211, 153, 0.5); }

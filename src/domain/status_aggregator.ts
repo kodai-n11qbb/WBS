@@ -1,7 +1,14 @@
 import { Task, TaskStatus } from './types.js';
 
+export interface CompletionRate {
+  total: number;
+  completed: number;
+  percentage: number;
+}
+
 export interface StatusAggregatorPort {
   recalculateStatuses(tasks: Map<string, Task>): void;
+  calculateCompletionRate(parentId: string, tasks: Map<string, Task>): CompletionRate;
 }
 
 export class StatusAggregator implements StatusAggregatorPort {
@@ -9,7 +16,6 @@ export class StatusAggregator implements StatusAggregatorPort {
    * Recalculates parent task statuses bottom-up based on child task statuses.
    */
   public recalculateStatuses(tasks: Map<string, Task>): void {
-    // 1. Group children by parentId
     const childrenMap = new Map<string, Task[]>();
     for (const task of tasks.values()) {
       if (task.parentId) {
@@ -20,10 +26,9 @@ export class StatusAggregator implements StatusAggregatorPort {
       }
     }
 
-    // 2. Perform iterative bottom-up status evaluation until no more status changes occur
     let changed = true;
     let iterations = 0;
-    const maxIterations = 20; // Safety guard against circular refs
+    const maxIterations = 20;
 
     while (changed && iterations < maxIterations) {
       changed = false;
@@ -40,6 +45,24 @@ export class StatusAggregator implements StatusAggregatorPort {
         }
       }
     }
+  }
+
+  /**
+   * Calculates completion percentage for a parent task's direct children.
+   */
+  public calculateCompletionRate(parentId: string, tasks: Map<string, Task>): CompletionRate {
+    const children = Array.from(tasks.values()).filter((t) => t.parentId === parentId);
+    if (children.length === 0) {
+      return { total: 0, completed: 0, percentage: 0 };
+    }
+
+    const completed = children.filter((c) => c.status === 'DONE').length;
+    const percentage = Math.round((completed / children.length) * 1000) / 10;
+    return {
+      total: children.length,
+      completed,
+      percentage,
+    };
   }
 
   private calculateParentStatus(children: Task[]): TaskStatus {

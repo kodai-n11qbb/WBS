@@ -2,14 +2,12 @@ import { EventRepositoryPort } from '../ports/repository.js';
 import { PeerTransportPort, PeerInfo, TransportMessage } from '../ports/transport.js';
 import { SyncEngine } from '../domain/sync_engine.js';
 import { TaskValidatorPort, StructuredTaskValidator } from '../domain/task_validator.js';
-import { ProjectState, SyncEvent, TaskStatus, TaskPriority, DefinitionOfDoneItem } from '../domain/types.js';
+import { ProjectState, SyncEvent, TaskStatus, TaskPriority } from '../domain/types.js';
 import { crypto } from './crypto_util.js';
 
 export interface CreateTaskInput {
   parentId?: string | null;
   title: string;
-  intent?: string;
-  definitionOfDone?: DefinitionOfDoneItem[];
   priority?: TaskPriority;
   status?: TaskStatus;
   orderIndex?: number;
@@ -103,8 +101,6 @@ export class NodeService {
         taskId,
         parentId: input.parentId || null,
         title: input.title.trim(),
-        intent: input.intent ? input.intent.trim() : '',
-        definitionOfDone: input.definitionOfDone || [],
         priority: input.priority || 'MEDIUM',
         status: input.status || 'TODO',
         orderIndex: typeof input.orderIndex === 'number' ? input.orderIndex : Date.now(),

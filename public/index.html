@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Share-Log | LAN P2P Interactive Tree Tracker</title>
+  <title>Share-Log | LAN P2P Tracker (Tree & Kanban)</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -22,12 +22,17 @@
         <div class="logo-badge">TREE</div>
         <div>
           <h1 id="project-title">LAN Share-Log Tracker</h1>
-          <p class="subtitle">ビジュアルツリー ＆ 十字キーアクセシビリティ ＆ 自動ステータス同期</p>
+          <p class="subtitle">極小モデル・全階層ステータスバッジ・親進捗率自動化</p>
         </div>
       </div>
 
       <div class="header-right">
-        <div class="kb-hint">💡 十字キー (↑↓←→) で爆速移動</div>
+        <!-- View Mode Switcher -->
+        <button id="btn-toggle-view" class="btn-toggle-view">
+          <span id="view-mode-icon">🌳</span> <span id="view-mode-label">ツリー表示</span>
+        </button>
+
+        <div class="kb-hint">💡 十字キー (↑↓←→) で操作</div>
         <div class="node-pill">
           <span class="status-dot online"></span>
           <span id="node-id-display">Node: Connecting...</span>
@@ -39,31 +44,33 @@
     <div id="error-toast" class="toast hidden"></div>
 
     <main class="main-content">
-      <!-- Quick Task Creation Input Bar -->
+      <!-- Minimal Task Input Bar -->
       <section class="task-input-section">
         <form id="quick-task-form" class="glass-card input-card">
+          <select id="select-quick-parent" title="親タスクを指定 (任意)">
+            <option value="">(親タスクなし - ルート)</option>
+          </select>
+
           <input 
             type="text" 
             id="quick-title-input" 
-            placeholder="タスク名を入力してEnter... (ドラッグ＆ドロップまたはモーダルで親子化)" 
+            placeholder="タスク名を入力してEnter... (カード間ドロップで親子化可能)" 
             required 
             autocomplete="off"
           />
+
           <button type="submit" class="btn-primary">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
               <line x1="12" y1="5" x2="12" y2="19"></line>
               <line x1="5" y1="12" x2="19" y2="12"></line>
             </svg>
-            追加
-          </button>
-          <button type="button" id="btn-open-modal" class="btn-secondary">
-            + オプション入力 (親タスク/Why)
+            タスク作成
           </button>
         </form>
       </section>
 
-      <!-- Kanban Board -->
-      <section class="kanban-board">
+      <!-- Main Board (Supports both Tree View and Kanban View) -->
+      <section class="kanban-board" id="main-board">
         <!-- TODO Column -->
         <div class="kanban-column glass-card" id="col-todo" data-status="TODO">
           <div class="column-header">
@@ -101,48 +108,6 @@
         </div>
       </section>
     </main>
-  </div>
-
-  <!-- Detailed Modal -->
-  <div id="task-modal" class="modal-overlay hidden">
-    <div class="modal-card glass-card">
-      <div class="modal-header">
-        <h2>タスク作成（オプション設定）</h2>
-        <button id="btn-close-modal" class="btn-close">&times;</button>
-      </div>
-      <form id="detailed-task-form">
-        <div class="form-group">
-          <label for="input-modal-title">タスクタイトル <span class="required">*</span></label>
-          <input type="text" id="input-modal-title" placeholder="例: サブタスクの作成" required autocomplete="off" />
-        </div>
-
-        <div class="form-group">
-          <label for="select-parent-task">親タスク (ツリー階層) <span class="optional">(任意)</span></label>
-          <select id="select-parent-task">
-            <option value="">(親タスクなし - ルートタスク)</option>
-          </select>
-        </div>
-
-        <div class="form-group">
-          <label for="input-intent">目的・背景 (Why) <span class="optional">(任意)</span></label>
-          <textarea id="input-intent" rows="2" placeholder="なぜこの作業を行うのかの背景（空欄可）"></textarea>
-        </div>
-
-        <div class="form-group">
-          <label>優先度</label>
-          <select id="select-priority">
-            <option value="MEDIUM" selected>MEDIUM (標準)</option>
-            <option value="HIGH">HIGH (高)</option>
-            <option value="LOW">LOW (低)</option>
-          </select>
-        </div>
-
-        <div class="modal-footer">
-          <button type="button" id="btn-cancel-modal" class="btn-secondary">キャンセル</button>
-          <button type="submit" class="btn-primary">タスクを作成</button>
-        </div>
-      </form>
-    </div>
   </div>
 
   <script src="app.js"></script>

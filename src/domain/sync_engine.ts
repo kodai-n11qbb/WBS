@@ -8,9 +8,6 @@ export class SyncEngine {
     this.statusAggregator = statusAggregator || new StatusAggregator();
   }
 
-  /**
-   * Sorts events deterministically based on Timestamp -> Sequence -> AuthorNodeId -> EventId
-   */
   public sortEvents(events: SyncEvent[]): SyncEvent[] {
     return [...events].sort((a, b) => {
       if (a.timestamp !== b.timestamp) {
@@ -26,10 +23,6 @@ export class SyncEngine {
     });
   }
 
-  /**
-   * Reduces an array of SyncEvents into a consolidated ProjectState.
-   * Handles deduplication, Tombstone deletion, parentId hierarchy, collapse toggling, and auto status aggregation.
-   */
   public reduceEvents(events: SyncEvent[]): ProjectState {
     const eventMap = new Map<string, SyncEvent>();
     for (const event of events) {
@@ -54,25 +47,13 @@ export class SyncEngine {
           break;
 
         case 'TASK_CREATED': {
-          const {
-            taskId,
-            parentId,
-            title,
-            intent,
-            definitionOfDone,
-            priority,
-            status,
-            orderIndex,
-            isCollapsed,
-            assignedNodeId,
-          } = event.payload;
+          const { taskId, parentId, title, priority, status, orderIndex, isCollapsed, assignedNodeId } =
+            event.payload;
           state.tasks.set(taskId, {
             id: taskId,
             projectId: event.projectId,
             parentId: parentId || null,
             title: title || '',
-            intent: intent || '',
-            definitionOfDone: Array.isArray(definitionOfDone) ? definitionOfDone : [],
             priority: priority || 'MEDIUM',
             status: status || 'TODO',
             orderIndex: typeof orderIndex === 'number' ? orderIndex : 0,
@@ -135,7 +116,6 @@ export class SyncEngine {
       }
     }
 
-    // Automatically recalculate parent task statuses based on child tasks
     this.statusAggregator.recalculateStatuses(state.tasks);
 
     return state;

@@ -10,11 +10,11 @@
 ## ドキュメント一覧
 
 1. [概念とユースケース (`./01_concept.md`)](./01_concept.md)
-   - システム概念、Obsidian型ノードバネ物理ドラッグ・重ね合わせ親子化確認ダイアログ、画面下部固定ChatGPT風プロンプトバー、単一キャンバス高度視認性ツリー表示、カンバン親タスク優先ソート
+   - 前面化されたObsidian型ノードグラフ表示、階層に応じた自然な上下配置（Y軸重力）、画面端ネスト表示深度コントロール、整理された最小限ヘッダー、画面下部固定ChatGPT風プロンプトバー
 2. [システムアーキテクチャ抽象 (`./02_architecture.md`)](./02_architecture.md)
-   - ObsidianSpringPhysicsRendererPort, StatusAggregator, 単体バイナリ packaging アダプター, DI（依存注入）レイヤー設計
+   - ObsidianSpringPhysicsHierarchicalCanvasPort, StatusAggregator, 単体バイナリ packaging アダプター, DI（依存注入）レイヤー設計
 3. [データモデルと同期仕様 (`./03_data_sync.md`)](./03_data_sync.md)
-   - ミニマルタスク仕様、画面下部固定プロンプトバー仕様、3つのビューモード仕様 (Tree/Obsidian Spring Physics Graph/Kanban)、Gitライク JSONL ログ仕様
+   - ミニマルタスク仕様、前面Obsidian Graph View仕様、画面端ネスト表示深度切替仕様、端末ローカルツリー折りたたみ仕様 (`isCollapsed`)、Gitライク JSONL ログ仕様
 4. [拡張性およびプラグイン設計 (`./04_extension_spec.md`)](./04_extension_spec.md)
    - 単体デスクトップ実行ファイル化 (.exe / .app), プロトコル抽象化, ストレージ抽象化, UI/インターフェース分離設計
 

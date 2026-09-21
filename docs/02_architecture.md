@@ -11,12 +11,12 @@
 ```
 +-----------------------------------------------------------------------------------------+
 |                                   Presentation Layer                                    |
-|   (Pure Tree View / Obsidian Graph Canvas / Kanban Board / Bottom ChatGPT Prompt Bar)   |
+|   (Obsidian Graph Canvas [Primary] / Minimalist Header / Edge Depth Control / Prompt Bar)|
 +-------------------------------------------+---------------------------------------------+
                                             | (Interfaces)
 +-------------------------------------------v---------------------------------------------+
 |                                   Application / Domain                                  |
-| (Status Aggregator, Minimal Task Core, Sync Engine, Hash Log, Node Spring Physics Engine)|
+| (Status Aggregator, Minimal Task Core, Sync Engine, Hash Log, Hierarchical Gravity Engine)|
 +-------------------+---------------------------------------+-----------------------------+
                     | (Interfaces)                          | (Interfaces)
 +-------------------v-------------+         +---------------+-----------------------------+
@@ -25,38 +25,33 @@
 +---------------------------------+         +---------------------------------------------+
 ```
 
+---
+
 ## 2. コンポーネントインターフェース定義（抽象ポート）
 
-### (1) Pure Tree View & Multi-View Navigation Port (樹状ツリービュー ＆ 多視点操作ポート)
-- **役割**: 全ルートタスクの統一樹状ツリー構造描画と、キーボード（↑↓←→）ナビゲーション制御。
+### (1) Obsidian Spring Physics & Hierarchical Gravity Canvas Port (前面グラフキャンバスポート)
+- **役割**: 前面メインビューとして、タスクの親子ネットワークを Obsidian 風のノード・バネ物理 ＋ 階層型Y軸重力で描画するプレゼンテーションポート。
 - **機能**:
-  - 親を指定せずに作成されたタスクはそのまま独立したルートタスク (`parentId: null`) として生成。
-  - 親を持たない独立ルートタスクをツリーエリア (`pureTreeContainer`) 内に統一描画。
-  - ドラッグ＆ドロップによる直感的な親子化・並べ替え。
-  - 親タスクの背景グラデーション (`linear-gradient`) による省スペース進捗 fill 描画。
-  - 全ビュー共通の統一キーボードナビゲーション (`ArrowUp` / `ArrowDown` / `ArrowLeft` / `ArrowRight`)。
+  - **階層型Y軸重力 (Hierarchical Gravity)**: 親の親（上位祖先）ほど自然と画面上部へ移動し、配下の子ノードは下方向へ浮遊配置される物理バイアス。
+  - **画面端 ネスト表示深度コントロール (Edge Nest Depth Filter)**: 画面端に配置されたコントローラーから表示階層範囲（デフォルト / カスタム数値 / 全表示）を切り替え。
+  - ノードドラッグ時のバネ弾性追従と、過度な装飾を排した実用的で静かな視覚表現。
 
-### (2) State Snapshot & Event Storage Port (最新状態スナップショット＆イベントリポジトリポート)
+### (2) Minimalist Header & Prompt Bar Port (最小限ヘッダー＆プロンプトバーポート)
+- **役割**: 余計な情報を削ぎ落とした最小限のタイトル表示、ネットワーク接続ステータス、最低限の操作ボタン、および画面下部固定のタスク追加入力。
+
+### (3) State Snapshot & Event Storage Port (最新状態スナップショット＆イベントリポジトリポート)
 - **役割**: 変更履歴 (`events.jsonl`) のバックグラウンド記録と、ディレクトリ直下への最新状態ファイル (`data/state.json`) のリアルタイム自動永続化。
 - **機能**:
   - `data/state.json` に最新の全タスク状態（Materialized Snapshot）を常時出力し、アプリ起動速度 $O(1)$ および他ツール・手動参照の可視性を実現。
   - `data/events.jsonl` により P2P ネットワーク差分マージ (`SYNC_REQUEST` / `SYNC_RESPONSE`) と改ざん防止ハッシュチェーンを維持。
 
-### (3) Obsidian Spring Physics Renderer Port (グラフレンダラーポート)
-- **役割**: タスクの親子ネットワークを Obsidian 風のノードとバネ物理（Spring Elasticity）で描画するプレゼンテーションポート。
-- **機能**:
-  - ノードドラッグ時のバネ弾性連動（接続ノードが引きずられて滑らかに追従）。
-  - ノードの円盤枠内（半径45px）へのドラッグ＆ドロップによる「親子化確認モーダルダイアログ」トリガー。
-  - ノードクリックによるツリー/カンバン表示の対象タスクカードへのフォーカス連動。
-
 ### (4) Status Aggregator & Single-Parent Hierarchy Port (進捗算出・単一親構造ポート)
 - **役割**:
-  - 子タスクの状態から親タスクの進捗率（Completion Rate: 例 `33.3%`）を動的算出。
+  - 子タスクの状態から親タスクの進捗率を動的算出。
   - 1:Nの単一親ツリー構造 (`parentId?: string | null`) を厳守し、巡回（Cycle）参照の発生を防止。
 
 ### (5) Standalone Executable Packaging Adapter (環境依存ゼロ・単一バイナリパッケージング)
 - **役割**: Node.js, Python, Docker, Rust 等が一切インストールされていない環境でも、単一バイナリ (`share-log-win.exe` / `share-log-macos-arm64`) をダブルクリックするだけでローカル Web サーバー (`http://localhost:3000`) が立ち上がり、規定のブラウザ画面を自動オープンするポータブルパッケージング構造。
-- **特徴**: アドレス手入力不要で自端末上で `localhost:3000` を開くだけで、UDP P2P通信により同一LAN内の全ノードと全自動同期。
 
 ---
 
@@ -66,5 +61,3 @@
 ---
 
 [次へ: データモデルと同期仕様](./03_data_sync.md)
-
-

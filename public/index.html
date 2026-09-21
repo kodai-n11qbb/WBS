@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Share-Log | LAN P2P Task Tracker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="background-blobs">
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+    <div class="blob blob-3"></div>
+  </div>
+
+  <div class="app-container">
+    <header class="app-header">
+      <div class="header-left">
+        <div class="logo-badge">P2P</div>
+        <div>
+          <h1 id="project-title">LAN Share-Log Tracker</h1>
+          <p class="subtitle">Local-First 分散タスク同期システム</p>
+        </div>
+      </div>
+
+      <div class="header-right">
+        <div class="node-pill">
+          <span class="status-dot online"></span>
+          <span id="node-id-display">Node: Connecting...</span>
+        </div>
+      </div>
+    </header>
+
+    <main class="main-content">
+      <!-- Create Task Input Bar -->
+      <section class="task-input-section">
+        <form id="create-task-form" class="glass-card input-card">
+          <input 
+            type="text" 
+            id="task-title-input" 
+            placeholder="新しいタスクを入力... (例: P2Pソケットテストの実施)" 
+            required 
+            autocomplete="off"
+          />
+          <button type="submit" id="btn-add-task" class="btn-primary">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            タスク追加
+          </button>
+        </form>
+      </section>
+
+      <!-- Kanban Board -->
+      <section class="kanban-board">
+        <!-- TODO Column -->
+        <div class="kanban-column glass-card" id="col-todo">
+          <div class="column-header">
+            <div class="column-title">
+              <span class="badge badge-todo">未着手</span>
+              <h2>To Do</h2>
+            </div>
+            <span class="task-count" id="count-todo">0</span>
+          </div>
+          <div class="task-list" id="list-todo"></div>
+        </div>
+
+        <!-- IN PROGRESS Column -->
+        <div class="kanban-column glass-card" id="col-in-progress">
+          <div class="column-header">
+            <div class="column-title">
+              <span class="badge badge-progress">進行中</span>
+              <h2>In Progress</h2>
+            </div>
+            <span class="task-count" id="count-in-progress">0</span>
+          </div>
+          <div class="task-list" id="list-in-progress"></div>
+        </div>
+
+        <!-- DONE Column -->
+        <div class="kanban-column glass-card" id="col-done">
+          <div class="column-header">
+            <div class="column-title">
+              <span class="badge badge-done">完了</span>
+              <h2>Done</h2>
+            </div>
+            <span class="task-count" id="count-done">0</span>
+          </div>
+          <div class="task-list" id="list-done"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { WebSocketServer, WebSocket } from 'ws';
 import { NodeService } from '../core/node_service.js';
 import { JsonlFileRepository } from '../adapters/jsonl_repository.js';
+import { JsonStateSnapshotExporter } from '../adapters/snapshot_exporter.js';
 import { UdpPeerTransport } from '../adapters/udp_peer_discovery.js';
 import { SyncEngine } from '../domain/sync_engine.js';
 import { StructuredTaskValidator } from '../domain/task_validator.js';
@@ -14,6 +15,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PUBLIC_DIR = path.join(__dirname, '../../public');
 const DATA_FILE = path.join(__dirname, '../../data/events.jsonl');
+const SNAPSHOT_FILE = path.join(__dirname, '../../data/state.json');
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 const NODE_ID = process.env.NODE_ID || `node-${crypto.randomUUID().slice(0, 6)}`;
@@ -21,6 +23,7 @@ const UDP_PORT = process.env.UDP_PORT ? parseInt(process.env.UDP_PORT, 10) : 412
 
 // 1. Dependency Injection setup according to DEV_POLICY_v1.0518.md
 const repository = new JsonlFileRepository(DATA_FILE);
+const snapshotExporter = new JsonStateSnapshotExporter(SNAPSHOT_FILE);
 const transport = new UdpPeerTransport({ nodeId: NODE_ID, port: UDP_PORT });
 const syncEngine = new SyncEngine();
 const validator = new StructuredTaskValidator();
@@ -31,6 +34,7 @@ const nodeService = new NodeService({
   transport,
   syncEngine,
   validator,
+  snapshotExporter,
 });
 
 let activeProjectId = 'default-project';

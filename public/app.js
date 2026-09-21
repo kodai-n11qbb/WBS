@@ -109,18 +109,12 @@
   function updateParentTaskOptions() {
     selectQuickParent.innerHTML = '';
 
-    const defaultOpt = document.createElement('option');
-    defaultOpt.value = 'UNCLASSIFIED';
-    defaultOpt.textContent = '未分類 (デフォルト)';
-    selectQuickParent.appendChild(defaultOpt);
-
     const rootOpt = document.createElement('option');
-    rootOpt.value = 'ROOT';
-    rootOpt.textContent = '+ 新しいルートタスクを作成';
+    rootOpt.value = '';
+    rootOpt.textContent = '📁 ルートタスク (親指定なし)';
     selectQuickParent.appendChild(rootOpt);
 
     currentTasks.forEach((t) => {
-      if (t.title.includes('未分類') || t.title.toLowerCase().includes('tmp')) return;
       const opt = document.createElement('option');
       opt.value = t.id;
       opt.textContent = `📁 ${t.title}`;
@@ -169,25 +163,19 @@
     }
   }
 
-  // VIEW 1: Pure Tree View (Single-Canvas with Screen-Floating Unclassified Cards)
+  // VIEW 1: Pure Tree View (Single-Canvas with Screen-Floating Standalone Root Tasks)
   function renderPureTreeView() {
     pureTreeContainer.innerHTML = '';
     if (floatingUnclassifiedLayer) floatingUnclassifiedLayer.innerHTML = '';
 
-    const isUnclassifiedTask = (t) => t.title.includes('未分類') || t.title.toLowerCase().includes('tmp');
-    const unclassifiedContainer = currentTasks.find((t) => !t.parentId && isUnclassifiedTask(t));
-    const unclassifiedContainerId = unclassifiedContainer ? unclassifiedContainer.id : null;
+    const hasSubtasks = (t) => currentTasks.some((child) => child.parentId === t.id);
 
-    // 1. Render Screen-Floating Unclassified Task Cards
-    const unclassifiedTasks = currentTasks.filter((t) => {
-      if (t.id === unclassifiedContainerId) return false;
-      if (unclassifiedContainerId && t.parentId === unclassifiedContainerId) return true;
-      if (!t.parentId && isUnclassifiedTask(t)) return true;
-      return false;
-    }).sort((a, b) => a.orderIndex - b.orderIndex);
+    // 1. Render Floating Standalone Root Tasks (root tasks with no children)
+    const floatingTasks = currentTasks.filter((t) => !t.parentId && !hasSubtasks(t))
+      .sort((a, b) => a.orderIndex - b.orderIndex);
 
     if (floatingUnclassifiedLayer) {
-      unclassifiedTasks.forEach((task, idx) => {
+      floatingTasks.forEach((task, idx) => {
         const floatingCard = document.createElement('div');
         floatingCard.className = `floating-unclassified-card ${focusedTaskId === task.id ? 'focused' : ''}`;
         floatingCard.setAttribute('draggable', 'true');
@@ -234,18 +222,18 @@
       });
     }
 
-    // 2. Render Main Structured Tree Tasks in Canvas
-    const rootTasks = currentTasks.filter((t) => !t.parentId && t.id !== unclassifiedContainerId && !isUnclassifiedTask(t))
+    // 2. Render Main Parent Tree Tasks in Canvas (root tasks with children)
+    const rootTreeTasks = currentTasks.filter((t) => !t.parentId && hasSubtasks(t))
       .sort((a, b) => a.orderIndex - b.orderIndex);
 
-    if (rootTasks.length === 0) {
+    if (rootTreeTasks.length === 0) {
       const emptyTreeMsg = document.createElement('div');
       emptyTreeMsg.className = 'empty-tree-notice';
       emptyTreeMsg.style.cssText = 'font-size: 0.9rem; color: var(--text-secondary); text-align: center; padding: 3rem 1rem; border: 1px dashed var(--card-border); border-radius: var(--radius-md); margin-top: 1rem;';
       emptyTreeMsg.textContent = '構造化されたルートタスクがまだありません。画面上の浮遊タスクを各親タスクへドラッグ＆ドロップして分類してください。';
       pureTreeContainer.appendChild(emptyTreeMsg);
     } else {
-      rootTasks.forEach((rootTask) => {
+      rootTreeTasks.forEach((rootTask) => {
         const nodeEl = renderTaskTreeNode(rootTask);
         pureTreeContainer.appendChild(nodeEl);
       });
@@ -1015,22 +1003,7 @@
 
     if (!title) return;
 
-    if (selectedVal === 'ROOT') {
-      sendCreateTask(title, null);
-    } else if (selectedVal === 'UNCLASSIFIED' || !selectedVal) {
-      let unclassifiedTask = currentTasks.find((t) => !t.parentId && (t.title.includes('未分類') || t.title.toLowerCase().includes('tmp')));
-      if (unclassifiedTask) {
-        sendCreateTask(title, unclassifiedTask.id);
-      } else {
-        sendCreateTask('未分類', null);
-        setTimeout(() => {
-          const newUnclassified = currentTasks.find((t) => !t.parentId && (t.title.includes('未分類') || t.title.toLowerCase().includes('tmp')));
-          sendCreateTask(title, newUnclassified ? newUnclassified.id : null);
-        }, 350);
-      }
-    } else {
-      sendCreateTask(title, selectedVal);
-    }
+    sendCreateTask(title, selectedVal || null);
 
     quickInputTitle.value = '';
   });

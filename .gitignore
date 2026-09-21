@@ -6,6 +6,7 @@ dist/
 
 # Local data & storage files
 data/*.jsonl
+data/*.json
 !data/.gitkeep
 temp_test_data/
 

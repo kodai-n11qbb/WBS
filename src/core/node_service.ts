@@ -1,5 +1,6 @@
 import { EventRepositoryPort } from '../ports/repository.js';
 import { PeerTransportPort, PeerInfo, TransportMessage } from '../ports/transport.js';
+import { StateSnapshotExporterPort } from '../ports/snapshot.js';
 import { SyncEngine } from '../domain/sync_engine.js';
 import { TaskValidatorPort, StructuredTaskValidator } from '../domain/task_validator.js';
 import { ProjectState, SyncEvent, TaskStatus, TaskPriority } from '../domain/types.js';
@@ -19,6 +20,7 @@ export interface NodeServiceDependencies {
   transport: PeerTransportPort;
   syncEngine: SyncEngine;
   validator?: TaskValidatorPort;
+  snapshotExporter?: StateSnapshotExporterPort;
 }
 
 export class NodeService {
@@ -27,6 +29,7 @@ export class NodeService {
   private transport: PeerTransportPort;
   private syncEngine: SyncEngine;
   private validator: TaskValidatorPort;
+  private snapshotExporter?: StateSnapshotExporterPort;
   private sequenceCounter: number = 0;
 
   constructor(deps: NodeServiceDependencies) {
@@ -35,8 +38,20 @@ export class NodeService {
     this.transport = deps.transport;
     this.syncEngine = deps.syncEngine;
     this.validator = deps.validator || new StructuredTaskValidator();
+    this.snapshotExporter = deps.snapshotExporter;
 
     this.setupTransportListeners();
+  }
+
+  private async exportSnapshot(projectId: string): Promise<void> {
+    if (this.snapshotExporter) {
+      try {
+        const state = await this.getProjectState(projectId);
+        await this.snapshotExporter.saveSnapshot(state);
+      } catch (e) {
+        console.error('[NodeService] Snapshot Export Error:', e);
+      }
+    }
   }
 
   private setupTransportListeners(): void {
@@ -80,6 +95,7 @@ export class NodeService {
 
     await this.repository.saveEvent(event);
     await this.transport.broadcast({ type: 'EVENT_BROADCAST', event });
+    await this.exportSnapshot(projectId);
     return event;
   }
 
@@ -110,6 +126,7 @@ export class NodeService {
 
     await this.repository.saveEvent(event);
     await this.transport.broadcast({ type: 'EVENT_BROADCAST', event });
+    await this.exportSnapshot(projectId);
     return event;
   }
 
@@ -131,6 +148,7 @@ export class NodeService {
 
     await this.repository.saveEvent(event);
     await this.transport.broadcast({ type: 'EVENT_BROADCAST', event });
+    await this.exportSnapshot(projectId);
     return event;
   }
 
@@ -151,6 +169,7 @@ export class NodeService {
 
     await this.repository.saveEvent(event);
     await this.transport.broadcast({ type: 'EVENT_BROADCAST', event });
+    await this.exportSnapshot(projectId);
     return event;
   }
 
@@ -177,6 +196,7 @@ export class NodeService {
 
     await this.repository.saveEvent(event);
     await this.transport.broadcast({ type: 'EVENT_BROADCAST', event });
+    await this.exportSnapshot(projectId);
     return event;
   }
 
@@ -197,6 +217,7 @@ export class NodeService {
 
     await this.repository.saveEvent(event);
     await this.transport.broadcast({ type: 'EVENT_BROADCAST', event });
+    await this.exportSnapshot(projectId);
     return event;
   }
 
@@ -230,6 +251,7 @@ export class NodeService {
       await this.transport.broadcast({ type: 'EVENT_BROADCAST', event });
       lastEvent = event;
     }
+    await this.exportSnapshot(projectId);
     return lastEvent!;
   }
 
@@ -247,6 +269,7 @@ export class NodeService {
     switch (msg.type) {
       case 'EVENT_BROADCAST':
         await this.repository.saveEvent(msg.event);
+        await this.exportSnapshot(msg.event.projectId);
         break;
 
       case 'HANDSHAKE': {
@@ -273,6 +296,9 @@ export class NodeService {
 
       case 'SYNC_RESPONSE':
         await this.repository.saveEvents(msg.events);
+        if (msg.events.length > 0) {
+          await this.exportSnapshot(msg.events[0].projectId);
+        }
         break;
     }
   }

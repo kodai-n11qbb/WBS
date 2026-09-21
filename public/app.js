@@ -7,13 +7,17 @@
   const nodeDisplay = document.getElementById('node-id-display');
   const errorToast = document.getElementById('error-toast');
 
+  const quickForm = document.getElementById('quick-task-form');
+  const quickInputTitle = document.getElementById('quick-title-input');
+
   const modal = document.getElementById('task-modal');
   const btnOpenModal = document.getElementById('btn-open-modal');
   const btnCloseModal = document.getElementById('btn-close-modal');
   const btnCancelModal = document.getElementById('btn-cancel-modal');
-  const structuredForm = document.getElementById('structured-task-form');
+  const detailedForm = document.getElementById('detailed-task-form');
 
-  const inputTitle = document.getElementById('input-title');
+  const inputModalTitle = document.getElementById('input-modal-title');
+  const selectParentTask = document.getElementById('select-parent-task');
   const inputIntent = document.getElementById('input-intent');
   const selectPriority = document.getElementById('select-priority');
   const dodListContainer = document.getElementById('dod-list');
@@ -45,6 +49,7 @@
         if (data.type === 'STATE_INIT' || data.type === 'STATE_UPDATE') {
           nodeDisplay.textContent = `Node: ${data.nodeId}`;
           currentTasks = data.state.tasks || [];
+          updateParentTaskOptions();
           renderTasks();
         } else if (data.type === 'ERROR') {
           showErrorToast(data.message);
@@ -68,7 +73,16 @@
     }, 4000);
   }
 
-  // Render Kanban Tasks
+  function updateParentTaskOptions() {
+    selectParentTask.innerHTML = '<option value="">(親タスクなし - ルートタスク)</option>';
+    currentTasks.forEach((t) => {
+      const opt = document.createElement('option');
+      opt.value = t.id;
+      opt.textContent = `📁 ${t.title}`;
+      selectParentTask.appendChild(opt);
+    });
+  }
+
   function renderTasks() {
     listTodo.innerHTML = '';
     listInProgress.innerHTML = '';
@@ -105,6 +119,15 @@
       item.classList.remove('dragging');
     });
 
+    // Parent Tree Badge
+    if (task.parentId) {
+      const parentTask = currentTasks.find((pt) => pt.id === task.parentId);
+      const parentBadge = document.createElement('div');
+      parentBadge.className = 'parent-badge';
+      parentBadge.textContent = `📁 親: ${parentTask ? parentTask.title : '指定タスク'}`;
+      item.appendChild(parentBadge);
+    }
+
     // Card Top (Title + Delete)
     const top = document.createElement('div');
     top.className = 'task-top';
@@ -126,16 +149,20 @@
 
     top.appendChild(titleEl);
     top.appendChild(btnDelete);
+    item.appendChild(top);
 
-    // Intent Section
-    const intentEl = document.createElement('div');
-    intentEl.className = 'task-intent';
-    intentEl.textContent = `🎯 目的: ${task.intent || '未指定'}`;
+    // Intent (Optional)
+    if (task.intent && task.intent.trim().length > 0) {
+      const intentEl = document.createElement('div');
+      intentEl.className = 'task-intent';
+      intentEl.textContent = `🎯 目的: ${task.intent}`;
+      item.appendChild(intentEl);
+    }
 
-    // DoD Section
-    const dodSection = document.createElement('div');
-    dodSection.className = 'dod-section';
+    // DoD Section (Optional)
     if (Array.isArray(task.definitionOfDone) && task.definitionOfDone.length > 0) {
+      const dodSection = document.createElement('div');
+      dodSection.className = 'dod-section';
       const dodHeader = document.createElement('div');
       dodHeader.className = 'dod-header';
       dodHeader.textContent = '完了定義 (DoD)';
@@ -147,6 +174,7 @@
         dodRow.textContent = `${itemDod.completed ? '✓' : '○'} ${itemDod.text}`;
         dodSection.appendChild(dodRow);
       });
+      item.appendChild(dodSection);
     }
 
     // Card Footer
@@ -162,18 +190,12 @@
 
     footer.appendChild(prioritySpan);
     footer.appendChild(authorSpan);
-
-    item.appendChild(top);
-    item.appendChild(intentEl);
-    if (task.definitionOfDone && task.definitionOfDone.length > 0) {
-      item.appendChild(dodSection);
-    }
     item.appendChild(footer);
 
     return item;
   }
 
-  // Setup HTML5 Drag & Drop for Kanban Columns
+  // Setup HTML5 Drag & Drop
   function setupDragAndDrop() {
     columns.forEach((col) => {
       col.addEventListener('dragover', (e) => {
@@ -222,7 +244,32 @@
     }
   }
 
-  // Modal & Structured Form Handling
+  function sendCreateTask(title, parentId = null, intent = '', definitionOfDone = [], priority = 'MEDIUM') {
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(
+        JSON.stringify({
+          action: 'CREATE_TASK',
+          title,
+          parentId,
+          intent,
+          definitionOfDone,
+          priority,
+        })
+      );
+    }
+  }
+
+  // Quick Form Submit (Title Only)
+  quickForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const title = quickInputTitle.value.trim();
+    if (title) {
+      sendCreateTask(title);
+      quickInputTitle.value = '';
+    }
+  });
+
+  // Modal & Detailed Form Handling
   function addDodInputRow(textValue = '') {
     const row = document.createElement('div');
     row.className = 'dod-input-row';
@@ -230,19 +277,14 @@
     const input = document.createElement('input');
     input.type = 'text';
     input.className = 'dod-text-input';
-    input.placeholder = '完了条件を入力... (例: 単体テスト全クリア)';
+    input.placeholder = '完了条件を入力 (任意)...';
     input.value = textValue;
-    input.required = true;
 
     const btnRemove = document.createElement('button');
     btnRemove.type = 'button';
     btnRemove.className = 'btn-action';
     btnRemove.textContent = '✕';
-    btnRemove.onclick = () => {
-      if (dodListContainer.children.length > 1) {
-        row.remove();
-      }
-    };
+    btnRemove.onclick = () => row.remove();
 
     row.appendChild(input);
     row.appendChild(btnRemove);
@@ -251,14 +293,14 @@
 
   function openModal() {
     dodListContainer.innerHTML = '';
-    addDodInputRow();
+    inputModalTitle.value = quickInputTitle.value.trim();
     modal.classList.remove('hidden');
-    inputTitle.focus();
+    inputModalTitle.focus();
   }
 
   function closeModal() {
     modal.classList.add('hidden');
-    structuredForm.reset();
+    detailedForm.reset();
   }
 
   btnOpenModal.addEventListener('click', openModal);
@@ -267,10 +309,11 @@
 
   btnAddDod.addEventListener('click', () => addDodInputRow());
 
-  structuredForm.addEventListener('submit', (e) => {
+  detailedForm.addEventListener('submit', (e) => {
     e.preventDefault();
 
-    const title = inputTitle.value.trim();
+    const title = inputModalTitle.value.trim();
+    const parentId = selectParentTask.value || null;
     const intent = inputIntent.value.trim();
     const priority = selectPriority.value;
 
@@ -283,17 +326,10 @@
       }))
       .filter((item) => item.text.length > 0);
 
-    if (socket && socket.readyState === WebSocket.OPEN) {
-      socket.send(
-        JSON.stringify({
-          action: 'CREATE_STRUCTURED_TASK',
-          title,
-          intent,
-          priority,
-          definitionOfDone,
-        })
-      );
+    if (title) {
+      sendCreateTask(title, parentId, intent, definitionOfDone, priority);
       closeModal();
+      quickInputTitle.value = '';
     }
   });
 

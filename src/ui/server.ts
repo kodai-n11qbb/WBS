@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer, WebSocket } from 'ws';
 import { NodeService } from '../core/node_service.js';
-import { InMemoryRepository } from '../adapters/in_memory_repository.js';
+import { JsonlFileRepository } from '../adapters/jsonl_repository.js';
 import { UdpPeerTransport } from '../adapters/udp_peer_discovery.js';
 import { SyncEngine } from '../domain/sync_engine.js';
 import { StructuredTaskValidator } from '../domain/task_validator.js';
@@ -13,13 +13,14 @@ import { crypto } from '../core/crypto_util.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PUBLIC_DIR = path.join(__dirname, '../../public');
+const DATA_FILE = path.join(__dirname, '../../data/events.jsonl');
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 const NODE_ID = process.env.NODE_ID || `node-${crypto.randomUUID().slice(0, 6)}`;
 const UDP_PORT = process.env.UDP_PORT ? parseInt(process.env.UDP_PORT, 10) : 41234;
 
-// 1. Dependency Injection setup according to DEV_POLICY_v1.0518.md
-const repository = new InMemoryRepository();
+// 1. Dependency Injection setup with JSONL File Persistence according to DEV_POLICY_v1.0518.md
+const repository = new JsonlFileRepository(DATA_FILE);
 const transport = new UdpPeerTransport({ nodeId: NODE_ID, port: UDP_PORT });
 const syncEngine = new SyncEngine();
 const validator = new StructuredTaskValidator();
@@ -35,46 +36,37 @@ const nodeService = new NodeService({
 let activeProjectId = 'default-project';
 
 async function bootstrap() {
+  await repository.init();
   await nodeService.start();
+
   const allEvents = await nodeService.getAllEvents();
   if (allEvents.length === 0) {
     await nodeService.createProject('LAN Share-Log Project');
 
-    await nodeService.createStructuredTask(activeProjectId, {
-      title: 'ローカルファーストP2P構造の検証',
-      intent: '中央サーバーに依存せずLAN内ノード同士でデータ整合性が保たれるか検証する。',
-      definitionOfDone: [
-        { id: 'd1', text: 'UDPマルチキャストでの自動探査確認', completed: true },
-        { id: 'd2', text: 'オフライン差分マージテスト', completed: true },
-      ],
-      priority: 'HIGH',
-      status: 'DONE',
-    });
-
-    await nodeService.createStructuredTask(activeProjectId, {
-      title: 'タスク構造化とDrag & Dropの実装',
-      intent: '目的(Why)と完了定義(DoD)の記述を強制し、カンバン直感操作を実現する。',
-      definitionOfDone: [
-        { id: 'd3', text: 'バリデータによる強制チェック実装', completed: true },
-        { id: 'd4', text: 'HTML5 Drag & Drop UI の組み込み', completed: false },
-      ],
+    const parentEvent = await nodeService.createTask(activeProjectId, {
+      title: '親タスク: LAN内P2Pローカルファースト開発',
+      intent: '中央サーバーに依存せずLAN内ノード同士で分散同期する。',
       priority: 'HIGH',
       status: 'IN_PROGRESS',
     });
 
-    await nodeService.createStructuredTask(activeProjectId, {
-      title: 'Tombstone 方式によるP2P分散タスク削除',
-      intent: 'ノード間で削除タスクが再復活するゴースト問題を防止する。',
-      definitionOfDone: [
-        { id: 'd5', text: 'TASK_DELETED イベントの追加', completed: true },
-        { id: 'd6', text: 'UI削除ボタンと連動', completed: false },
-      ],
-      priority: 'MEDIUM',
+    const parentId = parentEvent.payload.taskId;
+
+    await nodeService.createTask(activeProjectId, {
+      parentId,
+      title: '子タスク 1: JSONLファイル永続化の検証',
+      intent: 'data/events.jsonl に記録し再起動しても復元されるか確認する。',
+      status: 'DONE',
+    });
+
+    await nodeService.createTask(activeProjectId, {
+      parentId,
+      title: '子タスク 2: ツリー構造・Drag&Dropの確認',
       status: 'TODO',
     });
   }
 
-  console.log(`[NodeService] Started Node "${NODE_ID}" on UDP port ${UDP_PORT}`);
+  console.log(`[NodeService] Started Node "${NODE_ID}" with JSONL storage at: ${DATA_FILE}`);
 }
 
 const server = http.createServer((req, res) => {
@@ -114,6 +106,7 @@ wss.on('connection', async (ws) => {
       type: 'STATE_INIT',
       nodeId: NODE_ID,
       projectId: activeProjectId,
+      dataFile: DATA_FILE,
       state: {
         project: state.project,
         tasks: Array.from(state.tasks.values()),
@@ -124,9 +117,10 @@ wss.on('connection', async (ws) => {
   ws.on('message', async (rawMessage) => {
     try {
       const data = JSON.parse(rawMessage.toString());
-      if (data.action === 'CREATE_STRUCTURED_TASK') {
+      if (data.action === 'CREATE_TASK') {
         try {
-          await nodeService.createStructuredTask(activeProjectId, {
+          await nodeService.createTask(activeProjectId, {
+            parentId: data.parentId || null,
             title: data.title,
             intent: data.intent,
             definitionOfDone: data.definitionOfDone,
@@ -152,6 +146,9 @@ wss.on('connection', async (ws) => {
         await broadcastStateToUI();
       } else if (data.action === 'REORDER_TASK') {
         await nodeService.reorderTask(activeProjectId, data.taskId, data.newOrderIndex);
+        await broadcastStateToUI();
+      } else if (data.action === 'CHANGE_PARENT') {
+        await nodeService.changeTaskParent(activeProjectId, data.taskId, data.newParentId);
         await broadcastStateToUI();
       } else if (data.action === 'DELETE_TASK') {
         await nodeService.deleteTask(activeProjectId, data.taskId);

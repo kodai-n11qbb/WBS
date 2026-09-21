@@ -6,9 +6,10 @@ import { ProjectState, SyncEvent, TaskStatus, TaskPriority, DefinitionOfDoneItem
 import { crypto } from './crypto_util.js';
 
 export interface CreateTaskInput {
+  parentId?: string | null;
   title: string;
-  intent: string;
-  definitionOfDone: DefinitionOfDoneItem[];
+  intent?: string;
+  definitionOfDone?: DefinitionOfDoneItem[];
   priority?: TaskPriority;
   status?: TaskStatus;
   orderIndex?: number;
@@ -84,8 +85,7 @@ export class NodeService {
     return event;
   }
 
-  public async createStructuredTask(projectId: string, input: CreateTaskInput): Promise<SyncEvent> {
-    // 1. Enforce structured task validation
+  public async createTask(projectId: string, input: CreateTaskInput): Promise<SyncEvent> {
     const validation = this.validator.validateCreation(input);
     if (!validation.valid) {
       throw new Error(`タスク作成失敗: ${validation.errors.join(' / ')}`);
@@ -101,9 +101,10 @@ export class NodeService {
       type: 'TASK_CREATED',
       payload: {
         taskId,
+        parentId: input.parentId || null,
         title: input.title.trim(),
-        intent: input.intent.trim(),
-        definitionOfDone: input.definitionOfDone,
+        intent: input.intent ? input.intent.trim() : '',
+        definitionOfDone: input.definitionOfDone || [],
         priority: input.priority || 'MEDIUM',
         status: input.status || 'TODO',
         orderIndex: typeof input.orderIndex === 'number' ? input.orderIndex : Date.now(),
@@ -149,6 +150,26 @@ export class NodeService {
       sequence: ++this.sequenceCounter,
       type: 'TASK_REORDERED',
       payload: { taskId, newOrderIndex },
+    };
+
+    await this.repository.saveEvent(event);
+    await this.transport.broadcast({ type: 'EVENT_BROADCAST', event });
+    return event;
+  }
+
+  public async changeTaskParent(
+    projectId: string,
+    taskId: string,
+    newParentId: string | null
+  ): Promise<SyncEvent> {
+    const event: SyncEvent = {
+      id: crypto.randomUUID(),
+      projectId,
+      authorNodeId: this.nodeId,
+      timestamp: Date.now(),
+      sequence: ++this.sequenceCounter,
+      type: 'TASK_PARENT_CHANGED',
+      payload: { taskId, newParentId },
     };
 
     await this.repository.saveEvent(event);

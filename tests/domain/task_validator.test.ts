@@ -1,18 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { StructuredTaskValidator } from '../../src/domain/task_validator.js';
 
-describe('StructuredTaskValidator', () => {
+describe('StructuredTaskValidator (with Optional Attributes)', () => {
   const validator = new StructuredTaskValidator();
 
-  it('should validate valid structured task payload', () => {
+  it('should validate task with only title provided', () => {
     const validPayload = {
-      title: 'Fix UDP Peer Discovery',
-      intent: 'Ensure nodes on the same LAN can exchange events without packet loss.',
-      definitionOfDone: [
-        { id: 'dod-1', text: 'Write integration test', completed: false },
-        { id: 'dod-2', text: 'Verify multicast socket binding', completed: false },
-      ],
-      priority: 'HIGH',
+      title: 'Quick Task',
     };
 
     const result = validator.validateCreation(validPayload);
@@ -20,39 +14,24 @@ describe('StructuredTaskValidator', () => {
     expect(result.errors).toHaveLength(0);
   });
 
-  it('should fail validation when title is too short or empty', () => {
+  it('should fail validation when title is empty', () => {
     const invalidPayload = {
-      title: '  ',
-      intent: 'Some intent',
-      definitionOfDone: [{ id: 'dod-1', text: 'DoD 1', completed: false }],
+      title: '   ',
     };
 
     const result = validator.validateCreation(invalidPayload);
     expect(result.valid).toBe(false);
-    expect(result.errors).toContain('タイトルは空白を除いて3文字以上入力してください。');
+    expect(result.errors).toContain('タイトルを入力してください。');
   });
 
-  it('should fail validation when intent (purpose) is missing', () => {
-    const invalidPayload = {
-      title: 'Valid Title',
-      intent: '  ',
-      definitionOfDone: [{ id: 'dod-1', text: 'DoD 1', completed: false }],
+  it('should allow optional intent and definitionOfDone', () => {
+    const validPayload = {
+      title: 'Task with Optional Attributes',
+      intent: 'Optional Why description',
+      definitionOfDone: [{ id: 'd1', text: 'Optional DoD', completed: false }],
     };
 
-    const result = validator.validateCreation(invalidPayload);
-    expect(result.valid).toBe(false);
-    expect(result.errors).toContain('タスクの目的・背景(Why)の記述は必須です。');
-  });
-
-  it('should fail validation when definitionOfDone is empty', () => {
-    const invalidPayload = {
-      title: 'Valid Title',
-      intent: 'Valid Intent',
-      definitionOfDone: [],
-    };
-
-    const result = validator.validateCreation(invalidPayload);
-    expect(result.valid).toBe(false);
-    expect(result.errors).toContain('完了定義 (Definition of Done) チェックリストを最低1つ追加してください。');
+    const result = validator.validateCreation(validPayload);
+    expect(result.valid).toBe(true);
   });
 });

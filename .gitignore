@@ -4,6 +4,11 @@ node_modules/
 # Production build
 dist/
 
+# Local data & storage files
+data/*.jsonl
+!data/.gitkeep
+temp_test_data/
+
 # Logs
 *.log
 npm-debug.log*

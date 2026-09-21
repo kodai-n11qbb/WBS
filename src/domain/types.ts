@@ -10,9 +10,10 @@ export interface DefinitionOfDoneItem {
 export interface Task {
   id: string;
   projectId: string;
+  parentId?: string | null;
   title: string;
-  intent: string;
-  definitionOfDone: DefinitionOfDoneItem[];
+  intent?: string;
+  definitionOfDone?: DefinitionOfDoneItem[];
   priority: TaskPriority;
   status: TaskStatus;
   orderIndex: number;
@@ -32,6 +33,7 @@ export type EventType =
   | 'TASK_CREATED'
   | 'TASK_STATUS_UPDATED'
   | 'TASK_REORDERED'
+  | 'TASK_PARENT_CHANGED'
   | 'TASK_DELETED';
 
 export interface SyncEvent {
@@ -41,6 +43,8 @@ export interface SyncEvent {
   timestamp: number;
   sequence: number;
   type: EventType;
+  previousHash?: string;
+  hash?: string;
   payload: any;
 }
 

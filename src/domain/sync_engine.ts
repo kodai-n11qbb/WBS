@@ -21,7 +21,7 @@ export class SyncEngine {
 
   /**
    * Reduces an array of SyncEvents into a consolidated ProjectState.
-   * Handles deduplication, Tombstone deletion, and deterministic LWW resolution.
+   * Handles deduplication, Tombstone deletion, parentId hierarchy, and LWW.
    */
   public reduceEvents(events: SyncEvent[]): ProjectState {
     const eventMap = new Map<string, SyncEvent>();
@@ -47,11 +47,21 @@ export class SyncEngine {
           break;
 
         case 'TASK_CREATED': {
-          const { taskId, title, intent, definitionOfDone, priority, status, orderIndex, assignedNodeId } =
-            event.payload;
+          const {
+            taskId,
+            parentId,
+            title,
+            intent,
+            definitionOfDone,
+            priority,
+            status,
+            orderIndex,
+            assignedNodeId,
+          } = event.payload;
           state.tasks.set(taskId, {
             id: taskId,
             projectId: event.projectId,
+            parentId: parentId || null,
             title: title || '',
             intent: intent || '',
             definitionOfDone: Array.isArray(definitionOfDone) ? definitionOfDone : [],
@@ -83,6 +93,16 @@ export class SyncEngine {
           const existing = state.tasks.get(taskId);
           if (existing && typeof newOrderIndex === 'number') {
             existing.orderIndex = newOrderIndex;
+            existing.updatedAt = event.timestamp;
+          }
+          break;
+        }
+
+        case 'TASK_PARENT_CHANGED': {
+          const { taskId, newParentId } = event.payload;
+          const existing = state.tasks.get(taskId);
+          if (existing) {
+            existing.parentId = newParentId || null;
             existing.updatedAt = event.timestamp;
           }
           break;

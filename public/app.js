@@ -8,20 +8,13 @@
   let currentViewMode = 'TREE_VIEW';
   let userPreferredViewMode = 'TREE_VIEW';
 
-  // Idle Timer & Screensaver Mode
-  let idleTimer = null;
-  const IDLE_TIMEOUT_MS = 4000; // 4 seconds idle auto transition
-  let isScreensaverActive = false;
-
-  // Canvas Animation Frames & State
+  // Canvas Animation Frame & Physics State
   let canvasAnimationId = null;
-  let bgCanvasAnimationId = null;
   let graphNodes = [];
   let draggedGraphNode = null;
-  let dragStartPos = { x: 0, y: 0 };
+  let pendingParentingAction = null; // { childTaskId, parentTaskId }
 
   // DOM Elements
-  const appContainer = document.querySelector('.app-container');
   const nodeDisplay = document.getElementById('node-id-display');
   const errorToast = document.getElementById('error-toast');
 
@@ -38,8 +31,11 @@
 
   const obsidianGraphViewSection = document.getElementById('obsidian-graph-view');
   const canvas = document.getElementById('obsidian-canvas');
-  const bgCanvas = document.getElementById('bg-obsidian-canvas');
-  const screensaverOverlay = document.getElementById('screensaver-overlay');
+
+  const confirmModal = document.getElementById('confirm-parent-modal');
+  const confirmModalText = document.getElementById('confirm-modal-text');
+  const btnModalCancel = document.getElementById('btn-modal-cancel');
+  const btnModalConfirm = document.getElementById('btn-modal-confirm');
 
   const kanbanViewSection = document.getElementById('kanban-view');
   const listTodo = document.getElementById('list-todo');
@@ -110,7 +106,6 @@
   function setViewMode(mode, isUserAction = false) {
     if (isUserAction) {
       userPreferredViewMode = mode;
-      exitScreensaver();
     }
     currentViewMode = mode;
 
@@ -134,13 +129,13 @@
     if (currentViewMode === 'TREE_VIEW') {
       renderPureTreeView();
     } else if (currentViewMode === 'OBSIDIAN_GRAPH_VIEW') {
-      startObsidianGraphRenderer(canvas, false);
+      startObsidianGraphRenderer();
     } else if (currentViewMode === 'KANBAN_VIEW') {
       renderKanbanView();
     }
   }
 
-  // VIEW 1: Pure Tree View (Single-Canvas, No 3-Column Split)
+  // VIEW 1: Pure Tree View (Single-Canvas, Enhanced Readability)
   function renderPureTreeView() {
     pureTreeContainer.innerHTML = '';
     const rootTasks = currentTasks.filter((t) => !t.parentId).sort((a, b) => a.orderIndex - b.orderIndex);
@@ -181,28 +176,37 @@
     return nodeWrapper;
   }
 
-  // VIEW 2 & Screensaver: Obsidian Interactive Graph Canvas Renderer (Physics Drag & Click)
-  function startObsidianGraphRenderer(targetCanvas, isBgScreensaver = false) {
-    if (!targetCanvas) return;
-    const ctx = targetCanvas.getContext('2d');
+  // VIEW 2: Obsidian Graph Canvas Renderer with Spring Physics & Node Dragging
+  function startObsidianGraphRenderer() {
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    targetCanvas.width = isBgScreensaver ? window.innerWidth : targetCanvas.parentElement.clientWidth;
-    targetCanvas.height = isBgScreensaver ? window.innerHeight : targetCanvas.parentElement.clientHeight;
+    const wrapper = canvas.parentElement;
+    canvas.width = wrapper.clientWidth;
+    canvas.height = wrapper.clientHeight;
 
-    // Build Node Physics Array
+    // Initialize or Sync Node Array
+    const existingNodeMap = new Map(graphNodes.map((n) => [n.task.id, n]));
+
     graphNodes = currentTasks.map((task, idx) => {
+      const existing = existingNodeMap.get(task.id);
+      if (existing) {
+        existing.task = task;
+        return existing;
+      }
+
       const angle = (idx / Math.max(1, currentTasks.length)) * Math.PI * 2;
-      const radius = Math.min(targetCanvas.width, targetCanvas.height) * 0.3;
-      const centerX = targetCanvas.width / 2;
-      const centerY = targetCanvas.height / 2;
+      const radius = Math.min(canvas.width, canvas.height) * 0.3;
+      const centerX = canvas.width / 2;
+      const centerY = canvas.height / 2;
 
       return {
         task,
         x: task.parentId ? centerX + Math.cos(angle) * radius * 0.8 : centerX + Math.cos(angle) * (radius * 0.5),
         y: task.parentId ? centerY + Math.sin(angle) * radius * 0.8 : centerY + Math.sin(angle) * (radius * 0.5),
-        vx: (Math.random() - 0.5) * 0.4,
-        vy: (Math.random() - 0.5) * 0.4,
+        vx: (Math.random() - 0.5) * 0.2,
+        vy: (Math.random() - 0.5) * 0.2,
         isPinned: false,
       };
     });
@@ -210,9 +214,46 @@
     const nodeMap = new Map(graphNodes.map((n) => [n.task.id, n]));
 
     function animate() {
-      ctx.clearRect(0, 0, targetCanvas.width, targetCanvas.height);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // Draw Connection Edges (Glowing Lines between Parent & Child)
+      // 1. Calculate Spring Physics Elasticity between connected Parent-Child Nodes
+      graphNodes.forEach((node) => {
+        if (node.task.parentId) {
+          const parentNode = nodeMap.get(node.task.parentId);
+          if (parentNode) {
+            const dx = node.x - parentNode.x;
+            const dy = node.y - parentNode.y;
+            const dist = Math.hypot(dx, dy) || 1;
+            const restLength = 120; // Natural spring distance
+            const stiffness = 0.04; // Spring elasticity
+            const force = (dist - restLength) * stiffness;
+            const fx = (dx / dist) * force;
+            const fy = (dy / dist) * force;
+
+            if (!node.isPinned) {
+              node.vx -= fx * 0.4;
+              node.vy -= fy * 0.4;
+            }
+            if (!parentNode.isPinned) {
+              parentNode.vx += fx * 0.4;
+              parentNode.vy += fy * 0.4;
+            }
+          }
+        }
+
+        // Apply Velocity Damping
+        if (!node.isPinned) {
+          node.vx *= 0.88;
+          node.vy *= 0.88;
+          node.x += node.vx;
+          node.y += node.vy;
+
+          if (node.x < 40 || node.x > canvas.width - 40) node.vx *= -1;
+          if (node.y < 40 || node.y > canvas.height - 40) node.vy *= -1;
+        }
+      });
+
+      // 2. Draw Connection Edges (Glowing Lines)
       graphNodes.forEach((node) => {
         if (node.task.parentId) {
           const parentNode = nodeMap.get(node.task.parentId);
@@ -234,25 +275,19 @@
         }
       });
 
-      // Draw Nodes & Physics Motion
+      // 3. Draw Nodes
       graphNodes.forEach((node) => {
-        if (!node.isPinned) {
-          node.x += node.vx;
-          node.y += node.vy;
-
-          if (node.x < 40 || node.x > targetCanvas.width - 40) node.vx *= -1;
-          if (node.y < 40 || node.y > targetCanvas.height - 40) node.vy *= -1;
-        }
-
         let nodeColor = '#38bdf8'; // TODO: Blue
         if (node.task.status === 'IN_PROGRESS') nodeColor = '#fbbf24'; // Amber
         if (node.task.status === 'DONE') nodeColor = '#34d399'; // Green
 
+        const isFocused = focusedTaskId === node.task.id;
+
         // Glowing halo
         ctx.beginPath();
-        ctx.arc(node.x, node.y, focusedTaskId === node.task.id ? 22 : 16, 0, Math.PI * 2);
+        ctx.arc(node.x, node.y, isFocused ? 22 : 16, 0, Math.PI * 2);
         ctx.fillStyle = nodeColor;
-        ctx.globalAlpha = focusedTaskId === node.task.id ? 0.45 : 0.25;
+        ctx.globalAlpha = isFocused ? 0.45 : 0.25;
         ctx.fill();
 
         // Core Circle
@@ -261,7 +296,7 @@
         ctx.globalAlpha = 1.0;
         ctx.fillStyle = nodeColor;
         ctx.shadowColor = nodeColor;
-        ctx.shadowBlur = focusedTaskId === node.task.id ? 20 : 12;
+        ctx.shadowBlur = isFocused ? 20 : 12;
         ctx.fill();
         ctx.shadowBlur = 0;
 
@@ -272,25 +307,21 @@
         ctx.fillText(node.task.title, node.x, node.y + 24);
       });
 
-      if (isBgScreensaver) {
-        bgCanvasAnimationId = requestAnimationFrame(animate);
-      } else {
-        canvasAnimationId = requestAnimationFrame(animate);
-      }
+      canvasAnimationId = requestAnimationFrame(animate);
     }
 
     animate();
-    setupCanvasInteractivity(targetCanvas);
+    setupCanvasInteractivity();
   }
 
-  // Canvas Mouse Dragging & Click Selection Handler
-  function setupCanvasInteractivity(targetCanvas) {
+  // Canvas Mouse Dragging, Node Focus & Parent Drag-Drop Confirmation
+  function setupCanvasInteractivity() {
     let isMouseDown = false;
     let clickStartX = 0;
     let clickStartY = 0;
 
-    targetCanvas.onmousedown = (e) => {
-      const rect = targetCanvas.getBoundingClientRect();
+    canvas.onmousedown = (e) => {
+      const rect = canvas.getBoundingClientRect();
       const mouseX = e.clientX - rect.left;
       const mouseY = e.clientY - rect.top;
 
@@ -305,24 +336,33 @@
       }
     };
 
-    targetCanvas.onmousemove = (e) => {
+    canvas.onmousemove = (e) => {
       if (isMouseDown && draggedGraphNode) {
-        const rect = targetCanvas.getBoundingClientRect();
+        const rect = canvas.getBoundingClientRect();
         draggedGraphNode.x = e.clientX - rect.left;
         draggedGraphNode.y = e.clientY - rect.top;
       }
     };
 
-    targetCanvas.onmouseup = (e) => {
+    canvas.onmouseup = (e) => {
       const dist = Math.hypot(e.clientX - clickStartX, e.clientY - clickStartY);
       if (draggedGraphNode) {
         draggedGraphNode.isPinned = false;
+
         if (dist < 5) {
-          // Clicked on a Node: Focus task & switch to editing view!
+          // Clicked Node: Focus task & switch to tree/kanban view
           const taskId = draggedGraphNode.task.id;
-          exitScreensaver();
           setViewMode(userPreferredViewMode === 'OBSIDIAN_GRAPH_VIEW' ? 'TREE_VIEW' : userPreferredViewMode, true);
           setFocusedTask(taskId);
+        } else {
+          // Dragged Node: Check if dropped onto another node to change parent (Root tasks only)
+          const targetNode = graphNodes.find(
+            (n) => n.task.id !== draggedGraphNode.task.id && Math.hypot(n.x - draggedGraphNode.x, n.y - draggedGraphNode.y) <= 35
+          );
+
+          if (targetNode && !draggedGraphNode.task.parentId) {
+            promptParentingConfirmation(draggedGraphNode.task, targetNode.task);
+          }
         }
       }
       isMouseDown = false;
@@ -330,7 +370,27 @@
     };
   }
 
-  // VIEW 3: 3-Column Kanban View
+  // Parent Drag Confirmation Modal
+  function promptParentingConfirmation(childTask, parentTask) {
+    pendingParentingAction = { childTaskId: childTask.id, parentTaskId: parentTask.id };
+    confirmModalText.textContent = `タスク「${childTask.title}」を「${parentTask.title}」の子タスクに変更しますか？`;
+    confirmModal.classList.remove('hidden');
+  }
+
+  btnModalCancel.onclick = () => {
+    confirmModal.classList.add('hidden');
+    pendingParentingAction = null;
+  };
+
+  btnModalConfirm.onclick = () => {
+    if (pendingParentingAction) {
+      changeTaskParent(pendingParentingAction.childTaskId, pendingParentingAction.parentTaskId);
+    }
+    confirmModal.classList.add('hidden');
+    pendingParentingAction = null;
+  };
+
+  // VIEW 3: 3-Column Kanban View (Parent Tasks Priority Sorted to Top)
   function renderKanbanView() {
     listTodo.innerHTML = '';
     listInProgress.innerHTML = '';
@@ -350,7 +410,15 @@
     countInProgress.textContent = inProgressCount;
     countDone.textContent = doneCount;
 
-    const sortedTasks = [...currentTasks].sort((a, b) => a.orderIndex - b.orderIndex);
+    // Priority Sort: Parent tasks (tasks with subtasks) come FIRST, then by orderIndex
+    const isParentTask = (t) => currentTasks.some((child) => child.parentId === t.id);
+    const sortedTasks = [...currentTasks].sort((a, b) => {
+      const aIsParent = isParentTask(a) ? 0 : 1;
+      const bIsParent = isParentTask(b) ? 0 : 1;
+      if (aIsParent !== bIsParent) return aIsParent - bIsParent;
+      return a.orderIndex - b.orderIndex;
+    });
+
     sortedTasks.forEach((task) => {
       const card = createTaskCard(task);
       if (task.status === 'TODO') listTodo.appendChild(card);
@@ -607,67 +675,6 @@
     });
   }
 
-  // Idle Timer Setup (4 Seconds Auto Transition to Background Screensaver Mode)
-  function setupIdleTimer() {
-    function resetIdleTimer() {
-      if (idleTimer) clearTimeout(idleTimer);
-
-      idleTimer = setTimeout(() => {
-        enterScreensaver();
-      }, IDLE_TIMEOUT_MS);
-    }
-
-    // Reset idle timer on keyboard activity
-    window.addEventListener('keydown', () => {
-      if (isScreensaverActive) {
-        exitScreensaver();
-      }
-      resetIdleTimer();
-    });
-
-    // Reset idle timer on window click (Click Return)
-    window.addEventListener('click', (e) => {
-      if (isScreensaverActive) {
-        exitScreensaver();
-      } else {
-        resetIdleTimer();
-      }
-    });
-
-    screensaverOverlay.addEventListener('click', () => {
-      exitScreensaver();
-    });
-
-    resetIdleTimer();
-  }
-
-  function enterScreensaver() {
-    if (isScreensaverActive) return;
-    isScreensaverActive = true;
-
-    bgCanvas.classList.remove('hidden');
-    screensaverOverlay.classList.remove('hidden');
-    appContainer.classList.add('screensaver-fade');
-
-    startObsidianGraphRenderer(bgCanvas, true);
-  }
-
-  function exitScreensaver() {
-    if (!isScreensaverActive) return;
-    isScreensaverActive = false;
-
-    if (bgCanvasAnimationId) {
-      cancelAnimationFrame(bgCanvasAnimationId);
-      bgCanvasAnimationId = null;
-    }
-
-    bgCanvas.classList.add('hidden');
-    screensaverOverlay.classList.add('hidden');
-    appContainer.classList.remove('screensaver-fade');
-
-    renderCurrentView();
-  }
-
   // Socket Emitters
   function updateTaskStatus(taskId, newStatus) {
     if (socket && socket.readyState === WebSocket.OPEN) {
@@ -741,6 +748,5 @@
 
   setupDragAndDrop();
   setupKeyboardNavigation();
-  setupIdleTimer();
   initWebSocket();
 })();

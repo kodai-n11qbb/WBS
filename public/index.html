@@ -40,7 +40,7 @@
           </button>
         </div>
 
-        <div class="kb-hint">💡 十字キー(↑↓←→) | 4秒無操作でGraph化</div>
+        <div class="kb-hint">💡 十字キー(↑↓←→) | Obsidianノードのバネ物理ドラッグ</div>
 
         <div class="node-pill">
           <span class="status-dot online"></span>
@@ -49,10 +49,17 @@
       </div>
     </header>
 
-    <!-- Background Screensaver Canvas & Click Return Overlay -->
-    <canvas id="bg-obsidian-canvas" class="bg-obsidian-canvas hidden"></canvas>
-    <div id="screensaver-overlay" class="screensaver-overlay hidden">
-      <div class="screensaver-banner">🌌 Obsidian スクリーンセーバー表示中（画面クリックで編集画面へ復帰）</div>
+    <!-- Parent Drag Confirmation Modal Dialog -->
+    <div id="confirm-parent-modal" class="modal-backdrop hidden">
+      <div class="modal-card">
+        <div class="modal-icon">📁</div>
+        <h3>親タスク設定の確認</h3>
+        <p id="confirm-modal-text">タスク「X」を「Y」の子タスクに変更しますか？</p>
+        <div class="modal-actions">
+          <button id="btn-modal-cancel" class="btn-modal btn-cancel">キャンセル</button>
+          <button id="btn-modal-confirm" class="btn-modal btn-confirm">親タスクに設定</button>
+        </div>
+      </div>
     </div>
 
     <!-- Error Toast Notification -->

@@ -7,15 +7,45 @@ import { NodeService } from '../core/node_service.js';
 import { JsonlFileRepository } from '../adapters/jsonl_repository.js';
 import { JsonStateSnapshotExporter } from '../adapters/snapshot_exporter.js';
 import { UdpPeerTransport } from '../adapters/udp_peer_discovery.js';
+import { SystemBrowserLauncher } from '../adapters/browser_launcher.js';
 import { SyncEngine } from '../domain/sync_engine.js';
 import { StructuredTaskValidator } from '../domain/task_validator.js';
 import { crypto } from '../core/crypto_util.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const PUBLIC_DIR = path.join(__dirname, '../../public');
-const DATA_FILE = path.join(__dirname, '../../data/events.jsonl');
-const SNAPSHOT_FILE = path.join(__dirname, '../../data/state.json');
+const getFilename = () => {
+  if (typeof __filename !== 'undefined') return __filename;
+  try {
+    return fileURLToPath(import.meta.url);
+  } catch {
+    return '';
+  }
+};
+const currentFilename = getFilename();
+const currentDirname = typeof __dirname !== 'undefined' ? __dirname : (currentFilename ? path.dirname(currentFilename) : process.cwd());
+
+function getPublicDir(currentDir: string): string {
+  const candidates = [
+    path.join(process.cwd(), 'public'),
+    path.join(currentDir, '../../public'),
+    path.join(currentDir, '../public'),
+    path.join(currentDir, 'public'),
+    '/snapshot/share-log/public',
+    '/snapshot/public',
+  ];
+  for (const candidate of candidates) {
+    try {
+      if (fs.existsSync(path.join(candidate, 'index.html'))) {
+        return candidate;
+      }
+    } catch {}
+  }
+  return path.join(process.cwd(), 'public');
+}
+
+const PUBLIC_DIR = getPublicDir(currentDirname);
+const DATA_DIR = path.join(process.cwd(), 'data');
+const DATA_FILE = path.join(DATA_DIR, 'events.jsonl');
+const SNAPSHOT_FILE = path.join(DATA_DIR, 'state.json');
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 const NODE_ID = process.env.NODE_ID || `node-${crypto.randomUUID().slice(0, 6)}`;
@@ -25,6 +55,7 @@ const UDP_PORT = process.env.UDP_PORT ? parseInt(process.env.UDP_PORT, 10) : 412
 const repository = new JsonlFileRepository(DATA_FILE);
 const snapshotExporter = new JsonStateSnapshotExporter(SNAPSHOT_FILE);
 const transport = new UdpPeerTransport({ nodeId: NODE_ID, port: UDP_PORT });
+const browserLauncher = new SystemBrowserLauncher();
 const syncEngine = new SyncEngine();
 const validator = new StructuredTaskValidator();
 
@@ -72,28 +103,57 @@ async function bootstrap() {
 }
 
 const server = http.createServer((req, res) => {
-  let filePath = path.join(PUBLIC_DIR, req.url === '/' ? 'index.html' : req.url || 'index.html');
+  const rawUrl = req.url || '/';
+  const pathname = rawUrl.split('?')[0];
+  const relativePath = pathname === '/' ? 'index.html' : (pathname.startsWith('/') ? pathname.slice(1) : pathname);
+  const filePath = path.normalize(path.join(PUBLIC_DIR, relativePath));
 
-  const ext = path.extname(filePath);
-  let contentType = 'text/html';
-  if (ext === '.css') contentType = 'text/css';
-  if (ext === '.js') contentType = 'text/javascript';
-  if (ext === '.json') contentType = 'application/json';
+  const normalizedPublic = path.normalize(PUBLIC_DIR);
+  if (!filePath.startsWith(normalizedPublic)) {
+    res.writeHead(403, { 'Content-Type': 'text/html; charset=utf-8' });
+    res.end('<h1>403 Forbidden</h1>');
+    return;
+  }
+
+  const ext = path.extname(filePath).toLowerCase();
+  const mimeTypes: Record<string, string> = {
+    '.html': 'text/html; charset=utf-8',
+    '.css': 'text/css; charset=utf-8',
+    '.js': 'text/javascript; charset=utf-8',
+    '.json': 'application/json; charset=utf-8',
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.svg': 'image/svg+xml',
+    '.ico': 'image/x-icon',
+    '.woff2': 'font/woff2',
+  };
+  const contentType = mimeTypes[ext] || 'application/octet-stream';
 
   fs.readFile(filePath, (err, content) => {
     if (err) {
       if (err.code === 'ENOENT') {
-        res.writeHead(404, { 'Content-Type': 'text/html' });
+        res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8' });
         res.end('<h1>404 Not Found</h1>');
       } else {
-        res.writeHead(500);
-        res.end(`Server Error: ${err.code}`);
+        res.writeHead(500, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end(`<h1>500 Internal Server Error: ${err.code}</h1>`);
       }
     } else {
       res.writeHead(200, { 'Content-Type': contentType });
-      res.end(content, 'utf-8');
+      res.end(content);
     }
   });
+});
+
+server.on('error', (err: any) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`[Share-Log Web UI Error] Port ${PORT} is already in use.`);
+    console.error(`[Share-Log Web UI Error] Please terminate the process using port ${PORT} or specify PORT=<port>.`);
+    process.exit(1);
+  } else {
+    console.error(`[Share-Log Web UI Error] Server error:`, err);
+  }
 });
 
 const wss = new WebSocketServer({ server });
@@ -151,8 +211,7 @@ wss.on('connection', async (ws) => {
         await nodeService.changeTaskParent(activeProjectId, data.taskId, data.newParentId);
         await broadcastStateToUI();
       } else if (data.action === 'TOGGLE_COLLAPSE') {
-        await nodeService.toggleTaskCollapse(activeProjectId, data.taskId, data.isCollapsed);
-        await broadcastStateToUI();
+        // Tree node collapse/expand is local client UI state and excluded from P2P broadcast
       } else if (data.action === 'DELETE_TASK') {
         await nodeService.deleteTask(activeProjectId, data.taskId);
         await broadcastStateToUI();
@@ -192,5 +251,10 @@ transport.onMessage(async () => {
 
 server.listen(PORT, async () => {
   await bootstrap();
-  console.log(`[Share-Log Web UI] Server running at http://localhost:${PORT}`);
+  const url = `http://localhost:${PORT}`;
+  console.log(`[Share-Log Web UI] Server running at ${url}`);
+
+  if (process.env.AUTO_OPEN !== 'false') {
+    await browserLauncher.open(url);
+  }
 });

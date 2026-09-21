@@ -8,6 +8,28 @@
   let currentViewMode = 'TREE_VIEW';
   let userPreferredViewMode = 'TREE_VIEW';
 
+  // Local UI State: Tree collapse state is local to each client and NOT synced over P2P/WebSocket
+  const localCollapsedTaskIds = new Set(
+    JSON.parse(localStorage.getItem('share_log_local_collapsed_tasks') || '[]')
+  );
+
+  function isTaskCollapsed(taskId) {
+    return localCollapsedTaskIds.has(taskId);
+  }
+
+  function toggleTaskCollapse(taskId) {
+    if (localCollapsedTaskIds.has(taskId)) {
+      localCollapsedTaskIds.delete(taskId);
+    } else {
+      localCollapsedTaskIds.add(taskId);
+    }
+    localStorage.setItem(
+      'share_log_local_collapsed_tasks',
+      JSON.stringify(Array.from(localCollapsedTaskIds))
+    );
+    renderCurrentView();
+  }
+
   // Canvas Animation Frame & Physics State
   let canvasAnimationId = null;
   let graphNodes = [];
@@ -277,7 +299,7 @@
     nodeWrapper.appendChild(card);
 
     const children = currentTasks.filter((t) => t.parentId === task.id).sort((a, b) => a.orderIndex - b.orderIndex);
-    if (children.length > 0 && !task.isCollapsed) {
+    if (children.length > 0 && !isTaskCollapsed(task.id)) {
       const childrenContainer = document.createElement('div');
       childrenContainer.className = 'tree-children-container';
       childrenContainer.style.display = 'flex';
@@ -738,13 +760,14 @@
     const isParent = children.length > 0;
 
     if (isParent && currentViewMode === 'TREE_VIEW') {
+      const collapsed = isTaskCollapsed(task.id);
       const btnToggle = document.createElement('button');
       btnToggle.className = 'btn-toggle-tree';
-      btnToggle.textContent = task.isCollapsed ? '▶' : '▼';
-      btnToggle.title = task.isCollapsed ? '子タスクを展開' : '子タスクを折りたたむ';
+      btnToggle.textContent = collapsed ? '▶' : '▼';
+      btnToggle.title = collapsed ? '子タスクを展開' : '子タスクを折りたたむ';
       btnToggle.onclick = (e) => {
         e.stopPropagation();
-        toggleTaskCollapse(task.id, !task.isCollapsed);
+        toggleTaskCollapse(task.id);
       };
       titleGroup.appendChild(btnToggle);
     }
@@ -851,9 +874,9 @@
     while (target && target.parentId) {
       const parentTask = currentTasks.find((t) => t.id === target.parentId);
       if (parentTask) {
-        if (parentTask.isCollapsed) {
-          parentTask.isCollapsed = false;
-          toggleTaskCollapse(parentTask.id, false);
+        if (localCollapsedTaskIds.has(parentTask.id)) {
+          localCollapsedTaskIds.delete(parentTask.id);
+          localStorage.setItem('share_log_local_collapsed_tasks', JSON.stringify(Array.from(localCollapsedTaskIds)));
         }
         target = parentTask;
       } else {
@@ -1057,18 +1080,6 @@
           action: 'CHANGE_PARENT',
           taskId,
           newParentId,
-        })
-      );
-    }
-  }
-
-  function toggleTaskCollapse(taskId, isCollapsed) {
-    if (socket && socket.readyState === WebSocket.OPEN) {
-      socket.send(
-        JSON.stringify({
-          action: 'TOGGLE_COLLAPSE',
-          taskId,
-          isCollapsed,
         })
       );
     }

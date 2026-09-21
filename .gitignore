@@ -1,8 +1,9 @@
 # Dependencies
 node_modules/
 
-# Production build
+# Production build & packaged binaries
 dist/
+bin/
 
 # Local data & storage files
 data/*.jsonl

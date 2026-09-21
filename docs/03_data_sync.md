@@ -27,7 +27,7 @@ export interface Task {
   title: string;                 // タスク名 (唯一の必須属性)
   status: 'TODO' | 'IN_PROGRESS' | 'DONE'; // ステータス
   orderIndex: number;            // 表示順序
-  isCollapsed?: boolean;         // ツリーの折りたたみ状態
+  isCollapsed?: boolean;         // ツリーの折りたたみ状態（端末ローカルUI状態・P2P非同期）
   updatedAt: number;
   authorNodeId: string;
 }

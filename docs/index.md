@@ -10,11 +10,11 @@
 ## ドキュメント一覧
 
 1. [概念とユースケース (`./01_concept.md`)](./01_concept.md)
-   - システムの目的、背景、主要ユースケース、構造化強制、Tombstone分散削除、Drag & Dropの概念
+   - システム概念、柔軟なオプション属性、ツリー構造 (Parent-Child)、GitライクなJSONL追跡ログの定義
 2. [システムアーキテクチャ抽象 (`./02_architecture.md`)](./02_architecture.md)
-   - P2P ネットワーク、ノード発見、モジュール分割、DI（依存注入）レイヤー、TaskValidatorPort 設計
+   - P2P ネットワーク、ノード発見、モジュール分割、DI（依存注入）レイヤー、JsonlFileRepository 設計
 3. [データモデルと同期仕様 (`./03_data_sync.md`)](./03_data_sync.md)
-   - 構造化タスクモデル (Structured Task Spec)、Tombstone パターンによる分散削除仕様、Drag & Dropイベント、コンフリクト解決方針
+   - タスクデータ仕様 (Parent-Child Spec)、Gitライクな JSONL 履歴追跡ログ、Tombstone 分散削除、コンフリクト解決
 4. [拡張性およびプラグイン設計 (`./04_extension_spec.md`)](./04_extension_spec.md)
    - プロトコル抽象化、ストレージ抽象化、UI/インターフェース分離設計
 

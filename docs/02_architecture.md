@@ -11,27 +11,27 @@
 ```
 +-------------------------------------------------------------+
 |                     Presentation Layer                      |
-|          (Drag & Drop Web UI / CLI / Desktop App)           |
+|       (Tree & Kanban Drag-Drop Web UI / CLI / Desktop)      |
 +------------------------------+------------------------------+
                                | (Interfaces)
 +------------------------------v------------------------------+
 |                     Application / Domain                    |
-|    (Structured Task Validator, Sync Engine, Project)        |
+|    (Tree Validator, Sync Engine, Git-like Hash Logger)      |
 +--------------+------------------------------+---------------+
                | (Interfaces)                 | (Interfaces)
 +--------------v--------------+ +-------------v---------------+
-|     P2P Transport Layer     | |        Storage Layer        |
-|  (Discovery, Socket, Mesh)  | |  (SQLite, File System, Mem) |
+|     P2P Transport Layer     | |   Git-like Storage Layer    |
+|  (Discovery, Socket, Mesh)  | | (JSONL File, InMemory, DB)  |
 +-----------------------------+ +-----------------------------+
 ```
 
 ## 2. コンポーネントインターフェース定義（抽象ポート）
 
-### (1) Task Validator Port (構造化強制ポート)
-- **役割**: ドメインイベント発行前に入力データが構造化要件（タイトル、目的/背景、DoD等）を満たしているかを強制検証する。
+### (1) Task Validator Port (ツリー検証ポート)
+- **役割**: ドメインイベント発行前に入力データ（タイトル1文字以上）およびツリー構造制約（循環参照防止）を満たしているかを検証する。
 - **抽象機能**:
   - `validate_task_creation(payload): ValidationResult`
-  - `validate_task_update(payload): ValidationResult`
+  - `validate_tree_relationship(parentId, childId): ValidationResult`
 
 ### (2) Peer Discovery Port (ノード発見ポート)
 - **役割**: LAN 内の他ノードを検出し、参加/離脱イベントをドメインへ通知する。
@@ -49,7 +49,7 @@
   - `on_message_received(callback)`
 
 ### (4) Project Repository Port (ストレージポート)
-- **役割**: ローカルノードにおけるプロジェクトデータ・同期履歴の永続化。
+- **役割**: ローカルノードにおける Git ライクな `.jsonl` イベントログの永続化と読み込み。
 - **抽象機能**:
   - `save_event(event)`
   - `get_events_since(timestamp_or_seq)`
@@ -58,8 +58,8 @@
 ---
 
 ## 3. Dependency Injection (DI) 方針
-- ドメインコアは具象ソケット通信、特定DBドライバ、特定のUIイベントを直接 `new` せず、すべてインターフェース経由で外部注入（DI）を受ける。
-- 構造化バリデータ (`TaskValidatorPort`) も注入可能にし、プロジェクトごとに拡張・カスタマイズ可能な構造とする。
+- ドメインコアは具象ファイル操作、ソケット通信、特定DBドライバを直接 `new` せず、すべてインターフェース経由で外部注入（DI）を受ける。
+- テスト時には `InMemoryRepository` を用い、本番・ローカル保存時には `JsonlFileRepository` へ容易に切り替え可能な構造とする。
 
 ---
 

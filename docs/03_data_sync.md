@@ -6,19 +6,19 @@
 
 ## 1. ドメインモデルエンティティ（Local-First 原則）
 
-オフライン時の独立編集と接続時の自動マージを実現するため、直接上書き更新ではなく **「イベントログの集約（Event Sourcing）」** および **「CRDT (Conflict-free Replicated Data Type)」** の原則を採用します。
+オフライン時の独立編集と接続時の自動マージを実現するため、直接上書き更新ではなく **「イベントログの集約（Event Sourcing）」** および **「Gitライクなハッシュチェーンログ (JSONL)」** の原則を採用します。
 
 ### 主要概念
 - **Project**: 管理対象のプロジェクト枠組み（ID, Name, CreatedAt, OwnerNodeId）
-- **Structured Task**: 構造化の強制ルールが適用された作業項目（下記参照）
+- **Task Tree**: 階層構造（ツリー）および柔軟なオプション属性を持つ作業項目（下記参照）
 - **Member / Node**: ネットワーク内の参加者ノード（NodeID, DisplayName, LastSeenAt）
-- **Event**: 進行状態の変更・削除を表す不変 (Immutable) なレコード
+- **Git-like Event Log**: 履歴追跡を可能にする不変 (Immutable) な JSONL レコード
 
 ---
 
-## 2. 構造化タスク仕様 (Structured Task Spec)
+## 2. タスクデータ仕様 (Task Spec & Optional Attributes)
 
-タスクの曖昧さを排除するため、以下のフィールド構造および**入力バリデーションルールの強制**をドメイン層で適用します。
+タスク登録のハードルを下げつつ、階層構造（ツリー関係）と必要に応じた詳細情報を保持できるデータ構造です。
 
 ```typescript
 export interface DefinitionOfDoneItem {
@@ -27,76 +27,75 @@ export interface DefinitionOfDoneItem {
   completed: boolean;
 }
 
-export interface StructuredTask {
+export interface Task {
   id: string;
   projectId: string;
-  title: string;                 // 必須: タスクの概要名
-  intent: string;                // 必須: なぜこの作業を行うのか（目的・背景）
-  definitionOfDone: DefinitionOfDoneItem[]; // 必須: 完了とみなす条件チェックリスト（最低1個）
-  priority: 'HIGH' | 'MEDIUM' | 'LOW';     // 必須: 優先度
+  parentId?: string | null;      // 【ツリー構造】親タスクのID（nullの場合はルートタスク）
+  childTaskIds: string[];        // 【ツリー構造】子タスク（サブタスク）のID一覧
+  title: string;                 // 【必須】タスクの概要名
+  intent?: string;               // 【オプション】目的・背景 (Why)
+  definitionOfDone?: DefinitionOfDoneItem[]; // 【オプション】完了条件チェックリスト
+  priority: 'HIGH' | 'MEDIUM' | 'LOW';     // 必須: 優先度（デフォルト: MEDIUM）
   status: 'TODO' | 'IN_PROGRESS' | 'DONE';  // 必須: ステータス
-  orderIndex: number;            // 必須: カラム内表示順序（Drag & Drop移動用）
+  orderIndex: number;            // 必須: 表示順序（Drag & Drop移動用）
   assignedNodeId?: string;
   updatedAt: number;
   authorNodeId: string;
 }
 ```
 
-### 構造化強制バリデーションルール (Domain Rule)
-1. `title`: 空白を除き 3 文字以上であること。
-2. `intent`: 空白不可（なぜこの作業をするのかの背景を言語化させる）。
-3. `definitionOfDone`: 最低 1 つ以上のチェックリスト項目を含んでいること。
-4. **制約を満たさないイベントはドメインバリデータによって拒絶され、イベントログに追加されない。**
+### バリデーションルール (Domain Rule)
+1. **タスクタイトル**: 空白を除き 1 文字以上であること（入力必須）。
+2. **オプション属性**: `intent` や `definitionOfDone` は未入力・空配列でも正常に登録可能。
+3. **ツリー整合性チェック**: 自分自身を親に指定することや、循環参照（A ➔ B ➔ A）を禁止。
 
 ---
 
-## 3. 操作イベントおよび分散削除仕様 (Tombstone Pattern)
+## 3. Gitライクな JSONL 履歴追跡ログ仕様 (Git-like Audit Log)
 
-P2P分散環境では、データを物理削除すると他ノードとの再同期時に削除事実が伝播せずタスクが復活する「ゴーストタスク問題」が発生します。そのため、本システムでは **Tombstone (墓標) パターン** を採用します。
+すべての操作は改ざん不能な Git ライクなイベントログとして `.jsonl` ファイル（1行1JSON）に追記（Append-Only）されます。
 
-1. **`TASK_CREATED`**: 構造化要件を満たしたタスク新規登録。
+```json
+{
+  "id": "evt-uuid-001",
+  "projectId": "p1",
+  "authorNodeId": "node-alpha",
+  "timestamp": 1700000000000,
+  "sequence": 1,
+  "type": "TASK_CREATED",
+  "previousHash": "00000000000000000000000000000000",
+  "hash": "a1b2c3d4e5f6...",
+  "payload": {
+    "taskId": "t-100",
+    "parentId": null,
+    "title": "管理ツールの設計",
+    "intent": "LAN内での分散型プロジェクト進行を可能にするため（※任意）",
+    "definitionOfDone": []
+  }
+}
+```
+
+### 履歴追跡（`git log` 相当）のメリット
+- **完全な監査トレイル (Audit Trail)**: いつ、誰が、どの端末から、どのようにタスクを作成・階層移動・変更・削除したのかを 100% 過去へ遡って検証可能。
+- **ポータビリティ**: `events.jsonl` ファイル1本をUSBや他ネットワークにコピーするだけで、変更履歴を含むプロジェクト全体を完全移植可能。
+
+---
+
+## 4. 操作イベント一覧と Tombstone 削除
+
+1. **`TASK_CREATED`**: タスクの新規登録（`parentId` 指定可能、オプション属性含む）。
 2. **`TASK_STATUS_UPDATED`**: ステータス変更またはDrag & Drop移動。
-3. **`TASK_REORDERED`**: 同一カラム内での順序並び替え。
-4. **`TASK_DELETED` (Tombstone Event)**:
-   - Payload: `{ taskId, deletedAt, reason? }`
-   - 不変イベントとしてログに追加・分散伝播され、ドメイン還元処理 (Reduce State) において最終状態から当該タスクを除外する。
-   - 削除イベント発生後に遅れて到着した旧編集イベントは、タイムスタンプ比較により自動的に無視される。
+3. **`TASK_REORDERED`**: 同一階層内での順序並び替え。
+4. **`TASK_PARENT_CHANGED`**: ツリー階層の付け替え（親タスクの変更）。
+5. **`TASK_DELETED` (Tombstone Event)**:
+   - 削除理由を含む墓標イベント。不変ログとして伝播し、子タスクも含めた不整合な復活（ゴースト化）を防ぐ。
 
 ---
 
-## 4. オフライン編集と分散マージの仕組み
+## 5. コンフリクト解決ルール (LWW & Tree Reconciliation)
 
-### (1) オフライン時のローカル保存
-- 各端末は自身のローカルDB（SQLite / LevelDB / JSON）へ構造化イベントログを追加します。
-- サーバー問い合わせを必要としないため、完全オフラインで即座にUIへ反映されます。
-
-### (2) 再接続時の非同期差分交換 (P2P Delta Sync)
-
-```
-[端末 A (オフラインで削除 A_del)]               [端末 B (オフラインで編集 B_edit)]
-              |                                                   |
-              +-------------- LAN 接続確立 (P2P) ------------------+
-              |                                                   |
-              | --- 1. SYNC_VECTOR (保持イベントID一覧/時刻) ----> |
-              | <-- 2. SYNC_VECTOR (保持イベントID一覧/時刻) ----- |
-              |                                                   |
-              | --- 3. MISSING_EVENTS (A_del を送信) ------------> |
-              | <-- 4. MISSING_EVENTS (B_edit を送信) ------------ |
-              |                                                   |
-    (A_del によりタスク削除で合意)                      (A_del によりタスク削除で合意)
-              |                                                   |
-              v                                                   v
-      [端末A: 削除状態で整合完了]                         [端末B: 削除状態で整合完了]
-```
-
----
-
-## 5. コンフリクト解決ルール
-
-複数の端末がオフライン中に「同じタスクに対する編集」と「削除」を同時に行った場合の解決ルール：
-
-1. **Logical Timestamp (Lamport/Vector Clock)**: 各イベントに付与されたタイムスタンプとノードIDの順序定義に基づき、全ノードで決定論的 (Deterministic) に同一の結果を算出する。
-2. **Tombstone Win Rule (削除優先/タイムスタンプ判定)**: 削除イベント `TASK_DELETED` のタイムスタンプが編集イベントと同等以上の場合は削除が優先され、状態から削除される。
+1. **Logical Timestamp & Hash**: 各イベントに付与されたハッシュとタイムスタンプに基づき、決定論的 (Deterministic) に同一のツリー状態へ再構築する。
+2. **Tombstone Win**: 削除イベント `TASK_DELETED` は編集イベントより優先され、全ノードで削除状態として整合する。
 
 ---
 

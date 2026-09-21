@@ -28,11 +28,16 @@
 
   const pureTreeViewSection = document.getElementById('pure-tree-view');
   const pureTreeContainer = document.getElementById('pure-tree-container');
+  const treeUnclassifiedPanel = document.getElementById('tree-unclassified-panel');
+  const treeUnclassifiedList = document.getElementById('tree-unclassified-list');
+  const unclassifiedCountBadge = document.getElementById('unclassified-count-badge');
 
   const obsidianGraphViewSection = document.getElementById('obsidian-graph-view');
   const canvas = document.getElementById('obsidian-canvas');
 
   const confirmModal = document.getElementById('confirm-parent-modal');
+  const confirmModalIcon = document.getElementById('confirm-modal-icon');
+  const confirmModalTitle = document.getElementById('confirm-modal-title');
   const confirmModalText = document.getElementById('confirm-modal-text');
   const btnModalCancel = document.getElementById('btn-modal-cancel');
   const btnModalConfirm = document.getElementById('btn-modal-confirm');
@@ -107,6 +112,7 @@
   }
 
   function updateParentTaskOptions() {
+    const prevVal = selectQuickParent.value;
     selectQuickParent.innerHTML = '';
 
     const rootOpt = document.createElement('option');
@@ -120,6 +126,10 @@
       opt.textContent = `📁 ${t.title}`;
       selectQuickParent.appendChild(opt);
     });
+
+    if (prevVal && currentTasks.some((t) => t.id === prevVal)) {
+      selectQuickParent.value = prevVal;
+    }
   }
 
   // 3-Mode View Buttons Setup
@@ -141,11 +151,13 @@
     obsidianGraphViewSection.classList.toggle('hidden', mode !== 'OBSIDIAN_GRAPH_VIEW');
     kanbanViewSection.classList.toggle('hidden', mode !== 'KANBAN_VIEW');
 
-    if (floatingUnclassifiedLayer) {
-      floatingUnclassifiedLayer.classList.toggle('hidden', mode !== 'TREE_VIEW');
+    if (treeUnclassifiedPanel) {
+      treeUnclassifiedPanel.classList.toggle('hidden', mode !== 'TREE_VIEW');
     }
 
-    renderCurrentView();
+    requestAnimationFrame(() => {
+      renderCurrentView();
+    });
   }
 
   function renderCurrentView() {
@@ -163,74 +175,79 @@
     }
   }
 
-  // VIEW 1: Pure Tree View (Single-Canvas with Screen-Floating Standalone Root Tasks)
+  // VIEW 1: Pure Tree View with Bottom-Right Unclassified Inbox Panel
   function renderPureTreeView() {
     pureTreeContainer.innerHTML = '';
-    if (floatingUnclassifiedLayer) floatingUnclassifiedLayer.innerHTML = '';
+    if (treeUnclassifiedList) treeUnclassifiedList.innerHTML = '';
 
     const hasSubtasks = (t) => currentTasks.some((child) => child.parentId === t.id);
+    const isRootTask = (t) => !t.parentId || !currentTasks.some((parent) => parent.id === t.parentId);
 
-    // 1. Render Floating Standalone Root Tasks (root tasks with no children)
-    const floatingTasks = currentTasks.filter((t) => !t.parentId && !hasSubtasks(t))
+    // 1. Render Unclassified Standalone Root Tasks in Bottom-Right Panel
+    const unclassifiedTasks = currentTasks.filter((t) => isRootTask(t) && !hasSubtasks(t))
       .sort((a, b) => a.orderIndex - b.orderIndex);
 
-    if (floatingUnclassifiedLayer) {
-      floatingTasks.forEach((task, idx) => {
-        const floatingCard = document.createElement('div');
-        floatingCard.className = `floating-unclassified-card ${focusedTaskId === task.id ? 'focused' : ''}`;
-        floatingCard.setAttribute('draggable', 'true');
-        floatingCard.dataset.taskId = task.id;
-
-        // Position staggered across screen canvas
-        const posX = 40 + (idx * 230) % (Math.max(800, window.innerWidth - 300));
-        const posY = 150 + Math.floor((idx * 230) / Math.max(800, window.innerWidth - 300)) * 75;
-
-        floatingCard.style.left = `${posX}px`;
-        floatingCard.style.top = `${posY}px`;
-        floatingCard.style.animationDelay = `${(idx * 0.8) % 4}s`;
-
-        const dot = document.createElement('span');
-        dot.className = 'floating-card-dot';
-
-        const titleSpan = document.createElement('span');
-        titleSpan.className = 'floating-card-title';
-        titleSpan.textContent = task.title;
-
-        floatingCard.appendChild(dot);
-        floatingCard.appendChild(titleSpan);
-
-        floatingCard.addEventListener('click', (e) => {
-          e.stopPropagation();
-          setFocusedTask(task.id);
-        });
-
-        floatingCard.addEventListener('dragstart', (e) => {
-          e.stopPropagation();
-          draggedTaskId = task.id;
-          floatingCard.classList.add('dragging');
-          e.dataTransfer.setData('text/plain', task.id);
-        });
-
-        floatingCard.addEventListener('dragend', (e) => {
-          e.stopPropagation();
-          draggedTaskId = null;
-          floatingCard.classList.remove('dragging');
-          document.querySelectorAll('.drop-target-parent').forEach((el) => el.classList.remove('drop-target-parent'));
-        });
-
-        floatingUnclassifiedLayer.appendChild(floatingCard);
-      });
+    if (unclassifiedCountBadge) {
+      unclassifiedCountBadge.textContent = unclassifiedTasks.length;
     }
 
-    // 2. Render Main Parent Tree Tasks in Canvas (root tasks with children)
-    const rootTreeTasks = currentTasks.filter((t) => !t.parentId && hasSubtasks(t))
-      .sort((a, b) => a.orderIndex - b.orderIndex);
+    if (treeUnclassifiedList) {
+      if (unclassifiedTasks.length === 0) {
+        const emptyMsg = document.createElement('div');
+        emptyMsg.style.cssText = 'font-size: 0.78rem; color: var(--text-secondary); text-align: center; padding: 1rem;';
+        emptyMsg.textContent = '(未分類タスクはありません)';
+        treeUnclassifiedList.appendChild(emptyMsg);
+      } else {
+        unclassifiedTasks.forEach((task) => {
+          const item = document.createElement('div');
+          item.className = `unclassified-item ${focusedTaskId === task.id ? 'focused' : ''}`;
+          item.setAttribute('draggable', 'true');
+          item.dataset.taskId = task.id;
+
+          const titleSpan = document.createElement('span');
+          titleSpan.textContent = task.title;
+          titleSpan.style.cssText = 'white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px;';
+
+          const badge = document.createElement('span');
+          badge.className = `status-btn active-${task.status}`;
+          badge.style.cssText = 'font-size: 0.68rem; padding: 0.15rem 0.4rem; pointer-events: none;';
+          badge.textContent = task.status;
+
+          item.appendChild(titleSpan);
+          item.appendChild(badge);
+
+          item.addEventListener('click', (e) => {
+            e.stopPropagation();
+            setFocusedTask(task.id);
+          });
+
+          item.addEventListener('dragstart', (e) => {
+            e.stopPropagation();
+            draggedTaskId = task.id;
+            item.classList.add('dragging');
+            e.dataTransfer.setData('text/plain', task.id);
+          });
+
+          item.addEventListener('dragend', (e) => {
+            e.stopPropagation();
+            draggedTaskId = null;
+            item.classList.remove('dragging');
+            document.querySelectorAll('.drop-target-parent').forEach((el) => el.classList.remove('drop-target-parent'));
+          });
+
+          treeUnclassifiedList.appendChild(item);
+        });
+      }
+    }
+
+    // 2. Render All Root Tree Tasks in Container (Supports dropping unclassified items onto any root task)
+    const rootTreeTasks = currentTasks.filter(isRootTask).sort((a, b) => a.orderIndex - b.orderIndex);
 
     if (rootTreeTasks.length === 0) {
       const emptyTreeMsg = document.createElement('div');
       emptyTreeMsg.className = 'empty-tree-notice';
       emptyTreeMsg.style.cssText = 'font-size: 0.9rem; color: var(--text-secondary); text-align: center; padding: 3rem 1rem; border: 1px dashed var(--card-border); border-radius: var(--radius-md); margin-top: 1rem;';
-      emptyTreeMsg.textContent = '構造化されたルートタスクがまだありません。画面上の浮遊タスクを各親タスクへドラッグ＆ドロップして分類してください。';
+      emptyTreeMsg.textContent = 'ルートタスクがまだありません。上のプロンプトバーから新しいタスクを作成してください。';
       pureTreeContainer.appendChild(emptyTreeMsg);
     } else {
       rootTreeTasks.forEach((rootTask) => {
@@ -285,8 +302,12 @@
     if (!ctx) return;
 
     const wrapper = canvas.parentElement;
-    canvas.width = wrapper.clientWidth;
-    canvas.height = wrapper.clientHeight;
+    const rect = wrapper ? wrapper.getBoundingClientRect() : { width: 0, height: 0 };
+    const width = rect.width || wrapper.clientWidth || 1200;
+    const height = rect.height || wrapper.clientHeight || 600;
+
+    canvas.width = Math.max(width, 300);
+    canvas.height = Math.max(height, 300);
 
     // Initialize or Sync Node Array
     const existingNodeMap = new Map(graphNodes.map((n) => [n.task.id, n]));
@@ -561,25 +582,51 @@
     };
   }
 
-  // Parent Drag Confirmation Modal
-  function promptParentingConfirmation(childTask, parentTask) {
-    pendingParentingAction = { childTaskId: childTask.id, parentTaskId: parentTask.id };
-    confirmModalText.textContent = `タスク「${childTask.title}」を「${parentTask.title}」の子タスクに変更しますか？`;
+  let pendingActionCallback = null;
+
+  function promptActionConfirmation({ icon = '📁', title = '確認', message = '', onConfirm = () => {} }) {
+    if (confirmModalIcon) confirmModalIcon.textContent = icon;
+    if (confirmModalTitle) confirmModalTitle.textContent = title;
+    confirmModalText.textContent = message;
+    pendingActionCallback = onConfirm;
     confirmModal.classList.remove('hidden');
+  }
+
+  function promptParentingConfirmation(childTask, parentTask) {
+    promptActionConfirmation({
+      icon: '📁',
+      title: '親タスク設定の確認',
+      message: `タスク「${childTask.title}」を「${parentTask.title}」の子タスクに変更しますか？ (Enterキーで実行)`,
+      onConfirm: () => changeTaskParent(childTask.id, parentTask.id),
+    });
   }
 
   btnModalCancel.onclick = () => {
     confirmModal.classList.add('hidden');
-    pendingParentingAction = null;
+    pendingActionCallback = null;
   };
 
   btnModalConfirm.onclick = () => {
-    if (pendingParentingAction) {
-      changeTaskParent(pendingParentingAction.childTaskId, pendingParentingAction.parentTaskId);
+    if (pendingActionCallback) {
+      pendingActionCallback();
     }
     confirmModal.classList.add('hidden');
-    pendingParentingAction = null;
+    pendingActionCallback = null;
   };
+
+  window.addEventListener('keydown', (e) => {
+    if (!confirmModal.classList.contains('hidden')) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        e.stopPropagation();
+        btnModalConfirm.click();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        btnModalCancel.click();
+      }
+    }
+  }, true);
 
   // VIEW 3: 3-Column Kanban View (Parent Tasks Priority Sorted to Top)
   function renderKanbanView() {
@@ -762,6 +809,7 @@
         { key: 'DONE', label: 'DONE' },
       ];
 
+      const labelNames = { TODO: '未着手(TODO)', IN_PROGRESS: '進行中(IN_PROGRESS)', DONE: '完了(DONE)' };
       statuses.forEach((s) => {
         const btn = document.createElement('button');
         btn.className = `status-btn ${task.status === s.key ? `active-${s.key}` : ''}`;
@@ -769,7 +817,16 @@
         btn.onclick = (e) => {
           e.stopPropagation();
           if (task.status !== s.key) {
-            updateTaskStatus(task.id, s.key);
+            if (currentViewMode === 'KANBAN_VIEW') {
+              promptActionConfirmation({
+                icon: '📋',
+                title: 'カンバン移動の確認',
+                message: `タスク「${task.title}」のステータスを「${labelNames[task.status]}」から「${labelNames[s.key]}」へ変更しますか？ (Enterキーで実行)`,
+                onConfirm: () => updateTaskStatus(task.id, s.key),
+              });
+            } else {
+              updateTaskStatus(task.id, s.key);
+            }
           }
         };
         statusGroup.appendChild(btn);
@@ -813,7 +870,7 @@
 
   function highlightFocusedTaskCard(taskId) {
     let targetEl = null;
-    document.querySelectorAll('.task-item').forEach((el) => {
+    document.querySelectorAll('.task-item, .unclassified-item').forEach((el) => {
       if (el.dataset.taskId === taskId) {
         el.classList.add('focused');
         targetEl = el;
@@ -823,9 +880,9 @@
     });
 
     if (targetEl) {
-      targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      targetEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       targetEl.classList.add('highlight-flash');
-      setTimeout(() => targetEl.classList.remove('highlight-flash'), 2000);
+      setTimeout(() => targetEl.classList.remove('highlight-flash'), 1500);
     }
   }
 
@@ -848,7 +905,16 @@
         const taskId = e.dataTransfer.getData('text/plain') || draggedTaskId;
 
         if (taskId && targetStatus) {
-          updateTaskStatus(taskId, targetStatus);
+          const task = currentTasks.find((t) => t.id === taskId);
+          if (task && task.status !== targetStatus) {
+            const labelNames = { TODO: '未着手(TODO)', IN_PROGRESS: '進行中(IN_PROGRESS)', DONE: '完了(DONE)' };
+            promptActionConfirmation({
+              icon: '📋',
+              title: 'カンバン移動の確認',
+              message: `タスク「${task.title}」のステータスを「${labelNames[task.status]}」から「${labelNames[targetStatus]}」へ変更しますか？ (Enterキーで実行)`,
+              onConfirm: () => updateTaskStatus(taskId, targetStatus),
+            });
+          }
         }
       });
     });
@@ -869,66 +935,101 @@
     }
   }
 
-  // Setup Unified Visual DOM Keyboard Navigation for Tree and Kanban Views
+  // Setup Unified Keyboard Navigation for Tree, Obsidian Graph, and Kanban Views
   function setupKeyboardNavigation() {
     window.addEventListener('keydown', (e) => {
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) {
         return;
       }
 
-      if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+      if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter'].includes(e.key)) {
         return;
       }
 
+      if (!confirmModal.classList.contains('hidden')) {
+        return;
+      }
+
+      if (currentTasks.length === 0) return;
+
+      // Handle Obsidian Graph View
+      if (currentViewMode === 'OBSIDIAN_GRAPH_VIEW') {
+        if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return;
+        e.preventDefault();
+        const currentIdx = currentTasks.findIndex((t) => t.id === focusedTaskId);
+        let nextIdx = 0;
+
+        if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+          nextIdx = currentIdx >= 0 && currentIdx < currentTasks.length - 1 ? currentIdx + 1 : 0;
+        } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+          nextIdx = currentIdx > 0 ? currentIdx - 1 : currentTasks.length - 1;
+        }
+
+        setFocusedTask(currentTasks[nextIdx].id);
+        return;
+      }
+
+      // Handle Tree View and Kanban View
       const activeSection = document.querySelector('.view-section:not(.hidden)');
       if (!activeSection) return;
 
-      const visibleCards = Array.from(activeSection.querySelectorAll('.task-item'));
+      const visibleCards = Array.from(activeSection.querySelectorAll('.task-item, .unclassified-item'));
       if (visibleCards.length === 0) return;
 
-      e.preventDefault();
-
-      if (!focusedTaskId) {
-        setFocusedTask(visibleCards[0].dataset.taskId);
+      if (!focusedTaskId || !visibleCards.some((el) => el.dataset.taskId === focusedTaskId)) {
+        if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+          e.preventDefault();
+          setFocusedTask(visibleCards[0].dataset.taskId);
+        }
         return;
       }
 
       const currentCardIdx = visibleCards.findIndex((el) => el.dataset.taskId === focusedTaskId);
 
       if (e.key === 'ArrowDown') {
+        e.preventDefault();
         const nextIdx = currentCardIdx >= 0 && currentCardIdx < visibleCards.length - 1 ? currentCardIdx + 1 : 0;
         setFocusedTask(visibleCards[nextIdx].dataset.taskId);
       } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
         const prevIdx = currentCardIdx > 0 ? currentCardIdx - 1 : visibleCards.length - 1;
         setFocusedTask(visibleCards[prevIdx].dataset.taskId);
-      } else if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+      } else if (['ArrowRight', 'ArrowLeft', 'Enter'].includes(e.key)) {
+        const task = currentTasks.find((t) => t.id === focusedTaskId);
+        if (!task) return;
+
         if (currentViewMode === 'KANBAN_VIEW') {
-          // Move horizontally between columns in Kanban view
-          const currentCard = visibleCards[currentCardIdx];
-          const currentColumn = currentCard ? currentCard.closest('.kanban-column') : null;
-          const allCols = Array.from(document.querySelectorAll('.kanban-column'));
-          const colIdx = currentColumn ? allCols.indexOf(currentColumn) : 0;
-
-          const targetColIdx = e.key === 'ArrowRight'
-            ? (colIdx + 1) % allCols.length
-            : (colIdx - 1 + allCols.length) % allCols.length;
-
-          const targetCol = allCols[targetColIdx];
-          const targetCards = Array.from(targetCol.querySelectorAll('.task-item'));
-          if (targetCards.length > 0) {
-            setFocusedTask(targetCards[0].dataset.taskId);
+          let targetStatus = null;
+          if (e.key === 'ArrowRight') {
+            if (task.status === 'TODO') targetStatus = 'IN_PROGRESS';
+            else if (task.status === 'IN_PROGRESS') targetStatus = 'DONE';
+          } else if (e.key === 'ArrowLeft') {
+            if (task.status === 'DONE') targetStatus = 'IN_PROGRESS';
+            else if (task.status === 'IN_PROGRESS') targetStatus = 'TODO';
+          } else if (e.key === 'Enter') {
+            if (task.status === 'TODO') targetStatus = 'IN_PROGRESS';
+            else if (task.status === 'IN_PROGRESS') targetStatus = 'DONE';
+            else if (task.status === 'DONE') targetStatus = 'TODO';
           }
-        } else {
-          // Status change shortcut for focused task in Tree View
-          const task = currentTasks.find((t) => t.id === focusedTaskId);
-          if (task) {
-            if (e.key === 'ArrowRight') {
-              if (task.status === 'TODO') updateTaskStatus(task.id, 'IN_PROGRESS');
-              else if (task.status === 'IN_PROGRESS') updateTaskStatus(task.id, 'DONE');
-            } else if (e.key === 'ArrowLeft') {
-              if (task.status === 'DONE') updateTaskStatus(task.id, 'IN_PROGRESS');
-              else if (task.status === 'IN_PROGRESS') updateTaskStatus(task.id, 'TODO');
-            }
+
+          if (targetStatus && targetStatus !== task.status) {
+            e.preventDefault();
+            const labelNames = { TODO: '未着手(TODO)', IN_PROGRESS: '進行中(IN_PROGRESS)', DONE: '完了(DONE)' };
+            promptActionConfirmation({
+              icon: '📋',
+              title: 'カンバン移動の確認',
+              message: `タスク「${task.title}」のステータスを「${labelNames[task.status]}」から「${labelNames[targetStatus]}」へ変更しますか？ (Enterキーで実行)`,
+              onConfirm: () => updateTaskStatus(task.id, targetStatus),
+            });
+          }
+        } else if (currentViewMode === 'TREE_VIEW') {
+          e.preventDefault();
+          if (e.key === 'ArrowRight') {
+            if (task.status === 'TODO') updateTaskStatus(task.id, 'IN_PROGRESS');
+            else if (task.status === 'IN_PROGRESS') updateTaskStatus(task.id, 'DONE');
+          } else if (e.key === 'ArrowLeft') {
+            if (task.status === 'DONE') updateTaskStatus(task.id, 'IN_PROGRESS');
+            else if (task.status === 'IN_PROGRESS') updateTaskStatus(task.id, 'TODO');
           }
         }
       }

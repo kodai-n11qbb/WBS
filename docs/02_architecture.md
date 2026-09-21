@@ -11,7 +11,7 @@
 ```
 +-----------------------------------------------------------------------------------------+
 |                                   Presentation Layer                                    |
-| (Pure Tree View / Floating Cards Layer / Obsidian Canvas / Bottom ChatGPT Prompt Bar)   |
+|   (Pure Tree View / Obsidian Graph Canvas / Kanban Board / Bottom ChatGPT Prompt Bar)   |
 +-------------------------------------------+---------------------------------------------+
                                             | (Interfaces)
 +-------------------------------------------v---------------------------------------------+
@@ -27,14 +27,14 @@
 
 ## 2. コンポーネントインターフェース定義（抽象ポート）
 
-### (1) Screen-Floating Layer & Pure Tree View Port (浮遊層＆樹状ツリービューポート)
-- **役割**: 画面上を優しく漂う独立ルートタスクカードと高度なツリー構造の描画・操作。
+### (1) Pure Tree View & Multi-View Navigation Port (樹状ツリービュー ＆ 多視点操作ポート)
+- **役割**: 全ルートタスクの統一樹状ツリー構造描画と、キーボード（↑↓←→）ナビゲーション制御。
 - **機能**:
-  - 親を指定せずに作成されたタスクは自動生成コンテナに入らず、そのまま独立したルートタスク (`parentId: null`) として生成。
-  - 親を持たない独立ルートタスクを画面上の空きスペースに浮遊描画 (`.floating-unclassified-card`)。
-  - ドラッグしてツリー内のタスク枠内へ重ね合わせることで、直感的に子要素化。
+  - 親を指定せずに作成されたタスクはそのまま独立したルートタスク (`parentId: null`) として生成。
+  - 親を持たない独立ルートタスクをツリーエリア (`pureTreeContainer`) 内に統一描画。
+  - ドラッグ＆ドロップによる直感的な親子化・並べ替え。
   - 親タスクの背景グラデーション (`linear-gradient`) による省スペース進捗 fill 描画。
-  - 視覚的DOM描画順に従う統一キーボードナビゲーション (`ArrowUp` / `ArrowDown` / `ArrowLeft` / `ArrowRight`)。
+  - 全ビュー共通の統一キーボードナビゲーション (`ArrowUp` / `ArrowDown` / `ArrowLeft` / `ArrowRight`)。
 
 ### (2) State Snapshot & Event Storage Port (最新状態スナップショット＆イベントリポジトリポート)
 - **役割**: 変更履歴 (`events.jsonl`) のバックグラウンド記録と、ディレクトリ直下への最新状態ファイル (`data/state.json`) のリアルタイム自動永続化。

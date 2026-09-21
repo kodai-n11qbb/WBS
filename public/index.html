@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="ja">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,6 +10,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
   <div class="background-blobs">
     <div class="blob blob-1"></div>
@@ -40,7 +42,7 @@
           </button>
         </div>
 
-        <div class="kb-hint">💡 十字キー(↑↓←→) | Obsidianノードのバネ物理ドラッグ</div>
+        <div class="kb-hint">💡 十字キー(↑↓←→) | カンバン移動は [←][→] または [Enter] で確認のうえ実行</div>
 
         <div class="node-pill">
           <span class="status-dot online"></span>
@@ -49,15 +51,15 @@
       </div>
     </header>
 
-    <!-- Parent Drag Confirmation Modal Dialog -->
+    <!-- Parent & Action Drag/Keyboard Confirmation Modal Dialog -->
     <div id="confirm-parent-modal" class="modal-backdrop hidden">
       <div class="modal-card">
-        <div class="modal-icon">📁</div>
-        <h3>親タスク設定の確認</h3>
-        <p id="confirm-modal-text">タスク「X」を「Y」の子タスクに変更しますか？</p>
+        <div class="modal-icon" id="confirm-modal-icon">📁</div>
+        <h3 id="confirm-modal-title">確認ダイアログ</h3>
+        <p id="confirm-modal-text">操作を実行しますか？ (Enterキーで実行)</p>
         <div class="modal-actions">
-          <button id="btn-modal-cancel" class="btn-modal btn-cancel">キャンセル</button>
-          <button id="btn-modal-confirm" class="btn-modal btn-confirm">親タスクに設定</button>
+          <button id="btn-modal-cancel" class="btn-modal btn-cancel">キャンセル (Esc)</button>
+          <button id="btn-modal-confirm" class="btn-modal btn-confirm">確定 (Enter)</button>
         </div>
       </div>
     </div>
@@ -66,7 +68,7 @@
     <div id="error-toast" class="toast hidden"></div>
 
     <main class="main-content">
-      <!-- ChatGPT-style Task Input Bar -->
+      <!-- ChatGPT-style Task Input Bar & Side-by-Side Unclassified Panel Dock -->
       <section class="task-input-section" id="input-section">
         <form id="quick-task-form" class="chatgpt-prompt-bar">
           <div class="prompt-pill-select">
@@ -75,21 +77,26 @@
             </select>
           </div>
 
-          <input 
-            type="text" 
-            id="quick-title-input" 
-            placeholder="新しいタスクを入力... (Enterで即時作成)" 
-            required 
-            autocomplete="off"
-          />
+          <input type="text" id="quick-title-input" placeholder="新しいタスクを入力... (Enterで即時作成)" required
+            autocomplete="off" />
 
           <button type="submit" class="btn-send-prompt" title="タスクを作成">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+              stroke-linecap="round" stroke-linejoin="round">
               <line x1="12" y1="19" x2="12" y2="5"></line>
               <polyline points="5 12 12 5 19 12"></polyline>
             </svg>
           </button>
         </form>
+
+        <!-- Tree View Side-by-Side Unclassified Inbox Panel -->
+        <div id="tree-unclassified-panel" class="tree-unclassified-panel glass-card">
+          <div class="unclassified-panel-header">
+            <span>📦 未分類ボックス (ドラッグでツリーへ)</span>
+            <span id="unclassified-count-badge" class="unclassified-badge">0</span>
+          </div>
+          <div id="tree-unclassified-list" class="unclassified-panel-list"></div>
+        </div>
       </section>
 
       <!-- VIEW 1: Pure Single-Canvas Tree View (No 3-Column Split) -->
@@ -150,9 +157,7 @@
     </main>
   </div>
 
-  <!-- Screen-Floating Unclassified Tasks Layer -->
-  <div id="floating-unclassified-layer" class="floating-unclassified-layer"></div>
-
   <script src="app.js"></script>
 </body>
+
 </html>

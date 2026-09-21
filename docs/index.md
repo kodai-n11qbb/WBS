@@ -10,11 +10,11 @@
 ## ドキュメント一覧
 
 1. [概念とユースケース (`./01_concept.md`)](./01_concept.md)
-   - ミニマル設計、樹状ツリーファーストメイン表示（案A）、全階層ステータスバッジ、親進捗率表示、ビューモード切り替え (Tree ⇄ Kanban)
+   - システム概念、Obsidian型ノードグラフ表示、無操作自動イマーシブ遷移、単一キャンバス純粋ツリー表示、3つの表示モード
 2. [システムアーキテクチャ抽象 (`./02_architecture.md`)](./02_architecture.md)
-   - StatusAggregator, ViewModeSwitcherPort, P2P ネットワーク、DI（依存注入）レイヤー設計
+   - ObsidianGraphRendererPort, IdleAutoTransitionPort, StatusAggregator, DI（依存注入）レイヤー設計
 3. [データモデルと同期仕様 (`./03_data_sync.md`)](./03_data_sync.md)
-   - ミニマルタスク仕様 (Minimal Task Spec)、親タスク進捗率算出、全階層ステータスバッジ、Gitライク JSONL ログ仕様
+   - ミニマルタスク仕様、3つのビューモード仕様 (Tree/Obsidian Graph/Kanban)、無操作自動イマーシブ遷移、Gitライク JSONL ログ仕様
 4. [拡張性およびプラグイン設計 (`./04_extension_spec.md`)](./04_extension_spec.md)
    - プロトコル抽象化、ストレージ抽象化、UI/インターフェース分離設計
 

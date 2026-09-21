@@ -11,7 +11,7 @@
 ```
 +-------------------------------------------------------------+
 |                     Presentation Layer                      |
-|       (Tree View Mode / Kanban View Mode Switcher UI)       |
+| (Pure Tree View / Obsidian Graph Renderer / Idle Auto Sync) |
 +------------------------------+------------------------------+
                                | (Interfaces)
 +------------------------------v------------------------------+
@@ -27,14 +27,14 @@
 
 ## 2. コンポーネントインターフェース定義（抽象ポート）
 
-### (1) Status Aggregator Port (自動ステータス算出ポート)
+### (1) Obsidian Graph Renderer Port (グラフレンダラーポート)
+- **役割**: タスクの親子ネットワークを Obsidian 風のノードと光るエッジ（線）でグラフィカルに描画するプレゼンテーションポート。
+
+### (2) Idle Auto-Transition Port (無操作自動遷移ポート)
+- **役割**: ユーザーの操作停止（タイマー判定）を検出し、スムーズに Obsidian グラフ表示へ自動イマーシブ移行させるポート。
+
+### (3) Status Aggregator Port (自動ステータス算出ポート)
 - **役割**: 子タスクの状態変更発生時、親タスクのステータスおよび進捗率（Completion Rate）を自動計算・連動させるドメインエンジン。
-
-### (2) View Mode Switcher Port (ビュー切り替えポート)
-- **役割**: ツリーファーストビュー (`TREE_VIEW`) と カンバンビュー (`KANBAN_VIEW`) の表示モード切り替え抽象化。
-
-### (3) Peer Discovery & Transport Port (P2P通信ポート)
-- **役割**: LAN 内の他ノード探査およびメッセージ送受信。
 
 ### (4) Project Repository Port (ストレージポート)
 - **役割**: ローカルノードにおける `.jsonl` イベントログの永続化と読み込み。
@@ -42,7 +42,7 @@
 ---
 
 ## 3. Dependency Injection (DI) 方針
-- `StatusAggregator` および `ViewMode` はドメインコアから独立したポートとして定義され、コンストラクタ経由で注入（DI）されます。
+- `ObsidianGraphRenderer` や `IdleTimer` もドメインコアから分離された独立ポートとして外部注入（DI）可能とします。
 
 ---
 

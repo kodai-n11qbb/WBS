@@ -49,36 +49,38 @@
       </div>
     </header>
 
-    <!-- Idle Auto-Transition Notification Toast -->
-    <div id="idle-toast" class="idle-toast hidden">
-      ✨ 4秒間無操作のため Obsidian グラフ表示へ自動イマーシブ遷移中（操作再開で復帰）
+    <!-- Background Screensaver Canvas & Click Return Overlay -->
+    <canvas id="bg-obsidian-canvas" class="bg-obsidian-canvas hidden"></canvas>
+    <div id="screensaver-overlay" class="screensaver-overlay hidden">
+      <div class="screensaver-banner">🌌 Obsidian スクリーンセーバー表示中（画面クリックで編集画面へ復帰）</div>
     </div>
 
     <!-- Error Toast Notification -->
     <div id="error-toast" class="toast hidden"></div>
 
     <main class="main-content">
-      <!-- Minimal Task Input Bar -->
+      <!-- ChatGPT-style Task Input Bar -->
       <section class="task-input-section" id="input-section">
-        <form id="quick-task-form" class="glass-card input-card">
-          <select id="select-quick-parent" title="親タスクを指定 (任意)">
-            <option value="">(親タスクなし - ルート)</option>
-          </select>
+        <form id="quick-task-form" class="chatgpt-prompt-bar">
+          <div class="prompt-pill-select">
+            <select id="select-quick-parent" title="親タスクを指定 (任意)">
+              <option value="">📁 ルートタスク</option>
+            </select>
+          </div>
 
           <input 
             type="text" 
             id="quick-title-input" 
-            placeholder="タスク名を入力してEnter... (カード間ドロップで親子化可能)" 
+            placeholder="新しいタスクを入力... (Enterで即時作成)" 
             required 
             autocomplete="off"
           />
 
-          <button type="submit" class="btn-primary">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-              <line x1="12" y1="5" x2="12" y2="19"></line>
-              <line x1="5" y1="12" x2="19" y2="12"></line>
+          <button type="submit" class="btn-send-prompt" title="タスクを作成">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="12" y1="19" x2="12" y2="5"></line>
+              <polyline points="5 12 12 5 19 12"></polyline>
             </svg>
-            タスク作成
           </button>
         </form>
       </section>

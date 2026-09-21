@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
+    "build:exe": "npm run build && npx -y pkg . --out-path bin",
     "test": "vitest run",
     "test:watch": "vitest",
     "dev": "tsx src/ui/server.ts"

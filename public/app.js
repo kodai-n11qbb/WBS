@@ -8,18 +8,22 @@
   let currentViewMode = 'TREE_VIEW';
   let userPreferredViewMode = 'TREE_VIEW';
 
-  // Idle Timer
+  // Idle Timer & Screensaver Mode
   let idleTimer = null;
   const IDLE_TIMEOUT_MS = 4000; // 4 seconds idle auto transition
-  let isAutoTransitioned = false;
+  let isScreensaverActive = false;
 
-  // Canvas Animation Frame
+  // Canvas Animation Frames & State
   let canvasAnimationId = null;
+  let bgCanvasAnimationId = null;
+  let graphNodes = [];
+  let draggedGraphNode = null;
+  let dragStartPos = { x: 0, y: 0 };
 
   // DOM Elements
+  const appContainer = document.querySelector('.app-container');
   const nodeDisplay = document.getElementById('node-id-display');
   const errorToast = document.getElementById('error-toast');
-  const idleToast = document.getElementById('idle-toast');
 
   const btnViewTree = document.getElementById('btn-view-tree');
   const btnViewGraph = document.getElementById('btn-view-graph');
@@ -34,6 +38,8 @@
 
   const obsidianGraphViewSection = document.getElementById('obsidian-graph-view');
   const canvas = document.getElementById('obsidian-canvas');
+  const bgCanvas = document.getElementById('bg-obsidian-canvas');
+  const screensaverOverlay = document.getElementById('screensaver-overlay');
 
   const kanbanViewSection = document.getElementById('kanban-view');
   const listTodo = document.getElementById('list-todo');
@@ -87,7 +93,7 @@
   }
 
   function updateParentTaskOptions() {
-    selectQuickParent.innerHTML = '<option value="">(親タスクなし - ルート)</option>';
+    selectQuickParent.innerHTML = '<option value="">📁 ルートタスク</option>';
     currentTasks.forEach((t) => {
       const opt = document.createElement('option');
       opt.value = t.id;
@@ -104,8 +110,7 @@
   function setViewMode(mode, isUserAction = false) {
     if (isUserAction) {
       userPreferredViewMode = mode;
-      isAutoTransitioned = false;
-      idleToast.classList.add('hidden');
+      exitScreensaver();
     }
     currentViewMode = mode;
 
@@ -129,7 +134,7 @@
     if (currentViewMode === 'TREE_VIEW') {
       renderPureTreeView();
     } else if (currentViewMode === 'OBSIDIAN_GRAPH_VIEW') {
-      startObsidianGraphRenderer();
+      startObsidianGraphRenderer(canvas, false);
     } else if (currentViewMode === 'KANBAN_VIEW') {
       renderKanbanView();
     }
@@ -146,8 +151,7 @@
     });
 
     if (focusedTaskId) {
-      const el = document.querySelector(`[data-task-id="${focusedTaskId}"]`);
-      if (el) el.classList.add('focused');
+      highlightFocusedTaskCard(focusedTaskId);
     }
   }
 
@@ -177,40 +181,39 @@
     return nodeWrapper;
   }
 
-  // VIEW 2: Obsidian Graph Canvas Renderer
-  function startObsidianGraphRenderer() {
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
+  // VIEW 2 & Screensaver: Obsidian Interactive Graph Canvas Renderer (Physics Drag & Click)
+  function startObsidianGraphRenderer(targetCanvas, isBgScreensaver = false) {
+    if (!targetCanvas) return;
+    const ctx = targetCanvas.getContext('2d');
     if (!ctx) return;
 
-    // Resize canvas dynamically
-    const wrapper = canvas.parentElement;
-    canvas.width = wrapper.clientWidth;
-    canvas.height = wrapper.clientHeight;
+    targetCanvas.width = isBgScreensaver ? window.innerWidth : targetCanvas.parentElement.clientWidth;
+    targetCanvas.height = isBgScreensaver ? window.innerHeight : targetCanvas.parentElement.clientHeight;
 
-    // Calculate Node Positions with gentle floating physics
-    const nodes = currentTasks.map((task, idx) => {
+    // Build Node Physics Array
+    graphNodes = currentTasks.map((task, idx) => {
       const angle = (idx / Math.max(1, currentTasks.length)) * Math.PI * 2;
-      const radius = Math.min(canvas.width, canvas.height) * 0.3;
-      const centerX = canvas.width / 2;
-      const centerY = canvas.height / 2;
+      const radius = Math.min(targetCanvas.width, targetCanvas.height) * 0.3;
+      const centerX = targetCanvas.width / 2;
+      const centerY = targetCanvas.height / 2;
 
       return {
         task,
         x: task.parentId ? centerX + Math.cos(angle) * radius * 0.8 : centerX + Math.cos(angle) * (radius * 0.5),
         y: task.parentId ? centerY + Math.sin(angle) * radius * 0.8 : centerY + Math.sin(angle) * (radius * 0.5),
-        vx: (Math.random() - 0.5) * 0.3,
-        vy: (Math.random() - 0.5) * 0.3,
+        vx: (Math.random() - 0.5) * 0.4,
+        vy: (Math.random() - 0.5) * 0.4,
+        isPinned: false,
       };
     });
 
-    const nodeMap = new Map(nodes.map((n) => [n.task.id, n]));
+    const nodeMap = new Map(graphNodes.map((n) => [n.task.id, n]));
 
     function animate() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.clearRect(0, 0, targetCanvas.width, targetCanvas.height);
 
       // Draw Connection Edges (Glowing Lines between Parent & Child)
-      nodes.forEach((node) => {
+      graphNodes.forEach((node) => {
         if (node.task.parentId) {
           const parentNode = nodeMap.get(node.task.parentId);
           if (parentNode) {
@@ -219,8 +222,8 @@
             ctx.lineTo(parentNode.x, parentNode.y);
 
             const gradient = ctx.createLinearGradient(node.x, node.y, parentNode.x, parentNode.y);
-            gradient.addColorStop(0, 'rgba(129, 140, 248, 0.6)');
-            gradient.addColorStop(1, 'rgba(56, 189, 248, 0.6)');
+            gradient.addColorStop(0, 'rgba(129, 140, 248, 0.65)');
+            gradient.addColorStop(1, 'rgba(56, 189, 248, 0.65)');
 
             ctx.strokeStyle = gradient;
             ctx.lineWidth = 2;
@@ -231,14 +234,15 @@
         }
       });
 
-      // Draw Nodes
-      nodes.forEach((node) => {
-        // Floating motion
-        node.x += node.vx;
-        node.y += node.vy;
+      // Draw Nodes & Physics Motion
+      graphNodes.forEach((node) => {
+        if (!node.isPinned) {
+          node.x += node.vx;
+          node.y += node.vy;
 
-        if (node.x < 50 || node.x > canvas.width - 50) node.vx *= -1;
-        if (node.y < 50 || node.y > canvas.height - 50) node.vy *= -1;
+          if (node.x < 40 || node.x > targetCanvas.width - 40) node.vx *= -1;
+          if (node.y < 40 || node.y > targetCanvas.height - 40) node.vy *= -1;
+        }
 
         let nodeColor = '#38bdf8'; // TODO: Blue
         if (node.task.status === 'IN_PROGRESS') nodeColor = '#fbbf24'; // Amber
@@ -246,9 +250,9 @@
 
         // Glowing halo
         ctx.beginPath();
-        ctx.arc(node.x, node.y, 16, 0, Math.PI * 2);
+        ctx.arc(node.x, node.y, focusedTaskId === node.task.id ? 22 : 16, 0, Math.PI * 2);
         ctx.fillStyle = nodeColor;
-        ctx.globalAlpha = 0.25;
+        ctx.globalAlpha = focusedTaskId === node.task.id ? 0.45 : 0.25;
         ctx.fill();
 
         // Core Circle
@@ -257,7 +261,7 @@
         ctx.globalAlpha = 1.0;
         ctx.fillStyle = nodeColor;
         ctx.shadowColor = nodeColor;
-        ctx.shadowBlur = 12;
+        ctx.shadowBlur = focusedTaskId === node.task.id ? 20 : 12;
         ctx.fill();
         ctx.shadowBlur = 0;
 
@@ -268,10 +272,62 @@
         ctx.fillText(node.task.title, node.x, node.y + 24);
       });
 
-      canvasAnimationId = requestAnimationFrame(animate);
+      if (isBgScreensaver) {
+        bgCanvasAnimationId = requestAnimationFrame(animate);
+      } else {
+        canvasAnimationId = requestAnimationFrame(animate);
+      }
     }
 
     animate();
+    setupCanvasInteractivity(targetCanvas);
+  }
+
+  // Canvas Mouse Dragging & Click Selection Handler
+  function setupCanvasInteractivity(targetCanvas) {
+    let isMouseDown = false;
+    let clickStartX = 0;
+    let clickStartY = 0;
+
+    targetCanvas.onmousedown = (e) => {
+      const rect = targetCanvas.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+
+      clickStartX = e.clientX;
+      clickStartY = e.clientY;
+
+      const hitNode = graphNodes.find((n) => Math.hypot(n.x - mouseX, n.y - mouseY) <= 24);
+      if (hitNode) {
+        isMouseDown = true;
+        draggedGraphNode = hitNode;
+        hitNode.isPinned = true;
+      }
+    };
+
+    targetCanvas.onmousemove = (e) => {
+      if (isMouseDown && draggedGraphNode) {
+        const rect = targetCanvas.getBoundingClientRect();
+        draggedGraphNode.x = e.clientX - rect.left;
+        draggedGraphNode.y = e.clientY - rect.top;
+      }
+    };
+
+    targetCanvas.onmouseup = (e) => {
+      const dist = Math.hypot(e.clientX - clickStartX, e.clientY - clickStartY);
+      if (draggedGraphNode) {
+        draggedGraphNode.isPinned = false;
+        if (dist < 5) {
+          // Clicked on a Node: Focus task & switch to editing view!
+          const taskId = draggedGraphNode.task.id;
+          exitScreensaver();
+          setViewMode(userPreferredViewMode === 'OBSIDIAN_GRAPH_VIEW' ? 'TREE_VIEW' : userPreferredViewMode, true);
+          setFocusedTask(taskId);
+        }
+      }
+      isMouseDown = false;
+      draggedGraphNode = null;
+    };
   }
 
   // VIEW 3: 3-Column Kanban View
@@ -303,8 +359,7 @@
     });
 
     if (focusedTaskId) {
-      const el = document.querySelector(`[data-task-id="${focusedTaskId}"]`);
-      if (el) el.classList.add('focused');
+      highlightFocusedTaskCard(focusedTaskId);
     }
   }
 
@@ -366,7 +421,9 @@
     titleGroup.className = 'task-title-group';
 
     const children = currentTasks.filter((t) => t.parentId === task.id);
-    if (children.length > 0 && currentViewMode === 'TREE_VIEW') {
+    const isParent = children.length > 0;
+
+    if (isParent && currentViewMode === 'TREE_VIEW') {
       const btnToggle = document.createElement('button');
       btnToggle.className = 'btn-toggle-tree';
       btnToggle.textContent = task.isCollapsed ? '▶' : '▼';
@@ -398,10 +455,11 @@
     top.appendChild(btnDelete);
     item.appendChild(top);
 
-    // Parent Task Progress Bar
-    if (children.length > 0) {
+    // Parent Task Progress Bar & Calculation
+    let percentage = 0;
+    if (isParent) {
       const completedCount = children.filter((c) => c.status === 'DONE').length;
-      const percentage = Math.round((completedCount / children.length) * 100);
+      percentage = Math.round((completedCount / children.length) * 100);
 
       const progressBox = document.createElement('div');
       progressBox.className = 'parent-progress-box';
@@ -423,47 +481,61 @@
       item.appendChild(progressBox);
     }
 
-    // Footer with All-Level Status Button Selector
+    // Footer with Status Controls: Read-only Lock for Parents, Interactive Buttons for Leaf Tasks
     const footer = document.createElement('div');
     footer.className = 'task-footer';
 
-    const statusGroup = document.createElement('div');
-    statusGroup.className = 'status-btn-group';
+    if (isParent) {
+      // Parent Node Status Lock
+      const lockBadge = document.createElement('div');
+      lockBadge.className = 'status-locked-badge';
+      lockBadge.innerHTML = `🔒 自動算出: ${percentage}%`;
+      footer.appendChild(lockBadge);
+    } else {
+      // Leaf Node All-Level Status Buttons
+      const statusGroup = document.createElement('div');
+      statusGroup.className = 'status-btn-group';
 
-    const statuses = [
-      { key: 'TODO', label: 'TODO' },
-      { key: 'IN_PROGRESS', label: 'PROGRESS' },
-      { key: 'DONE', label: 'DONE' },
-    ];
+      const statuses = [
+        { key: 'TODO', label: 'TODO' },
+        { key: 'IN_PROGRESS', label: 'PROGRESS' },
+        { key: 'DONE', label: 'DONE' },
+      ];
 
-    statuses.forEach((s) => {
-      const btn = document.createElement('button');
-      btn.className = `status-btn ${task.status === s.key ? `active-${s.key}` : ''}`;
-      btn.textContent = s.label;
-      btn.onclick = (e) => {
-        e.stopPropagation();
-        if (task.status !== s.key) {
-          updateTaskStatus(task.id, s.key);
-        }
-      };
-      statusGroup.appendChild(btn);
-    });
+      statuses.forEach((s) => {
+        const btn = document.createElement('button');
+        btn.className = `status-btn ${task.status === s.key ? `active-${s.key}` : ''}`;
+        btn.textContent = s.label;
+        btn.onclick = (e) => {
+          e.stopPropagation();
+          if (task.status !== s.key) {
+            updateTaskStatus(task.id, s.key);
+          }
+        };
+        statusGroup.appendChild(btn);
+      });
+
+      footer.appendChild(statusGroup);
+    }
 
     const authorSpan = document.createElement('span');
     authorSpan.textContent = `By: ${task.authorNodeId || 'local'}`;
-
-    footer.appendChild(statusGroup);
     footer.appendChild(authorSpan);
-    item.appendChild(footer);
 
+    item.appendChild(footer);
     return item;
   }
 
   function setFocusedTask(taskId) {
     focusedTaskId = taskId;
+    highlightFocusedTaskCard(taskId);
+  }
+
+  function highlightFocusedTaskCard(taskId) {
     document.querySelectorAll('.task-item').forEach((el) => {
       if (el.dataset.taskId === taskId) {
         el.classList.add('focused');
+        el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       } else {
         el.classList.remove('focused');
       }
@@ -535,31 +607,65 @@
     });
   }
 
-  // Idle Timer Setup (4 Seconds Auto Transition to Obsidian Graph View)
+  // Idle Timer Setup (4 Seconds Auto Transition to Background Screensaver Mode)
   function setupIdleTimer() {
     function resetIdleTimer() {
       if (idleTimer) clearTimeout(idleTimer);
 
-      if (isAutoTransitioned) {
-        isAutoTransitioned = false;
-        idleToast.classList.add('hidden');
-        setViewMode(userPreferredViewMode, false);
-      }
-
       idleTimer = setTimeout(() => {
-        if (currentViewMode !== 'OBSIDIAN_GRAPH_VIEW') {
-          isAutoTransitioned = true;
-          idleToast.classList.remove('hidden');
-          setViewMode('OBSIDIAN_GRAPH_VIEW', false);
-        }
+        enterScreensaver();
       }, IDLE_TIMEOUT_MS);
     }
 
-    ['mousemove', 'mousedown', 'keydown', 'touchstart'].forEach((evt) => {
-      window.addEventListener(evt, resetIdleTimer, { passive: true });
+    // Reset idle timer on keyboard activity
+    window.addEventListener('keydown', () => {
+      if (isScreensaverActive) {
+        exitScreensaver();
+      }
+      resetIdleTimer();
+    });
+
+    // Reset idle timer on window click (Click Return)
+    window.addEventListener('click', (e) => {
+      if (isScreensaverActive) {
+        exitScreensaver();
+      } else {
+        resetIdleTimer();
+      }
+    });
+
+    screensaverOverlay.addEventListener('click', () => {
+      exitScreensaver();
     });
 
     resetIdleTimer();
+  }
+
+  function enterScreensaver() {
+    if (isScreensaverActive) return;
+    isScreensaverActive = true;
+
+    bgCanvas.classList.remove('hidden');
+    screensaverOverlay.classList.remove('hidden');
+    appContainer.classList.add('screensaver-fade');
+
+    startObsidianGraphRenderer(bgCanvas, true);
+  }
+
+  function exitScreensaver() {
+    if (!isScreensaverActive) return;
+    isScreensaverActive = false;
+
+    if (bgCanvasAnimationId) {
+      cancelAnimationFrame(bgCanvasAnimationId);
+      bgCanvasAnimationId = null;
+    }
+
+    bgCanvas.classList.add('hidden');
+    screensaverOverlay.classList.add('hidden');
+    appContainer.classList.remove('screensaver-fade');
+
+    renderCurrentView();
   }
 
   // Socket Emitters

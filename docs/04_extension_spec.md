@@ -13,30 +13,28 @@
 
 ## 2. プラグイン・アダプターの拡張ポイント
 
-### (1) Transport Adapter (通信基盤の差し替え)
+### (1) Standalone Desktop Executable Adapter (環境依存ゼロのバイナリ配布)
+Node.js, Python, Cargo (Rust) 等が**一切インストールされていない端末**でも、ダブルクリック一発で動作させるためのパッケージング手法。
+
+- **Node.js Single Executable Applications (SEA) / Bun compile**:
+  - バックグラウンド HTTP/WebSocket サーバーとフロントエンド静的資産を1つの独立した実行ファイル (`share-log-mac` / `share-log-win.exe`) にパッケージング。
+  - ダブルクリックするとローカルサーバーが起動し、標準ブラウザで Web アプリ UI が立ち上がる。
+- **Electron / Tauri パッケージング**:
+  - 専用のデスクトップウィンドウアプリ (`.app` / `.exe`) としての配布に対応。
+
+### (2) Transport Adapter (通信基盤の差し替え)
 インターフェース `PeerDiscoveryPort` および `PeerTransportPort` を実装することで、通信方式を自由に切り替え可能とします。
 
 - **フェーズ1 (初期検証)**: LAN 内 UDP Broadcast / Multicast
 - **フェーズ2 (LAN内高度化)**: mDNS (Bonjour) + TCP Direct Socket
 - **フェーズ3 (NAT越え/クロスネットワーク)**: WebRTC / libp2p アダプターの追加
 
-### (2) Storage Adapter (永続化基盤の差し替え)
+### (3) Storage Adapter (永続化基盤の差し替え)
 `ProjectRepositoryPort` を実装することで、利用環境に応じたストレージを選択可能とします。
 
 - **In-Memory Storage**: 単体テスト・デモ用
 - **JSON File / LocalStorage**: 簡易デスクトップ・ブラウザ利用時
 - **SQLite / RocksDB**: 大規模なイベントログ・オフラインキャッシュ管理用
-
-### (3) Packaging & Distribution Adapter (クロスプラットフォーム配布)
-各 OS 向けの独立したバイナリ・パッケージとしてビルド・配布可能な構造とします。
-
-- **Windows**: `.exe` (ポータブル単一実行ファイル または インストーラー)
-- **macOS**: `.app` / `.dmg` (Apple Silicon / Intel ユニバーサルバイナリ)
-- **Linux**: AppImage / Binary
-
-**推奨技術選定アプローチ（将来の実装時）**:
-- **Tauri (Rust + Web Frontend)**: 極めて軽量（数MB〜10MB程度）で高速、Windows `.exe` や macOS `.app` のビルドが非常に容易。
-- **Go / Rust + Embedded Web UI**: バックエンドロジックとフロントエンドを1つのバイナリに丸ごと埋め込み、ダブルクリック一発でブラウザ/WebViewで起動可能。
 
 ---
 

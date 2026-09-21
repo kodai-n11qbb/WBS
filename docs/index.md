@@ -10,13 +10,13 @@
 ## ドキュメント一覧
 
 1. [概念とユースケース (`./01_concept.md`)](./01_concept.md)
-   - システム概念、Obsidian型ノードグラフ表示、無操作自動イマーシブ遷移、単一キャンバス純粋ツリー表示、3つの表示モード
+   - システム概念、Obsidian型ノード物理ドラッグ＆クリックフォーカス、4秒無操作背景スクリーンセーバー、ChatGPT風タスク追加プロンプトバー、単一キャンバス純粋ツリー表示、親タスク進捗率ロック表示
 2. [システムアーキテクチャ抽象 (`./02_architecture.md`)](./02_architecture.md)
-   - ObsidianGraphRendererPort, IdleAutoTransitionPort, StatusAggregator, DI（依存注入）レイヤー設計
+   - ObsidianInteractiveGraphRendererPort, IdleAutoScreensaverPort, StatusAggregator, 単体バイナリ packaging アダプター, DI（依存注入）レイヤー設計
 3. [データモデルと同期仕様 (`./03_data_sync.md`)](./03_data_sync.md)
-   - ミニマルタスク仕様、3つのビューモード仕様 (Tree/Obsidian Graph/Kanban)、無操作自動イマーシブ遷移、Gitライク JSONL ログ仕様
+   - ミニマルタスク仕様、ChatGPT風入力バー仕様、3つのビューモード仕様 (Tree/Obsidian Interactive Graph/Kanban)、無操作自動背景スクリーンセーバー、Gitライク JSONL ログ仕様
 4. [拡張性およびプラグイン設計 (`./04_extension_spec.md`)](./04_extension_spec.md)
-   - プロトコル抽象化、ストレージ抽象化、UI/インターフェース分離設計
+   - 単体デスクトップ実行ファイル化 (.exe / .app), プロトコル抽象化, ストレージ抽象化, UI/インターフェース分離設計
 
 ---
 

@@ -1,10 +1,21 @@
 export type TaskStatus = 'TODO' | 'IN_PROGRESS' | 'DONE';
+export type TaskPriority = 'HIGH' | 'MEDIUM' | 'LOW';
+
+export interface DefinitionOfDoneItem {
+  id: string;
+  text: string;
+  completed: boolean;
+}
 
 export interface Task {
   id: string;
   projectId: string;
   title: string;
+  intent: string;
+  definitionOfDone: DefinitionOfDoneItem[];
+  priority: TaskPriority;
   status: TaskStatus;
+  orderIndex: number;
   assignedNodeId?: string;
   updatedAt: number;
   authorNodeId: string;
@@ -16,7 +27,12 @@ export interface Project {
   createdAt: number;
 }
 
-export type EventType = 'PROJECT_CREATED' | 'TASK_CREATED' | 'TASK_STATUS_UPDATED' | 'TASK_DELETED';
+export type EventType =
+  | 'PROJECT_CREATED'
+  | 'TASK_CREATED'
+  | 'TASK_STATUS_UPDATED'
+  | 'TASK_REORDERED'
+  | 'TASK_DELETED';
 
 export interface SyncEvent {
   id: string;

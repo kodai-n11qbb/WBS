@@ -21,10 +21,9 @@ export class SyncEngine {
 
   /**
    * Reduces an array of SyncEvents into a consolidated ProjectState.
-   * Handles deduplication and deterministic LWW (Last-Write-Wins) resolution.
+   * Handles deduplication, Tombstone deletion, and deterministic LWW resolution.
    */
   public reduceEvents(events: SyncEvent[]): ProjectState {
-    // Deduplicate by event.id
     const eventMap = new Map<string, SyncEvent>();
     for (const event of events) {
       if (!eventMap.has(event.id)) {
@@ -48,12 +47,17 @@ export class SyncEngine {
           break;
 
         case 'TASK_CREATED': {
-          const { taskId, title, status, assignedNodeId } = event.payload;
+          const { taskId, title, intent, definitionOfDone, priority, status, orderIndex, assignedNodeId } =
+            event.payload;
           state.tasks.set(taskId, {
             id: taskId,
             projectId: event.projectId,
             title: title || '',
+            intent: intent || '',
+            definitionOfDone: Array.isArray(definitionOfDone) ? definitionOfDone : [],
+            priority: priority || 'MEDIUM',
             status: status || 'TODO',
+            orderIndex: typeof orderIndex === 'number' ? orderIndex : 0,
             assignedNodeId,
             updatedAt: event.timestamp,
             authorNodeId: event.authorNodeId,
@@ -62,10 +66,23 @@ export class SyncEngine {
         }
 
         case 'TASK_STATUS_UPDATED': {
-          const { taskId, status } = event.payload;
+          const { taskId, status, newOrderIndex } = event.payload;
           const existing = state.tasks.get(taskId);
           if (existing) {
             existing.status = status;
+            if (typeof newOrderIndex === 'number') {
+              existing.orderIndex = newOrderIndex;
+            }
+            existing.updatedAt = event.timestamp;
+          }
+          break;
+        }
+
+        case 'TASK_REORDERED': {
+          const { taskId, newOrderIndex } = event.payload;
+          const existing = state.tasks.get(taskId);
+          if (existing && typeof newOrderIndex === 'number') {
+            existing.orderIndex = newOrderIndex;
             existing.updatedAt = event.timestamp;
           }
           break;

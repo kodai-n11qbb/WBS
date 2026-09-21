@@ -1,14 +1,25 @@
 import { EventRepositoryPort } from '../ports/repository.js';
 import { PeerTransportPort, PeerInfo, TransportMessage } from '../ports/transport.js';
 import { SyncEngine } from '../domain/sync_engine.js';
-import { ProjectState, SyncEvent, TaskStatus } from '../domain/types.js';
+import { TaskValidatorPort, StructuredTaskValidator } from '../domain/task_validator.js';
+import { ProjectState, SyncEvent, TaskStatus, TaskPriority, DefinitionOfDoneItem } from '../domain/types.js';
 import { crypto } from './crypto_util.js';
+
+export interface CreateTaskInput {
+  title: string;
+  intent: string;
+  definitionOfDone: DefinitionOfDoneItem[];
+  priority?: TaskPriority;
+  status?: TaskStatus;
+  orderIndex?: number;
+}
 
 export interface NodeServiceDependencies {
   nodeId: string;
   repository: EventRepositoryPort;
   transport: PeerTransportPort;
   syncEngine: SyncEngine;
+  validator?: TaskValidatorPort;
 }
 
 export class NodeService {
@@ -16,6 +27,7 @@ export class NodeService {
   private repository: EventRepositoryPort;
   private transport: PeerTransportPort;
   private syncEngine: SyncEngine;
+  private validator: TaskValidatorPort;
   private sequenceCounter: number = 0;
 
   constructor(deps: NodeServiceDependencies) {
@@ -23,6 +35,7 @@ export class NodeService {
     this.repository = deps.repository;
     this.transport = deps.transport;
     this.syncEngine = deps.syncEngine;
+    this.validator = deps.validator || new StructuredTaskValidator();
 
     this.setupTransportListeners();
   }
@@ -32,8 +45,7 @@ export class NodeService {
       await this.handleIncomingMessage(peer, msg);
     });
 
-    this.transport.onPeerDiscovered(async (peer: PeerInfo) => {
-      // Send handshake on peer discovery
+    this.transport.onPeerDiscovered(async () => {
       const allEvents = await this.repository.getAllEvents();
       await this.transport.broadcast({
         type: 'HANDSHAKE',
@@ -72,11 +84,13 @@ export class NodeService {
     return event;
   }
 
-  public async createTask(
-    projectId: string,
-    title: string,
-    status: TaskStatus = 'TODO'
-  ): Promise<SyncEvent> {
+  public async createStructuredTask(projectId: string, input: CreateTaskInput): Promise<SyncEvent> {
+    // 1. Enforce structured task validation
+    const validation = this.validator.validateCreation(input);
+    if (!validation.valid) {
+      throw new Error(`タスク作成失敗: ${validation.errors.join(' / ')}`);
+    }
+
     const taskId = crypto.randomUUID();
     const event: SyncEvent = {
       id: crypto.randomUUID(),
@@ -85,7 +99,15 @@ export class NodeService {
       timestamp: Date.now(),
       sequence: ++this.sequenceCounter,
       type: 'TASK_CREATED',
-      payload: { taskId, title, status },
+      payload: {
+        taskId,
+        title: input.title.trim(),
+        intent: input.intent.trim(),
+        definitionOfDone: input.definitionOfDone,
+        priority: input.priority || 'MEDIUM',
+        status: input.status || 'TODO',
+        orderIndex: typeof input.orderIndex === 'number' ? input.orderIndex : Date.now(),
+      },
     };
 
     await this.repository.saveEvent(event);
@@ -96,7 +118,8 @@ export class NodeService {
   public async updateTaskStatus(
     projectId: string,
     taskId: string,
-    status: TaskStatus
+    status: TaskStatus,
+    newOrderIndex?: number
   ): Promise<SyncEvent> {
     const event: SyncEvent = {
       id: crypto.randomUUID(),
@@ -105,7 +128,43 @@ export class NodeService {
       timestamp: Date.now(),
       sequence: ++this.sequenceCounter,
       type: 'TASK_STATUS_UPDATED',
-      payload: { taskId, status },
+      payload: { taskId, status, newOrderIndex },
+    };
+
+    await this.repository.saveEvent(event);
+    await this.transport.broadcast({ type: 'EVENT_BROADCAST', event });
+    return event;
+  }
+
+  public async reorderTask(
+    projectId: string,
+    taskId: string,
+    newOrderIndex: number
+  ): Promise<SyncEvent> {
+    const event: SyncEvent = {
+      id: crypto.randomUUID(),
+      projectId,
+      authorNodeId: this.nodeId,
+      timestamp: Date.now(),
+      sequence: ++this.sequenceCounter,
+      type: 'TASK_REORDERED',
+      payload: { taskId, newOrderIndex },
+    };
+
+    await this.repository.saveEvent(event);
+    await this.transport.broadcast({ type: 'EVENT_BROADCAST', event });
+    return event;
+  }
+
+  public async deleteTask(projectId: string, taskId: string): Promise<SyncEvent> {
+    const event: SyncEvent = {
+      id: crypto.randomUUID(),
+      projectId,
+      authorNodeId: this.nodeId,
+      timestamp: Date.now(),
+      sequence: ++this.sequenceCounter,
+      type: 'TASK_DELETED',
+      payload: { taskId },
     };
 
     await this.repository.saveEvent(event);

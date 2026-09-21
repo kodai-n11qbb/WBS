@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Share-Log | LAN P2P Task Tracker</title>
+  <title>Share-Log | LAN P2P Structured Task Tracker</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -22,11 +22,19 @@
         <div class="logo-badge">P2P</div>
         <div>
           <h1 id="project-title">LAN Share-Log Tracker</h1>
-          <p class="subtitle">Local-First 分散タスク同期システム</p>
+          <p class="subtitle">構造化強制・Local-First 分散タスク同期システム</p>
         </div>
       </div>
 
       <div class="header-right">
+        <button id="btn-open-modal" class="btn-primary">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          新規構造化タスク作成
+        </button>
+
         <div class="node-pill">
           <span class="status-dot online"></span>
           <span id="node-id-display">Node: Connecting...</span>
@@ -34,31 +42,14 @@
       </div>
     </header>
 
-    <main class="main-content">
-      <!-- Create Task Input Bar -->
-      <section class="task-input-section">
-        <form id="create-task-form" class="glass-card input-card">
-          <input 
-            type="text" 
-            id="task-title-input" 
-            placeholder="新しいタスクを入力... (例: P2Pソケットテストの実施)" 
-            required 
-            autocomplete="off"
-          />
-          <button type="submit" id="btn-add-task" class="btn-primary">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-              <line x1="12" y1="5" x2="12" y2="19"></line>
-              <line x1="5" y1="12" x2="19" y2="12"></line>
-            </svg>
-            タスク追加
-          </button>
-        </form>
-      </section>
+    <!-- Error Toast Notification -->
+    <div id="error-toast" class="toast hidden"></div>
 
+    <main class="main-content">
       <!-- Kanban Board -->
       <section class="kanban-board">
         <!-- TODO Column -->
-        <div class="kanban-column glass-card" id="col-todo">
+        <div class="kanban-column glass-card" id="col-todo" data-status="TODO">
           <div class="column-header">
             <div class="column-title">
               <span class="badge badge-todo">未着手</span>
@@ -70,7 +61,7 @@
         </div>
 
         <!-- IN PROGRESS Column -->
-        <div class="kanban-column glass-card" id="col-in-progress">
+        <div class="kanban-column glass-card" id="col-in-progress" data-status="IN_PROGRESS">
           <div class="column-header">
             <div class="column-title">
               <span class="badge badge-progress">進行中</span>
@@ -82,7 +73,7 @@
         </div>
 
         <!-- DONE Column -->
-        <div class="kanban-column glass-card" id="col-done">
+        <div class="kanban-column glass-card" id="col-done" data-status="DONE">
           <div class="column-header">
             <div class="column-title">
               <span class="badge badge-done">完了</span>
@@ -94,6 +85,50 @@
         </div>
       </section>
     </main>
+  </div>
+
+  <!-- Structured Task Modal -->
+  <div id="task-modal" class="modal-overlay hidden">
+    <div class="modal-card glass-card">
+      <div class="modal-header">
+        <h2>構造化タスクの作成</h2>
+        <button id="btn-close-modal" class="btn-close">&times;</button>
+      </div>
+      <form id="structured-task-form">
+        <div class="form-group">
+          <label for="input-title">タスクタイトル <span class="required">*</span></label>
+          <input type="text" id="input-title" placeholder="例: P2Pソケットテストの実施" required autocomplete="off" />
+          <p class="field-hint">3文字以上を入力してください</p>
+        </div>
+
+        <div class="form-group">
+          <label for="input-intent">目的・背景 (Why) <span class="required">*</span></label>
+          <textarea id="input-intent" rows="3" placeholder="なぜこの作業を行うのかの背景・意図を具体的に記述してください" required></textarea>
+        </div>
+
+        <div class="form-group">
+          <label>優先度</label>
+          <select id="select-priority">
+            <option value="MEDIUM" selected>MEDIUM (標準)</option>
+            <option value="HIGH">HIGH (高)</option>
+            <option value="LOW">LOW (低)</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>完了定義 (Definition of Done: DoD) <span class="required">*</span></label>
+          <div id="dod-list" class="dod-input-list">
+            <!-- Dynamic DoD Input Rows -->
+          </div>
+          <button type="button" id="btn-add-dod" class="btn-secondary">+ DoD項目を追加</button>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" id="btn-cancel-modal" class="btn-secondary">キャンセル</button>
+          <button type="submit" class="btn-primary">構造化タスクを作成</button>
+        </div>
+      </form>
+    </div>
   </div>
 
   <script src="app.js"></script>

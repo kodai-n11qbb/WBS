@@ -4,9 +4,24 @@
   let draggedTaskId = null;
   let focusedTaskId = null;
 
-  // View Modes: 'TREE_VIEW' | 'OBSIDIAN_GRAPH_VIEW' | 'KANBAN_VIEW'
-  let currentViewMode = 'TREE_VIEW';
-  let userPreferredViewMode = 'TREE_VIEW';
+  // View Modes: 'OBSIDIAN_GRAPH_VIEW' | 'TREE_VIEW' | 'KANBAN_VIEW'
+  let currentViewMode = 'OBSIDIAN_GRAPH_VIEW';
+  let userPreferredViewMode = 'OBSIDIAN_GRAPH_VIEW';
+
+  // Edge Nest Depth Filter (1, 2, 3... or 'all')
+  let currentMaxDepth = 2;
+
+  function getTaskDepth(task) {
+    let depth = 0;
+    let curr = task;
+    const visited = new Set();
+    while (curr && curr.parentId && !visited.has(curr.id)) {
+      visited.add(curr.id);
+      depth++;
+      curr = currentTasks.find((t) => t.id === curr.parentId);
+    }
+    return depth;
+  }
 
   // Local UI State: Tree collapse state is local to each client and NOT synced over P2P/WebSocket
   const localCollapsedTaskIds = new Set(
@@ -158,6 +173,18 @@
   btnViewTree.addEventListener('click', () => setViewMode('TREE_VIEW', true));
   btnViewGraph.addEventListener('click', () => setViewMode('OBSIDIAN_GRAPH_VIEW', true));
   btnViewKanban.addEventListener('click', () => setViewMode('KANBAN_VIEW', true));
+
+  // Depth Filter Controls Setup
+  const depthButtons = document.querySelectorAll('.depth-btn');
+  depthButtons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      depthButtons.forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      const val = btn.dataset.depth;
+      currentMaxDepth = val === 'all' ? 'all' : parseInt(val, 10);
+      renderCurrentView();
+    });
+  });
 
   function setViewMode(mode, isUserAction = false) {
     if (isUserAction) {
@@ -332,24 +359,31 @@
     canvas.height = Math.max(height, 300);
 
     // Initialize or Sync Node Array
+    const visibleTasks = currentTasks.filter((task) => {
+      if (currentMaxDepth === 'all') return true;
+      return getTaskDepth(task) < currentMaxDepth;
+    });
+
     const existingNodeMap = new Map(graphNodes.map((n) => [n.task.id, n]));
 
-    graphNodes = currentTasks.map((task, idx) => {
+    graphNodes = visibleTasks.map((task, idx) => {
       const existing = existingNodeMap.get(task.id);
       if (existing) {
         existing.task = task;
         return existing;
       }
 
-      const angle = (idx / Math.max(1, currentTasks.length)) * Math.PI * 2;
+      const depth = getTaskDepth(task);
+      const angle = (idx / Math.max(1, visibleTasks.length)) * Math.PI * 2;
       const radius = Math.min(canvas.width, canvas.height) * 0.3;
       const centerX = canvas.width / 2;
-      const centerY = canvas.height / 2;
+      const targetYRatio = depth === 0 ? 0.22 : (depth === 1 ? 0.48 : (depth === 2 ? 0.72 : 0.88));
+      const centerY = canvas.height * targetYRatio;
 
       return {
         task,
-        x: task.parentId ? centerX + Math.cos(angle) * radius * 0.8 : centerX + Math.cos(angle) * (radius * 0.5),
-        y: task.parentId ? centerY + Math.sin(angle) * radius * 0.8 : centerY + Math.sin(angle) * (radius * 0.5),
+        x: centerX + Math.cos(angle) * (radius * 0.5),
+        y: centerY + (Math.random() - 0.5) * 40,
         vx: (Math.random() - 0.5) * 0.2,
         vy: (Math.random() - 0.5) * 0.2,
         isPinned: false,
@@ -424,10 +458,18 @@
         }
       }
 
-      // (C) Ambient Floating Motion (Gentle Floating/Drifting Effect), Damping & Border Constraints
+      // (C) Ambient Floating Motion & Hierarchical Y-Axis Gravity, Damping & Border Constraints
       const nowTime = Date.now() * 0.0012;
       graphNodes.forEach((node, idx) => {
         if (!node.isPinned) {
+          const depth = getTaskDepth(node.task);
+          const targetYRatio = depth === 0 ? 0.22 : (depth === 1 ? 0.48 : (depth === 2 ? 0.72 : 0.88));
+          const targetY = canvas.height * targetYRatio;
+
+          // Hierarchical Y-Axis gravity force (Ancestors float top, children float below)
+          const hierarchicalGravityY = (targetY - node.y) * 0.015;
+          node.vy += hierarchicalGravityY;
+
           // Gentle ambient floating wave forces
           const driftX = Math.cos(nowTime * 0.8 + idx * 1.5) * 0.06;
           const driftY = Math.sin(nowTime * 0.7 + idx * 2.1) * 0.06;

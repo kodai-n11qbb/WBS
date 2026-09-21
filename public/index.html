@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Share-Log | Obsidian Graph & P2P Tree Tracker</title>
+  <title>Share-Log | Obsidian Graph Tracker</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -19,39 +19,32 @@
   </div>
 
   <div class="app-container">
-    <header class="app-header">
+    <header class="app-header minimal-header">
       <div class="header-left">
-        <div class="logo-badge">P2P GRAPH</div>
-        <div>
-          <h1 id="project-title">LAN Share-Log Tracker</h1>
-          <p class="subtitle">Obsidian型ノードグラフ ＆ 無操作自動イマーシブ遷移</p>
-        </div>
-      </div>
-
-      <div class="header-right">
-        <!-- 3-Mode View Switcher -->
-        <div class="view-switcher-group">
-          <button id="btn-view-tree" class="btn-mode active" title="純粋ツリー表示 (単一キャンバス)">
-            🌳 ツリー
-          </button>
-          <button id="btn-view-graph" class="btn-mode" title="Obsidian型ノードグラフ">
-            🌌 Obsidian Graph
-          </button>
-          <button id="btn-view-kanban" class="btn-mode" title="3カラム カンバン表示">
-            📋 カンバン
-          </button>
-        </div>
-
-        <div class="kb-hint">💡 十字キー(↑↓←→) | カンバン移動は [←][→] または [Enter] で確認のうえ実行</div>
-
+        <h1 id="project-title">Share-Log</h1>
         <div class="node-pill">
           <span class="status-dot online"></span>
           <span id="node-id-display">Node: Connecting...</span>
         </div>
       </div>
+
+      <div class="header-right">
+        <!-- View Switcher -->
+        <div class="view-switcher-group">
+          <button id="btn-view-graph" class="btn-mode active" title="Obsidianノードグラフ (メイン)">
+            🌌 グラフ
+          </button>
+          <button id="btn-view-tree" class="btn-mode" title="ツリー表示">
+            🌳 ツリー
+          </button>
+          <button id="btn-view-kanban" class="btn-mode" title="カンバン表示">
+            📋 カンバン
+          </button>
+        </div>
+      </div>
     </header>
 
-    <!-- Parent & Action Drag/Keyboard Confirmation Modal Dialog -->
+    <!-- Parent & Action Confirmation Modal Dialog -->
     <div id="confirm-parent-modal" class="modal-backdrop hidden">
       <div class="modal-card">
         <div class="modal-icon" id="confirm-modal-icon">📁</div>
@@ -90,7 +83,7 @@
         </form>
 
         <!-- Tree View Side-by-Side Unclassified Inbox Panel -->
-        <div id="tree-unclassified-panel" class="tree-unclassified-panel glass-card">
+        <div id="tree-unclassified-panel" class="tree-unclassified-panel glass-card hidden">
           <div class="unclassified-panel-header">
             <span>📦 未分類ボックス (ドラッグでツリーへ)</span>
             <span id="unclassified-count-badge" class="unclassified-badge">0</span>
@@ -99,24 +92,28 @@
         </div>
       </section>
 
-      <!-- VIEW 1: Pure Single-Canvas Tree View (No 3-Column Split) -->
-      <section id="pure-tree-view" class="view-section glass-card">
-        <div class="tree-canvas-header">
-          <h2>🌳 純粋ツリー表示 (単一キャンバス)</h2>
-          <span class="tree-subtitle">TODO/PROGRESS/DONEのカラム区分けなしの樹状ツリー</span>
+      <!-- VIEW 1: Obsidian-like Node Graph Canvas View (Default Front-and-Center) -->
+      <section id="obsidian-graph-view" class="view-section glass-card full-graph-view">
+        <!-- Screen Edge Nesting Depth Control -->
+        <div id="depth-filter-control" class="depth-filter-control glass-card">
+          <span class="depth-label">ネスト表示:</span>
+          <button class="depth-btn" data-depth="1">1階層</button>
+          <button class="depth-btn active" data-depth="2">2階層 (標準)</button>
+          <button class="depth-btn" data-depth="3">3階層</button>
+          <button class="depth-btn" data-depth="all">すべて</button>
         </div>
-        <div id="pure-tree-container" class="pure-tree-container"></div>
+
+        <div class="canvas-wrapper">
+          <canvas id="obsidian-canvas" width="1200" height="650"></canvas>
+        </div>
       </section>
 
-      <!-- VIEW 2: Obsidian-like Node Graph Canvas View -->
-      <section id="obsidian-graph-view" class="view-section glass-card hidden">
-        <div class="graph-canvas-header">
-          <h2>🌌 Obsidian ノードグラフビュー</h2>
-          <span class="graph-subtitle">暗闇の中に発光ノードと接続エッジが浮かぶグラフィカル空間</span>
+      <!-- VIEW 2: Pure Single-Canvas Tree View -->
+      <section id="pure-tree-view" class="view-section glass-card hidden">
+        <div class="tree-canvas-header">
+          <h2>🌳 樹状ツリー表示</h2>
         </div>
-        <div class="canvas-wrapper">
-          <canvas id="obsidian-canvas" width="1200" height="600"></canvas>
-        </div>
+        <div id="pure-tree-container" class="pure-tree-container"></div>
       </section>
 
       <!-- VIEW 3: 3-Column Kanban Board View -->

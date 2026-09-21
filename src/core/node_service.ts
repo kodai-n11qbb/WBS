@@ -159,6 +159,12 @@ export class NodeService {
     taskId: string,
     newParentId: string | null
   ): Promise<SyncEvent> {
+    const state = await this.getProjectState(projectId);
+    const validation = this.validator.validateParentChange(taskId, newParentId, state.tasks);
+    if (!validation.valid) {
+      throw new Error(`親タスク変更失敗: ${validation.errors.join(' / ')}`);
+    }
+
     const event: SyncEvent = {
       id: crypto.randomUUID(),
       projectId,
@@ -195,19 +201,36 @@ export class NodeService {
   }
 
   public async deleteTask(projectId: string, taskId: string): Promise<SyncEvent> {
-    const event: SyncEvent = {
-      id: crypto.randomUUID(),
-      projectId,
-      authorNodeId: this.nodeId,
-      timestamp: Date.now(),
-      sequence: ++this.sequenceCounter,
-      type: 'TASK_DELETED',
-      payload: { taskId },
-    };
+    const state = await this.getProjectState(projectId);
+    const toDelete = new Set<string>([taskId]);
+    let added = true;
+    while (added) {
+      added = false;
+      for (const [id, t] of state.tasks.entries()) {
+        if (t.parentId && toDelete.has(t.parentId) && !toDelete.has(id)) {
+          toDelete.add(id);
+          added = true;
+        }
+      }
+    }
 
-    await this.repository.saveEvent(event);
-    await this.transport.broadcast({ type: 'EVENT_BROADCAST', event });
-    return event;
+    let lastEvent: SyncEvent | null = null;
+    for (const id of toDelete) {
+      const event: SyncEvent = {
+        id: crypto.randomUUID(),
+        projectId,
+        authorNodeId: this.nodeId,
+        timestamp: Date.now(),
+        sequence: ++this.sequenceCounter,
+        type: 'TASK_DELETED',
+        payload: { taskId: id },
+      };
+
+      await this.repository.saveEvent(event);
+      await this.transport.broadcast({ type: 'EVENT_BROADCAST', event });
+      lastEvent = event;
+    }
+    return lastEvent!;
   }
 
   public async getProjectState(projectId: string): Promise<ProjectState> {

@@ -77,4 +77,41 @@ describe('SyncEngine (Tree Structure & Optional Attributes)', () => {
     const state = engine.reduceEvents(events);
     expect(state.tasks.get('t1')?.parentId).toBe('t-parent-target');
   });
+
+  it('should cascade delete child subtasks when parent task is deleted', () => {
+    const engine = new SyncEngine();
+    const events: SyncEvent[] = [
+      {
+        id: 'e1',
+        projectId: 'p1',
+        authorNodeId: 'node-A',
+        timestamp: 1000,
+        sequence: 1,
+        type: 'TASK_CREATED',
+        payload: { taskId: 't-parent', title: 'Parent Task', status: 'TODO', orderIndex: 0 },
+      },
+      {
+        id: 'e2',
+        projectId: 'p1',
+        authorNodeId: 'node-A',
+        timestamp: 1001,
+        sequence: 2,
+        type: 'TASK_CREATED',
+        payload: { taskId: 't-child', parentId: 't-parent', title: 'Child Task', status: 'TODO', orderIndex: 0 },
+      },
+      {
+        id: 'e3',
+        projectId: 'p1',
+        authorNodeId: 'node-A',
+        timestamp: 1002,
+        sequence: 3,
+        type: 'TASK_DELETED',
+        payload: { taskId: 't-parent' },
+      },
+    ];
+
+    const state = engine.reduceEvents(events);
+    expect(state.tasks.has('t-parent')).toBe(false);
+    expect(state.tasks.has('t-child')).toBe(false);
+  });
 });

@@ -209,7 +209,12 @@ input[type="text"]::placeholder { color: var(--text-secondary); }
 .tree-subtitle, .graph-subtitle { font-size: 0.85rem; color: var(--text-secondary); }
 
 .pure-tree-container {
-  display: flex; flex-direction: column; gap: 1rem; padding: 0.5rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding: 0.5rem 0.25rem;
+  max-height: calc(100vh - 220px);
+  overflow-y: auto;
 }
 
 /* VIEW 2: Obsidian Graph Canvas */
@@ -223,11 +228,11 @@ input[type="text"]::placeholder { color: var(--text-secondary); }
 
 /* VIEW 3: Kanban Board Layout */
 .kanban-board {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 1.5rem; padding: 0; background: transparent; border: none; box-shadow: none;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem; padding: 0; background: transparent; border: none; box-shadow: none;
 }
 
 .kanban-column {
-  padding: 1.25rem; display: flex; flex-direction: column; min-height: 580px;
+  padding: 1.25rem; display: flex; flex-direction: column; min-height: 580px; max-height: calc(100vh - 200px);
   transition: border-color 0.2s ease, background 0.2s ease;
 }
 .kanban-column.drag-over { border-color: var(--accent-blue); background: rgba(56, 189, 248, 0.08); }
@@ -249,10 +254,66 @@ input[type="text"]::placeholder { color: var(--text-secondary); }
   padding: 0.2rem 0.6rem; border-radius: 999px; color: var(--text-secondary);
 }
 
-.task-list { display: flex; flex-direction: column; gap: 0.85rem; flex: 1; min-height: 100px; }
+.task-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  flex: 1;
+  min-height: 150px;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
 
-/* Visual Tree Nodes */
+/* Unified Vertical Scrollbar Design */
+.pure-tree-container::-webkit-scrollbar,
+.task-list::-webkit-scrollbar,
+.floating-inbox-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.pure-tree-container::-webkit-scrollbar-track,
+.task-list::-webkit-scrollbar-track,
+.floating-inbox-list::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 99px;
+}
+
+.pure-tree-container::-webkit-scrollbar-thumb,
+.task-list::-webkit-scrollbar-thumb,
+.floating-inbox-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 99px;
+}
+
+.pure-tree-container::-webkit-scrollbar-thumb:hover,
+.task-list::-webkit-scrollbar-thumb:hover,
+.floating-inbox-list::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-blue);
+}
+
+/* Visual Tree Nodes & Unclassified Inbox Container */
 .task-tree-node { display: flex; flex-direction: column; gap: 0.5rem; position: relative; }
+
+.task-tree-node.is-unclassified-container {
+  border: 2px dashed rgba(251, 191, 36, 0.55);
+  background: rgba(251, 191, 36, 0.04);
+  border-radius: var(--radius-lg);
+  padding: 0.85rem;
+  margin-bottom: 1.25rem;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  transition: all 0.25s ease;
+}
+.task-tree-node.is-unclassified-container:hover {
+  border-color: rgba(251, 191, 36, 0.85);
+  box-shadow: 0 6px 24px rgba(251, 191, 36, 0.2);
+}
+
+.inbox-section-banner {
+  font-size: 0.78rem; font-weight: 700; color: var(--accent-amber);
+  background: rgba(251, 191, 36, 0.12); padding: 0.35rem 0.75rem;
+  border-radius: var(--radius-sm); margin-bottom: 0.65rem;
+  display: flex; align-items: center; gap: 0.4rem;
+}
 .task-tree-node.is-subtask {
   margin-left: 1.75rem;
   border-left: 2px dashed rgba(99, 102, 241, 0.4);
@@ -268,13 +329,34 @@ input[type="text"]::placeholder { color: var(--text-secondary); }
 .task-item.dragging { opacity: 0.4; transform: scale(0.98); }
 .task-item.focused {
   border-color: var(--accent-blue) !important;
-  box-shadow: 0 0 14px rgba(56, 189, 248, 0.5) !important;
+  box-shadow: 0 0 18px rgba(56, 189, 248, 0.6) !important;
   transform: translateY(-2px);
 }
+.task-item.highlight-flash {
+  animation: cardFlashPulse 1.8s ease;
+}
+
+@keyframes cardFlashPulse {
+  0% { box-shadow: 0 0 25px rgba(56, 189, 248, 0.9), 0 0 45px rgba(129, 140, 248, 0.85); }
+  50% { box-shadow: 0 0 35px rgba(56, 189, 248, 1), 0 0 55px rgba(129, 140, 248, 0.95); }
+  100% { box-shadow: 0 0 18px rgba(56, 189, 248, 0.6); }
+}
+
 .task-item.drop-target-parent {
-  border-color: var(--accent-purple) !important;
-  background: rgba(129, 140, 248, 0.15) !important;
-  box-shadow: 0 0 16px rgba(129, 140, 248, 0.6) !important;
+  border-color: var(--accent-amber) !important;
+  border-style: dashed !important;
+  background: rgba(251, 191, 36, 0.18) !important;
+  box-shadow: 0 0 24px rgba(251, 191, 36, 0.7), inset 0 0 15px rgba(251, 191, 36, 0.2) !important;
+  transform: scale(1.02);
+}
+.task-item.drop-target-parent::after {
+  content: '↙ 子要素として追加';
+  position: absolute;
+  right: 0.8rem;
+  bottom: 0.4rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--accent-amber);
 }
 
 .task-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem; }
@@ -325,3 +407,79 @@ input[type="text"]::placeholder { color: var(--text-secondary); }
 .status-btn.active-TODO { background: rgba(148, 163, 184, 0.25); color: #cbd5e1; border-color: rgba(148, 163, 184, 0.5); }
 .status-btn.active-IN_PROGRESS { background: rgba(251, 191, 36, 0.25); color: var(--accent-amber); border-color: rgba(251, 191, 36, 0.5); }
 .status-btn.active-DONE { background: rgba(52, 211, 153, 0.25); color: var(--accent-green); border-color: rgba(52, 211, 153, 0.5); }
+
+/* Screen-Floating Unclassified Tasks Layer & Floating Cards */
+.floating-unclassified-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 90;
+  overflow: hidden;
+}
+
+.floating-unclassified-layer.hidden {
+  display: none !important;
+}
+
+.floating-unclassified-card {
+  pointer-events: auto;
+  position: absolute;
+  background: rgba(15, 23, 42, 0.88);
+  backdrop-filter: blur(14px);
+  border: 1px solid rgba(251, 191, 36, 0.5);
+  border-radius: var(--radius-md);
+  padding: 0.65rem 0.95rem;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 18px rgba(251, 191, 36, 0.25);
+  cursor: grab;
+  user-select: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  animation: ambientFloat 6s ease-in-out infinite alternate;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  max-width: 260px;
+}
+
+.floating-unclassified-card:active {
+  cursor: grabbing;
+}
+
+.floating-unclassified-card:hover {
+  border-color: var(--accent-amber);
+  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.6), 0 0 25px rgba(251, 191, 36, 0.4);
+}
+
+.floating-unclassified-card.dragging {
+  opacity: 0.4;
+  transform: scale(0.95);
+}
+
+.floating-card-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent-amber);
+  box-shadow: 0 0 8px var(--accent-amber);
+  flex-shrink: 0;
+}
+
+.floating-card-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@keyframes ambientFloat {
+  0% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-10px) rotate(1deg);
+  }
+  100% {
+    transform: translateY(5px) rotate(-1deg);
+  }
+}

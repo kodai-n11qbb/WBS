@@ -92,8 +92,12 @@ export class SyncEngine {
           const { taskId, newParentId } = event.payload;
           const existing = state.tasks.get(taskId);
           if (existing) {
-            existing.parentId = newParentId || null;
-            existing.updatedAt = event.timestamp;
+            const validation = this.statusAggregator ? 
+              this.validateCycle(taskId, newParentId || null, state.tasks) : { valid: true };
+            if (validation.valid) {
+              existing.parentId = newParentId || null;
+              existing.updatedAt = event.timestamp;
+            }
           }
           break;
         }
@@ -110,7 +114,20 @@ export class SyncEngine {
 
         case 'TASK_DELETED': {
           const { taskId } = event.payload;
-          state.tasks.delete(taskId);
+          const toDelete = new Set<string>([taskId]);
+          let added = true;
+          while (added) {
+            added = false;
+            for (const [id, t] of state.tasks.entries()) {
+              if (t.parentId && toDelete.has(t.parentId) && !toDelete.has(id)) {
+                toDelete.add(id);
+                added = true;
+              }
+            }
+          }
+          for (const id of toDelete) {
+            state.tasks.delete(id);
+          }
           break;
         }
       }
@@ -119,5 +136,25 @@ export class SyncEngine {
     this.statusAggregator.recalculateStatuses(state.tasks);
 
     return state;
+  }
+
+  private validateCycle(taskId: string, newParentId: string | null, tasks: Map<string, Task>): { valid: boolean } {
+    if (!newParentId) return { valid: true };
+    if (taskId === newParentId) return { valid: false };
+
+    let currentId: string | null | undefined = newParentId;
+    const visited = new Set<string>();
+
+    while (currentId) {
+      if (currentId === taskId) {
+        return { valid: false };
+      }
+      if (visited.has(currentId)) break;
+      visited.add(currentId);
+      const parentTask = tasks.get(currentId);
+      currentId = parentTask ? parentTask.parentId : null;
+    }
+
+    return { valid: true };
   }
 }

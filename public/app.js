@@ -48,6 +48,24 @@
 
   const columns = document.querySelectorAll('.kanban-column');
 
+  const floatingInboxContainer = document.getElementById('floating-inbox-container');
+  const floatingInboxDrawer = document.getElementById('floating-inbox-drawer');
+  const btnToggleInbox = document.getElementById('btn-toggle-inbox');
+  const btnCloseInbox = document.getElementById('btn-close-inbox');
+  const floatingInboxBadge = document.getElementById('floating-inbox-badge');
+  const floatingInboxList = document.getElementById('floating-inbox-list');
+
+  if (btnToggleInbox && floatingInboxDrawer) {
+    btnToggleInbox.addEventListener('click', () => {
+      floatingInboxDrawer.classList.toggle('hidden');
+    });
+  }
+  if (btnCloseInbox && floatingInboxDrawer) {
+    btnCloseInbox.addEventListener('click', () => {
+      floatingInboxDrawer.classList.add('hidden');
+    });
+  }
+
   // WebSocket Setup
   function initWebSocket() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -89,8 +107,20 @@
   }
 
   function updateParentTaskOptions() {
-    selectQuickParent.innerHTML = '<option value="">📁 ルートタスク</option>';
+    selectQuickParent.innerHTML = '';
+
+    const defaultOpt = document.createElement('option');
+    defaultOpt.value = 'UNCLASSIFIED';
+    defaultOpt.textContent = '未分類 (デフォルト)';
+    selectQuickParent.appendChild(defaultOpt);
+
+    const rootOpt = document.createElement('option');
+    rootOpt.value = 'ROOT';
+    rootOpt.textContent = '+ 新しいルートタスクを作成';
+    selectQuickParent.appendChild(rootOpt);
+
     currentTasks.forEach((t) => {
+      if (t.title.includes('未分類') || t.title.toLowerCase().includes('tmp')) return;
       const opt = document.createElement('option');
       opt.value = t.id;
       opt.textContent = `📁 ${t.title}`;
@@ -117,6 +147,10 @@
     obsidianGraphViewSection.classList.toggle('hidden', mode !== 'OBSIDIAN_GRAPH_VIEW');
     kanbanViewSection.classList.toggle('hidden', mode !== 'KANBAN_VIEW');
 
+    if (floatingUnclassifiedLayer) {
+      floatingUnclassifiedLayer.classList.toggle('hidden', mode !== 'TREE_VIEW');
+    }
+
     renderCurrentView();
   }
 
@@ -135,15 +169,87 @@
     }
   }
 
-  // VIEW 1: Pure Tree View (Single-Canvas, Enhanced Readability)
+  // VIEW 1: Pure Tree View (Single-Canvas with Screen-Floating Unclassified Cards)
   function renderPureTreeView() {
     pureTreeContainer.innerHTML = '';
-    const rootTasks = currentTasks.filter((t) => !t.parentId).sort((a, b) => a.orderIndex - b.orderIndex);
+    if (floatingUnclassifiedLayer) floatingUnclassifiedLayer.innerHTML = '';
 
-    rootTasks.forEach((rootTask) => {
-      const nodeEl = renderTaskTreeNode(rootTask);
-      pureTreeContainer.appendChild(nodeEl);
-    });
+    const isUnclassifiedTask = (t) => t.title.includes('未分類') || t.title.toLowerCase().includes('tmp');
+    const unclassifiedContainer = currentTasks.find((t) => !t.parentId && isUnclassifiedTask(t));
+    const unclassifiedContainerId = unclassifiedContainer ? unclassifiedContainer.id : null;
+
+    // 1. Render Screen-Floating Unclassified Task Cards
+    const unclassifiedTasks = currentTasks.filter((t) => {
+      if (t.id === unclassifiedContainerId) return false;
+      if (unclassifiedContainerId && t.parentId === unclassifiedContainerId) return true;
+      if (!t.parentId && isUnclassifiedTask(t)) return true;
+      return false;
+    }).sort((a, b) => a.orderIndex - b.orderIndex);
+
+    if (floatingUnclassifiedLayer) {
+      unclassifiedTasks.forEach((task, idx) => {
+        const floatingCard = document.createElement('div');
+        floatingCard.className = `floating-unclassified-card ${focusedTaskId === task.id ? 'focused' : ''}`;
+        floatingCard.setAttribute('draggable', 'true');
+        floatingCard.dataset.taskId = task.id;
+
+        // Position staggered across screen canvas
+        const posX = 40 + (idx * 230) % (Math.max(800, window.innerWidth - 300));
+        const posY = 150 + Math.floor((idx * 230) / Math.max(800, window.innerWidth - 300)) * 75;
+
+        floatingCard.style.left = `${posX}px`;
+        floatingCard.style.top = `${posY}px`;
+        floatingCard.style.animationDelay = `${(idx * 0.8) % 4}s`;
+
+        const dot = document.createElement('span');
+        dot.className = 'floating-card-dot';
+
+        const titleSpan = document.createElement('span');
+        titleSpan.className = 'floating-card-title';
+        titleSpan.textContent = task.title;
+
+        floatingCard.appendChild(dot);
+        floatingCard.appendChild(titleSpan);
+
+        floatingCard.addEventListener('click', (e) => {
+          e.stopPropagation();
+          setFocusedTask(task.id);
+        });
+
+        floatingCard.addEventListener('dragstart', (e) => {
+          e.stopPropagation();
+          draggedTaskId = task.id;
+          floatingCard.classList.add('dragging');
+          e.dataTransfer.setData('text/plain', task.id);
+        });
+
+        floatingCard.addEventListener('dragend', (e) => {
+          e.stopPropagation();
+          draggedTaskId = null;
+          floatingCard.classList.remove('dragging');
+          document.querySelectorAll('.drop-target-parent').forEach((el) => el.classList.remove('drop-target-parent'));
+        });
+
+        floatingUnclassifiedLayer.appendChild(floatingCard);
+      });
+    }
+
+    // 2. Render Main Structured Tree Tasks in Canvas
+    const rootTasks = currentTasks.filter((t) => !t.parentId && t.id !== unclassifiedContainerId && !isUnclassifiedTask(t))
+      .sort((a, b) => a.orderIndex - b.orderIndex);
+
+    if (rootTasks.length === 0) {
+      const emptyTreeMsg = document.createElement('div');
+      emptyTreeMsg.className = 'empty-tree-notice';
+      emptyTreeMsg.style.cssText = 'font-size: 0.9rem; color: var(--text-secondary); text-align: center; padding: 3rem 1rem; border: 1px dashed var(--card-border); border-radius: var(--radius-md); margin-top: 1rem;';
+      emptyTreeMsg.textContent = '構造化されたルートタスクがまだありません。画面上の浮遊タスクを各親タスクへドラッグ＆ドロップして分類してください。';
+      pureTreeContainer.appendChild(emptyTreeMsg);
+    } else {
+      rootTasks.forEach((rootTask) => {
+        const nodeEl = renderTaskTreeNode(rootTask);
+        pureTreeContainer.appendChild(nodeEl);
+      });
+    }
 
     if (focusedTaskId) {
       highlightFocusedTaskCard(focusedTaskId);
@@ -151,8 +257,16 @@
   }
 
   function renderTaskTreeNode(task) {
+    const isUnclassified = !task.parentId && (task.title.includes('未分類') || task.title.toLowerCase().includes('tmp'));
     const nodeWrapper = document.createElement('div');
-    nodeWrapper.className = `task-tree-node ${task.parentId ? 'is-subtask' : ''}`;
+    nodeWrapper.className = `task-tree-node ${task.parentId ? 'is-subtask' : ''} ${isUnclassified ? 'is-unclassified-container' : ''}`;
+
+    if (isUnclassified) {
+      const inboxHeader = document.createElement('div');
+      inboxHeader.className = 'inbox-section-banner';
+      inboxHeader.innerHTML = `<span>[ 未分類インボックス ] ドラッグ＆ドロップで各親タスクへ分類可能</span>`;
+      nodeWrapper.appendChild(inboxHeader);
+    }
 
     const card = createTaskCard(task);
     nodeWrapper.appendChild(card);
@@ -216,7 +330,8 @@
     function animate() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // 1. Calculate Spring Physics Elasticity between connected Parent-Child Nodes
+      // 1. Calculate Spring Physics Elasticity & Repulsion (Overlap Prevention)
+      // (A) Spring Attraction between Parent & Child Nodes
       graphNodes.forEach((node) => {
         if (node.task.parentId) {
           const parentNode = nodeMap.get(node.task.parentId);
@@ -224,7 +339,7 @@
             const dx = node.x - parentNode.x;
             const dy = node.y - parentNode.y;
             const dist = Math.hypot(dx, dy) || 1;
-            const restLength = 120; // Natural spring distance
+            const restLength = 130; // Natural spring distance
             const stiffness = 0.04; // Spring elasticity
             const force = (dist - restLength) * stiffness;
             const fx = (dx / dist) * force;
@@ -240,16 +355,67 @@
             }
           }
         }
+      });
 
-        // Apply Velocity Damping
+      // (B) Node-to-Node Repulsion Physics (Bypassed for actively dragged nodes)
+      const minRepelDist = 130;
+      for (let i = 0; i < graphNodes.length; i++) {
+        for (let j = i + 1; j < graphNodes.length; j++) {
+          const nodeA = graphNodes[i];
+          const nodeB = graphNodes[j];
+
+          // If a node is currently grabbed by mouse, disable repulsion so it can overlap smoothly
+          if (nodeA.isPinned || nodeB.isPinned) continue;
+
+          const dx = nodeB.x - nodeA.x;
+          const dy = nodeB.y - nodeA.y;
+          const dist = Math.hypot(dx, dy) || 1;
+
+          if (dist < minRepelDist) {
+            const force = ((minRepelDist - dist) / minRepelDist) * 1.5;
+            const fx = (dx / dist) * force;
+            const fy = (dy / dist) * force;
+
+            nodeA.vx -= fx;
+            nodeA.vy -= fy;
+            nodeB.vx += fx;
+            nodeB.vy += fy;
+
+            // Hard Separation Boundary (70px limit when idle)
+            if (dist < 70) {
+              const push = (70 - dist) / 2;
+              const px = (dx / dist) * push;
+              const py = (dy / dist) * push;
+              nodeA.x -= px; nodeA.y -= py;
+              nodeB.x += px; nodeB.y += py;
+            }
+          }
+        }
+      }
+
+      // (C) Ambient Floating Motion (Gentle Floating/Drifting Effect), Damping & Border Constraints
+      const nowTime = Date.now() * 0.0012;
+      graphNodes.forEach((node, idx) => {
         if (!node.isPinned) {
-          node.vx *= 0.88;
-          node.vy *= 0.88;
+          // Gentle ambient floating wave forces
+          const driftX = Math.cos(nowTime * 0.8 + idx * 1.5) * 0.06;
+          const driftY = Math.sin(nowTime * 0.7 + idx * 2.1) * 0.06;
+
+          node.vx += driftX;
+          node.vy += driftY;
+
+          // Smooth Damping for continuous floating motion
+          node.vx *= 0.94;
+          node.vy *= 0.94;
+
           node.x += node.vx;
           node.y += node.vy;
 
-          if (node.x < 40 || node.x > canvas.width - 40) node.vx *= -1;
-          if (node.y < 40 || node.y > canvas.height - 40) node.vy *= -1;
+          const pad = 60;
+          if (node.x < pad) { node.x = pad; node.vx *= -0.5; }
+          if (node.x > canvas.width - pad) { node.x = canvas.width - pad; node.vx *= -0.5; }
+          if (node.y < pad) { node.y = pad; node.vy *= -0.5; }
+          if (node.y > canvas.height - pad) { node.y = canvas.height - pad; node.vy *= -0.5; }
         }
       });
 
@@ -275,36 +441,52 @@
         }
       });
 
-      // 3. Draw Nodes
+      // 3. Draw Nodes (Dynamically Scaled by Child Task Count)
       graphNodes.forEach((node) => {
         let nodeColor = '#38bdf8'; // TODO: Blue
         if (node.task.status === 'IN_PROGRESS') nodeColor = '#fbbf24'; // Amber
         if (node.task.status === 'DONE') nodeColor = '#34d399'; // Green
 
         const isFocused = focusedTaskId === node.task.id;
+        const childCount = currentTasks.filter((t) => t.parentId === node.task.id).length;
+
+        // Dynamic Sizing based on subtask count
+        const baseRadius = 8;
+        const coreRadius = baseRadius + Math.min(childCount * 4, 18); // Core radius scales from 8px to 26px
+        const haloRadius = coreRadius + (isFocused ? 12 : 8); // Glowing halo scales proportionally
 
         // Glowing halo
         ctx.beginPath();
-        ctx.arc(node.x, node.y, isFocused ? 22 : 16, 0, Math.PI * 2);
+        ctx.arc(node.x, node.y, haloRadius, 0, Math.PI * 2);
         ctx.fillStyle = nodeColor;
-        ctx.globalAlpha = isFocused ? 0.45 : 0.25;
+        ctx.globalAlpha = isFocused ? 0.45 : 0.22;
         ctx.fill();
 
         // Core Circle
         ctx.beginPath();
-        ctx.arc(node.x, node.y, 8, 0, Math.PI * 2);
+        ctx.arc(node.x, node.y, coreRadius, 0, Math.PI * 2);
         ctx.globalAlpha = 1.0;
         ctx.fillStyle = nodeColor;
         ctx.shadowColor = nodeColor;
-        ctx.shadowBlur = isFocused ? 20 : 12;
+        ctx.shadowBlur = isFocused ? 22 : 12;
         ctx.fill();
         ctx.shadowBlur = 0;
 
+        // Badge indicating child count for major hubs
+        if (childCount > 0) {
+          ctx.font = 'bold 10px Inter, sans-serif';
+          ctx.fillStyle = '#0f172a';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(`${childCount}`, node.x, node.y);
+          ctx.textBaseline = 'alphabetic'; // Reset
+        }
+
         // Label
-        ctx.font = '12px Inter, sans-serif';
+        ctx.font = childCount > 0 ? 'bold 12px Inter, sans-serif' : '12px Inter, sans-serif';
         ctx.fillStyle = '#f8fafc';
         ctx.textAlign = 'center';
-        ctx.fillText(node.task.title, node.x, node.y + 24);
+        ctx.fillText(node.task.title, node.x, node.y + haloRadius + 14);
       });
 
       canvasAnimationId = requestAnimationFrame(animate);
@@ -312,6 +494,23 @@
 
     animate();
     setupCanvasInteractivity();
+  }
+
+  // Cycle Prevention Helper Function
+  function isDescendantOf(candidateParentId, taskId) {
+    if (!candidateParentId || !taskId) return false;
+    if (candidateParentId === taskId) return true;
+
+    let currentId = candidateParentId;
+    const visited = new Set();
+    while (currentId) {
+      if (currentId === taskId) return true;
+      if (visited.has(currentId)) break;
+      visited.add(currentId);
+      const parentTask = currentTasks.find((t) => t.id === currentId);
+      currentId = parentTask ? parentTask.parentId : null;
+    }
+    return false;
   }
 
   // Canvas Mouse Dragging, Node Focus & Parent Drag-Drop Confirmation
@@ -328,7 +527,7 @@
       clickStartX = e.clientX;
       clickStartY = e.clientY;
 
-      const hitNode = graphNodes.find((n) => Math.hypot(n.x - mouseX, n.y - mouseY) <= 24);
+      const hitNode = graphNodes.find((n) => Math.hypot(n.x - mouseX, n.y - mouseY) <= 28);
       if (hitNode) {
         isMouseDown = true;
         draggedGraphNode = hitNode;
@@ -355,13 +554,17 @@
           setViewMode(userPreferredViewMode === 'OBSIDIAN_GRAPH_VIEW' ? 'TREE_VIEW' : userPreferredViewMode, true);
           setFocusedTask(taskId);
         } else {
-          // Dragged Node: Check if dropped onto another node to change parent (Root tasks only)
+          // Dragged Node: Check if dropped onto another node (Threshold 45px)
           const targetNode = graphNodes.find(
-            (n) => n.task.id !== draggedGraphNode.task.id && Math.hypot(n.x - draggedGraphNode.x, n.y - draggedGraphNode.y) <= 35
+            (n) => n.task.id !== draggedGraphNode.task.id && Math.hypot(n.x - draggedGraphNode.x, n.y - draggedGraphNode.y) <= 45
           );
 
-          if (targetNode && !draggedGraphNode.task.parentId) {
-            promptParentingConfirmation(draggedGraphNode.task, targetNode.task);
+          if (targetNode) {
+            if (isDescendantOf(targetNode.task.id, draggedGraphNode.task.id)) {
+              showErrorToast('⚠️ 親タスクを自己の子孫タスクの中に移動することはできません。');
+            } else {
+              promptParentingConfirmation(draggedGraphNode.task, targetNode.task);
+            }
           }
         }
       }
@@ -420,7 +623,7 @@
     });
 
     sortedTasks.forEach((task) => {
-      const card = createTaskCard(task);
+      const card = createTaskCard(task, true);
       if (task.status === 'TODO') listTodo.appendChild(card);
       else if (task.status === 'IN_PROGRESS') listInProgress.appendChild(card);
       else if (task.status === 'DONE') listDone.appendChild(card);
@@ -432,10 +635,12 @@
   }
 
   // Create Task Card Element
-  function createTaskCard(task) {
+  function createTaskCard(task, isKanbanView = false) {
     const item = document.createElement('div');
-    item.className = `task-item ${focusedTaskId === task.id ? 'focused' : ''}`;
-    item.setAttribute('draggable', 'true');
+    item.className = `task-item ${focusedTaskId === task.id ? 'focused' : ''} ${isKanbanView ? 'kanban-item' : ''}`;
+    if (!isKanbanView) {
+      item.setAttribute('draggable', 'true');
+    }
     item.dataset.taskId = task.id;
 
     item.addEventListener('click', (e) => {
@@ -443,43 +648,49 @@
       setFocusedTask(task.id);
     });
 
-    item.addEventListener('dragstart', (e) => {
-      e.stopPropagation();
-      draggedTaskId = task.id;
-      item.classList.add('dragging');
-      e.dataTransfer.setData('text/plain', task.id);
-    });
+    if (!isKanbanView) {
+      item.addEventListener('dragstart', (e) => {
+        e.stopPropagation();
+        draggedTaskId = task.id;
+        item.classList.add('dragging');
+        e.dataTransfer.setData('text/plain', task.id);
+      });
 
-    item.addEventListener('dragend', (e) => {
-      e.stopPropagation();
-      draggedTaskId = null;
-      item.classList.remove('dragging');
-      document.querySelectorAll('.drop-target-parent').forEach((el) => el.classList.remove('drop-target-parent'));
-    });
+      item.addEventListener('dragend', (e) => {
+        e.stopPropagation();
+        draggedTaskId = null;
+        item.classList.remove('dragging');
+        document.querySelectorAll('.drop-target-parent').forEach((el) => el.classList.remove('drop-target-parent'));
+      });
 
-    item.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      if (draggedTaskId && draggedTaskId !== task.id) {
-        item.classList.add('drop-target-parent');
-      }
-    });
+      item.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (draggedTaskId && draggedTaskId !== task.id && !isDescendantOf(task.id, draggedTaskId)) {
+          item.classList.add('drop-target-parent');
+        }
+      });
 
-    item.addEventListener('dragleave', (e) => {
-      e.stopPropagation();
-      item.classList.remove('drop-target-parent');
-    });
+      item.addEventListener('dragleave', (e) => {
+        e.stopPropagation();
+        item.classList.remove('drop-target-parent');
+      });
 
-    item.addEventListener('drop', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      item.classList.remove('drop-target-parent');
-      const sourceTaskId = e.dataTransfer.getData('text/plain') || draggedTaskId;
+      item.addEventListener('drop', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        item.classList.remove('drop-target-parent');
+        const sourceTaskId = e.dataTransfer.getData('text/plain') || draggedTaskId;
 
-      if (sourceTaskId && sourceTaskId !== task.id) {
-        changeTaskParent(sourceTaskId, task.id);
-      }
-    });
+        if (sourceTaskId && sourceTaskId !== task.id) {
+          if (isDescendantOf(task.id, sourceTaskId)) {
+            showErrorToast('⚠️ 親タスクを自己の子孫タスクの中に移動することはできません。');
+            return;
+          }
+          changeTaskParent(sourceTaskId, task.id);
+        }
+      });
+    }
 
     // Card Top (Title + Toggle + Delete)
     const top = document.createElement('div');
@@ -523,30 +734,23 @@
     top.appendChild(btnDelete);
     item.appendChild(top);
 
-    // Parent Task Progress Bar & Calculation
+    // Parent Task Progress Calculation & Background Fill
     let percentage = 0;
     if (isParent) {
       const completedCount = children.filter((c) => c.status === 'DONE').length;
       percentage = Math.round((completedCount / children.length) * 100);
 
-      const progressBox = document.createElement('div');
-      progressBox.className = 'parent-progress-box';
+      // Save vertical height by filling progress directly in card background gradient
+      item.style.background = `linear-gradient(90deg, rgba(52, 211, 153, 0.22) 0%, rgba(52, 211, 153, 0.22) ${percentage}%, rgba(15, 23, 42, 0.8) ${percentage}%, rgba(15, 23, 42, 0.8) 100%)`;
+      if (percentage === 100) {
+        item.style.borderColor = 'rgba(52, 211, 153, 0.5)';
+      }
 
-      const labelRow = document.createElement('div');
-      labelRow.className = 'progress-label-row';
-      labelRow.innerHTML = `<span>進捗率</span><span>${completedCount}/${children.length} 完了 (${percentage}%)</span>`;
-
-      const track = document.createElement('div');
-      track.className = 'progress-bar-track';
-
-      const fill = document.createElement('div');
-      fill.className = 'progress-bar-fill';
-      fill.style.width = `${percentage}%`;
-
-      track.appendChild(fill);
-      progressBox.appendChild(labelRow);
-      progressBox.appendChild(track);
-      item.appendChild(progressBox);
+      // Progress Badge next to Title for zero extra vertical space
+      const progressBadge = document.createElement('span');
+      progressBadge.className = `progress-pill-badge ${percentage === 100 ? 'done' : ''}`;
+      progressBadge.textContent = `${completedCount}/${children.length} (${percentage}%)`;
+      titleGroup.appendChild(progressBadge);
     }
 
     // Footer with Status Controls: Read-only Lock for Parents, Interactive Buttons for Leaf Tasks
@@ -557,7 +761,7 @@
       // Parent Node Status Lock
       const lockBadge = document.createElement('div');
       lockBadge.className = 'status-locked-badge';
-      lockBadge.innerHTML = `🔒 自動算出: ${percentage}%`;
+      lockBadge.innerHTML = `🔒 子タスク連動`;
       footer.appendChild(lockBadge);
     } else {
       // Leaf Node All-Level Status Buttons
@@ -596,21 +800,48 @@
 
   function setFocusedTask(taskId) {
     focusedTaskId = taskId;
-    highlightFocusedTaskCard(taskId);
+
+    // Uncollapse any collapsed parent ancestors so target card is rendered in Tree View
+    let target = currentTasks.find((t) => t.id === taskId);
+    while (target && target.parentId) {
+      const parentTask = currentTasks.find((t) => t.id === target.parentId);
+      if (parentTask) {
+        if (parentTask.isCollapsed) {
+          parentTask.isCollapsed = false;
+          toggleTaskCollapse(parentTask.id, false);
+        }
+        target = parentTask;
+      } else {
+        break;
+      }
+    }
+
+    renderCurrentView();
+
+    setTimeout(() => {
+      highlightFocusedTaskCard(taskId);
+    }, 60);
   }
 
   function highlightFocusedTaskCard(taskId) {
+    let targetEl = null;
     document.querySelectorAll('.task-item').forEach((el) => {
       if (el.dataset.taskId === taskId) {
         el.classList.add('focused');
-        el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        targetEl = el;
       } else {
         el.classList.remove('focused');
       }
     });
+
+    if (targetEl) {
+      targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      targetEl.classList.add('highlight-flash');
+      setTimeout(() => targetEl.classList.remove('highlight-flash'), 2000);
+    }
   }
 
-  // Setup Drag & Drop for Kanban Columns
+  // Setup Drag & Drop for Kanban Columns & Tree Canvas Background
   function setupDragAndDrop() {
     columns.forEach((col) => {
       col.addEventListener('dragover', (e) => {
@@ -633,44 +864,85 @@
         }
       });
     });
+
+    if (pureTreeContainer) {
+      pureTreeContainer.addEventListener('dragover', (e) => {
+        e.preventDefault();
+      });
+      pureTreeContainer.addEventListener('drop', (e) => {
+        if (e.target === pureTreeContainer || e.target.classList.contains('empty-tree-notice')) {
+          e.preventDefault();
+          const sourceTaskId = e.dataTransfer.getData('text/plain') || draggedTaskId;
+          if (sourceTaskId) {
+            changeTaskParent(sourceTaskId, null);
+          }
+        }
+      });
+    }
   }
 
-  // Setup Keyboard Navigation
+  // Setup Unified Visual DOM Keyboard Navigation for Tree and Kanban Views
   function setupKeyboardNavigation() {
     window.addEventListener('keydown', (e) => {
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) {
         return;
       }
 
-      if (!currentTasks || currentTasks.length === 0) return;
-
-      if (!focusedTaskId) {
-        focusedTaskId = currentTasks[0].id;
-        renderCurrentView();
+      if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
         return;
       }
 
-      const currentIndex = currentTasks.findIndex((t) => t.id === focusedTaskId);
-      if (currentIndex === -1) return;
+      const activeSection = document.querySelector('.view-section:not(.hidden)');
+      if (!activeSection) return;
 
-      const currentTask = currentTasks[currentIndex];
+      const visibleCards = Array.from(activeSection.querySelectorAll('.task-item'));
+      if (visibleCards.length === 0) return;
 
-      if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        const prevIndex = (currentIndex - 1 + currentTasks.length) % currentTasks.length;
-        setFocusedTask(currentTasks[prevIndex].id);
-      } else if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        const nextIndex = (currentIndex + 1) % currentTasks.length;
-        setFocusedTask(currentTasks[nextIndex].id);
-      } else if (e.key === 'ArrowRight') {
-        e.preventDefault();
-        if (currentTask.status === 'TODO') updateTaskStatus(currentTask.id, 'IN_PROGRESS');
-        else if (currentTask.status === 'IN_PROGRESS') updateTaskStatus(currentTask.id, 'DONE');
-      } else if (e.key === 'ArrowLeft') {
-        e.preventDefault();
-        if (currentTask.status === 'DONE') updateTaskStatus(currentTask.id, 'IN_PROGRESS');
-        else if (currentTask.status === 'IN_PROGRESS') updateTaskStatus(currentTask.id, 'TODO');
+      e.preventDefault();
+
+      if (!focusedTaskId) {
+        setFocusedTask(visibleCards[0].dataset.taskId);
+        return;
+      }
+
+      const currentCardIdx = visibleCards.findIndex((el) => el.dataset.taskId === focusedTaskId);
+
+      if (e.key === 'ArrowDown') {
+        const nextIdx = currentCardIdx >= 0 && currentCardIdx < visibleCards.length - 1 ? currentCardIdx + 1 : 0;
+        setFocusedTask(visibleCards[nextIdx].dataset.taskId);
+      } else if (e.key === 'ArrowUp') {
+        const prevIdx = currentCardIdx > 0 ? currentCardIdx - 1 : visibleCards.length - 1;
+        setFocusedTask(visibleCards[prevIdx].dataset.taskId);
+      } else if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+        if (currentViewMode === 'KANBAN_VIEW') {
+          // Move horizontally between columns in Kanban view
+          const currentCard = visibleCards[currentCardIdx];
+          const currentColumn = currentCard ? currentCard.closest('.kanban-column') : null;
+          const allCols = Array.from(document.querySelectorAll('.kanban-column'));
+          const colIdx = currentColumn ? allCols.indexOf(currentColumn) : 0;
+
+          const targetColIdx = e.key === 'ArrowRight'
+            ? (colIdx + 1) % allCols.length
+            : (colIdx - 1 + allCols.length) % allCols.length;
+
+          const targetCol = allCols[targetColIdx];
+          const targetCards = Array.from(targetCol.querySelectorAll('.task-item'));
+          if (targetCards.length > 0) {
+            setFocusedTask(targetCards[0].dataset.taskId);
+          }
+        } else {
+          // Status change shortcut for focused task in Tree View
+          const task = currentTasks.find((t) => t.id === focusedTaskId);
+          if (task) {
+            if (e.key === 'ArrowRight') {
+              if (task.status === 'TODO') updateTaskStatus(task.id, 'IN_PROGRESS');
+              else if (task.status === 'IN_PROGRESS') updateTaskStatus(task.id, 'DONE');
+            } else if (e.key === 'ArrowLeft') {
+              if (task.status === 'DONE') updateTaskStatus(task.id, 'IN_PROGRESS');
+              else if (task.status === 'IN_PROGRESS') updateTaskStatus(task.id, 'TODO');
+            }
+          }
+        }
       }
     });
   }
@@ -739,11 +1011,28 @@
   quickForm.addEventListener('submit', (e) => {
     e.preventDefault();
     const title = quickInputTitle.value.trim();
-    const parentId = selectQuickParent.value || null;
-    if (title) {
-      sendCreateTask(title, parentId);
-      quickInputTitle.value = '';
+    const selectedVal = selectQuickParent.value;
+
+    if (!title) return;
+
+    if (selectedVal === 'ROOT') {
+      sendCreateTask(title, null);
+    } else if (selectedVal === 'UNCLASSIFIED' || !selectedVal) {
+      let unclassifiedTask = currentTasks.find((t) => !t.parentId && (t.title.includes('未分類') || t.title.toLowerCase().includes('tmp')));
+      if (unclassifiedTask) {
+        sendCreateTask(title, unclassifiedTask.id);
+      } else {
+        sendCreateTask('未分類', null);
+        setTimeout(() => {
+          const newUnclassified = currentTasks.find((t) => !t.parentId && (t.title.includes('未分類') || t.title.toLowerCase().includes('tmp')));
+          sendCreateTask(title, newUnclassified ? newUnclassified.id : null);
+        }, 350);
+      }
+    } else {
+      sendCreateTask(title, selectedVal);
     }
+
+    quickInputTitle.value = '';
   });
 
   setupDragAndDrop();

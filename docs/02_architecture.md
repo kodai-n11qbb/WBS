@@ -11,12 +11,12 @@
 ```
 +-------------------------------------------------------------+
 |                     Presentation Layer                      |
-|       (Tree & Kanban Drag-Drop Web UI / CLI / Desktop)      |
+| (Interactive Tree View, Arrow Keys Nav, Drag-Drop Parent)   |
 +------------------------------+------------------------------+
                                | (Interfaces)
 +------------------------------v------------------------------+
 |                     Application / Domain                    |
-|    (Tree Validator, Sync Engine, Git-like Hash Logger)      |
+| (Status Aggregator, Tree Validator, Sync Engine, Hash Log)  |
 +--------------+------------------------------+---------------+
                | (Interfaces)                 | (Interfaces)
 +--------------v--------------+ +-------------v---------------+
@@ -27,39 +27,28 @@
 
 ## 2. コンポーネントインターフェース定義（抽象ポート）
 
-### (1) Task Validator Port (ツリー検証ポート)
-- **役割**: ドメインイベント発行前に入力データ（タイトル1文字以上）およびツリー構造制約（循環参照防止）を満たしているかを検証する。
+### (1) Status Aggregator Port (自動ステータス算出ポート)
+- **役割**: 子タスクの状態変更発生時、親タスクのステータスを自動計算・連動させるドメインエンジン。
 - **抽象機能**:
-  - `validate_task_creation(payload): ValidationResult`
-  - `validate_tree_relationship(parentId, childId): ValidationResult`
+  - `recalculate_parent_status(parentId, state): TaskStatus`
 
-### (2) Peer Discovery Port (ノード発見ポート)
-- **役割**: LAN 内の他ノードを検出し、参加/離脱イベントをドメインへ通知する。
+### (2) Navigation & Interaction Port (UX操作ポート)
+- **役割**: マウス Drag & Drop ペアレンティングおよびキーボード（十字キー）操作による状態・階層変更イベントの抽象化。
 - **抽象機能**:
-  - `start_discovery()`
-  - `stop_discovery()`
-  - `on_peer_found(callback)`
-  - `on_peer_lost(callback)`
+  - `on_parent_drop(sourceTaskId, targetParentId)`
+  - `on_arrow_key_move(activeTaskId, direction: 'UP' | 'DOWN' | 'LEFT' | 'RIGHT')`
 
-### (3) Peer Transport Port (P2P通信ポート)
-- **役割**: ノード間のデータメッセージの送受信を担当。
-- **抽象機能**:
-  - `send_message(peer_id, payload)`
-  - `broadcast_message(payload)`
-  - `on_message_received(callback)`
+### (3) Peer Discovery & Transport Port (P2P通信ポート)
+- **役割**: LAN 内の他ノード探査およびメッセージ送受信。
 
 ### (4) Project Repository Port (ストレージポート)
-- **役割**: ローカルノードにおける Git ライクな `.jsonl` イベントログの永続化と読み込み。
-- **抽象機能**:
-  - `save_event(event)`
-  - `get_events_since(timestamp_or_seq)`
-  - `get_project_state(project_id)`
+- **役割**: ローカルノードにおける `.jsonl` イベントログの永続化と読み込み。
 
 ---
 
 ## 3. Dependency Injection (DI) 方針
-- ドメインコアは具象ファイル操作、ソケット通信、特定DBドライバを直接 `new` せず、すべてインターフェース経由で外部注入（DI）を受ける。
-- テスト時には `InMemoryRepository` を用い、本番・ローカル保存時には `JsonlFileRepository` へ容易に切り替え可能な構造とする。
+- `StatusAggregator` および `InteractionPort` は具象UIコードやファイル操作から分離され、ドメインサービスへコンストラクタ経由で外部注入（DI）されます。
+- テスト時には UI なしでキーボード移動・ドラッグペアレンティング・親ステータス自動計算を単体テスト可能とします。
 
 ---
 

@@ -10,11 +10,11 @@
 ## ドキュメント一覧
 
 1. [概念とユースケース (`./01_concept.md`)](./01_concept.md)
-   - システム概念、柔軟なオプション属性、ツリー構造 (Parent-Child)、GitライクなJSONL追跡ログの定義
+   - UX中心設計、視覚的ツリー表現＆開閉トグル、親ステータス自動連動、Drag-Dropペアレンティング＆十字キー操作
 2. [システムアーキテクチャ抽象 (`./02_architecture.md`)](./02_architecture.md)
-   - P2P ネットワーク、ノード発見、モジュール分割、DI（依存注入）レイヤー、JsonlFileRepository 設計
+   - StatusAggregator, Navigation & Interaction Port, P2P ネットワーク、DI（依存注入）レイヤー設計
 3. [データモデルと同期仕様 (`./03_data_sync.md`)](./03_data_sync.md)
-   - タスクデータ仕様 (Parent-Child Spec)、Gitライクな JSONL 履歴追跡ログ、Tombstone 分散削除、コンフリクト解決
+   - ビジュアルツリータスク仕様、親タスク自動ステータス計算ルール、Drag & Drop ペアレンティング、十字キーナビゲーション仕様
 4. [拡張性およびプラグイン設計 (`./04_extension_spec.md`)](./04_extension_spec.md)
    - プロトコル抽象化、ストレージ抽象化、UI/インターフェース分離設計
 

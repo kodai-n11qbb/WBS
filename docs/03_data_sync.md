@@ -10,92 +10,88 @@
 
 ### 主要概念
 - **Project**: 管理対象のプロジェクト枠組み（ID, Name, CreatedAt, OwnerNodeId）
-- **Task Tree**: 階層構造（ツリー）および柔軟なオプション属性を持つ作業項目（下記参照）
+- **Visual Tree Task**: ツリー構造、自動ステータス集約、表示折りたたみフラグを持つ作業項目
 - **Member / Node**: ネットワーク内の参加者ノード（NodeID, DisplayName, LastSeenAt）
 - **Git-like Event Log**: 履歴追跡を可能にする不変 (Immutable) な JSONL レコード
 
 ---
 
-## 2. タスクデータ仕様 (Task Spec & Optional Attributes)
-
-タスク登録のハードルを下げつつ、階層構造（ツリー関係）と必要に応じた詳細情報を保持できるデータ構造です。
+## 2. ビジュアルツリータスク仕様 (Visual Tree Task Spec)
 
 ```typescript
-export interface DefinitionOfDoneItem {
-  id: string;
-  text: string;
-  completed: boolean;
-}
-
 export interface Task {
   id: string;
   projectId: string;
-  parentId?: string | null;      // 【ツリー構造】親タスクのID（nullの場合はルートタスク）
-  childTaskIds: string[];        // 【ツリー構造】子タスク（サブタスク）のID一覧
-  title: string;                 // 【必須】タスクの概要名
-  intent?: string;               // 【オプション】目的・背景 (Why)
-  definitionOfDone?: DefinitionOfDoneItem[]; // 【オプション】完了条件チェックリスト
-  priority: 'HIGH' | 'MEDIUM' | 'LOW';     // 必須: 優先度（デフォルト: MEDIUM）
-  status: 'TODO' | 'IN_PROGRESS' | 'DONE';  // 必須: ステータス
-  orderIndex: number;            // 必須: 表示順序（Drag & Drop移動用）
+  parentId?: string | null;      // 親タスクのID（nullの場合は最上位Rootタスク）
+  childTaskIds: string[];        // 子タスク（サブタスク）のID一覧
+  title: string;                 // タスク名 (必須)
+  status: 'TODO' | 'IN_PROGRESS' | 'DONE'; // 自動集約または個別設定ステータス
+  orderIndex: number;            // 表示順序（Drag & Drop / 十字キー移動用）
+  isCollapsed?: boolean;         // 視覚的ツリーの折りたたみUI状態
   assignedNodeId?: string;
   updatedAt: number;
   authorNodeId: string;
 }
 ```
 
-### バリデーションルール (Domain Rule)
-1. **タスクタイトル**: 空白を除き 1 文字以上であること（入力必須）。
-2. **オプション属性**: `intent` や `definitionOfDone` は未入力・空配列でも正常に登録可能。
-3. **ツリー整合性チェック**: 自分自身を親に指定することや、循環参照（A ➔ B ➔ A）を禁止。
+---
+
+## 3. 親タスクの自動ステータス計算ルール (Status Aggregation Rule)
+
+ドメイン層において、親タスクのステータスは直下の子タスク群の状態に基づいて以下のように決定論的 (Deterministic) に再計算・更新されます。
+
+```
+                    [親タスクの自動ステータス算出]
+                                  |
+           +----------------------+----------------------+
+           |                      |                      |
+           v                      v                      v
+   【子タスク全件が DONE】  【子タスク一部がPROGRESS/DONE】 【子タスク全件が TODO】
+           |                      |                      |
+           v                      v                      v
+     親 status = DONE      親 status = IN_PROGRESS    親 status = TODO
+```
+
+- **適用タイミング**: 子タスクの追加・ステータス更新・削除・Drag&Dropドロップが発生した瞬間、親ノードを再帰的に遡ってステータスが自動同期されます。
 
 ---
 
-## 3. Gitライクな JSONL 履歴追跡ログ仕様 (Git-like Audit Log)
+## 4. Drag & Drop ペアレンティング と キーボード移動イベント
 
-すべての操作は改ざん不能な Git ライクなイベントログとして `.jsonl` ファイル（1行1JSON）に追記（Append-Only）されます。
+### (1) Drag & Drop イベント
+1. **`TASK_STATUS_UPDATED`**: カラム（TODO / IN_PROGRESS / DONE）へのドロップ。
+2. **`TASK_PARENT_CHANGED`** (カード同士のドロップ時):
+   - Payload: `{ taskId, newParentId }`
+   - あるカードを別のカードの上に重なるようドロップすることで、瞬時にそのカードの子タスクとしてツリー接続を再構築します。
+
+### (2) 十字キー (Arrow Keys) ナビゲーション
+キーボードフォーカスされているアクティブタスクに対し、以下のキー操作をバインドします：
+- **`ArrowUp` / `ArrowDown`**: カラム内またはツリーノード間でのフォーカス移動。
+- **`ArrowLeft` / `ArrowRight`**: タスクのステータスを前後に変更（TODO ⇄ IN_PROGRESS ⇄ DONE）。
+- **`Shift + ArrowUp / ArrowDown`**: 親タスクの変更（階層の昇格・降格）。
+
+---
+
+## 5. Gitライクな JSONL 履歴追跡ログ仕様 (Git-like Audit Log)
+
+すべての操作（ペアレンティング付け替え、自動ステータス更新含む）は改ざん不能な Git ライクなイベントログとして `.jsonl` ファイル（1行1JSON）に追記（Append-Only）されます。
 
 ```json
 {
-  "id": "evt-uuid-001",
+  "id": "evt-uuid-002",
   "projectId": "p1",
   "authorNodeId": "node-alpha",
   "timestamp": 1700000000000,
-  "sequence": 1,
-  "type": "TASK_CREATED",
-  "previousHash": "00000000000000000000000000000000",
-  "hash": "a1b2c3d4e5f6...",
+  "sequence": 2,
+  "type": "TASK_PARENT_CHANGED",
+  "previousHash": "a1b2c3d4e5f6...",
+  "hash": "f6e5d4c3b2a1...",
   "payload": {
-    "taskId": "t-100",
-    "parentId": null,
-    "title": "管理ツールの設計",
-    "intent": "LAN内での分散型プロジェクト進行を可能にするため（※任意）",
-    "definitionOfDone": []
+    "taskId": "t-child-10",
+    "newParentId": "t-parent-01"
   }
 }
 ```
-
-### 履歴追跡（`git log` 相当）のメリット
-- **完全な監査トレイル (Audit Trail)**: いつ、誰が、どの端末から、どのようにタスクを作成・階層移動・変更・削除したのかを 100% 過去へ遡って検証可能。
-- **ポータビリティ**: `events.jsonl` ファイル1本をUSBや他ネットワークにコピーするだけで、変更履歴を含むプロジェクト全体を完全移植可能。
-
----
-
-## 4. 操作イベント一覧と Tombstone 削除
-
-1. **`TASK_CREATED`**: タスクの新規登録（`parentId` 指定可能、オプション属性含む）。
-2. **`TASK_STATUS_UPDATED`**: ステータス変更またはDrag & Drop移動。
-3. **`TASK_REORDERED`**: 同一階層内での順序並び替え。
-4. **`TASK_PARENT_CHANGED`**: ツリー階層の付け替え（親タスクの変更）。
-5. **`TASK_DELETED` (Tombstone Event)**:
-   - 削除理由を含む墓標イベント。不変ログとして伝播し、子タスクも含めた不整合な復活（ゴースト化）を防ぐ。
-
----
-
-## 5. コンフリクト解決ルール (LWW & Tree Reconciliation)
-
-1. **Logical Timestamp & Hash**: 各イベントに付与されたハッシュとタイムスタンプに基づき、決定論的 (Deterministic) に同一のツリー状態へ再構築する。
-2. **Tombstone Win**: 削除イベント `TASK_DELETED` は編集イベントより優先され、全ノードで削除状態として整合する。
 
 ---
 

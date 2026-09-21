@@ -11,12 +11,12 @@
 ```
 +-------------------------------------------------------------+
 |                     Presentation Layer                      |
-| (Interactive Tree View, Arrow Keys Nav, Drag-Drop Parent)   |
+|       (Tree View Mode / Kanban View Mode Switcher UI)       |
 +------------------------------+------------------------------+
                                | (Interfaces)
 +------------------------------v------------------------------+
 |                     Application / Domain                    |
-| (Status Aggregator, Tree Validator, Sync Engine, Hash Log)  |
+| (Status Aggregator, Minimal Task Core, Sync Engine, Hash Log)|
 +--------------+------------------------------+---------------+
                | (Interfaces)                 | (Interfaces)
 +--------------v--------------+ +-------------v---------------+
@@ -28,15 +28,10 @@
 ## 2. コンポーネントインターフェース定義（抽象ポート）
 
 ### (1) Status Aggregator Port (自動ステータス算出ポート)
-- **役割**: 子タスクの状態変更発生時、親タスクのステータスを自動計算・連動させるドメインエンジン。
-- **抽象機能**:
-  - `recalculate_parent_status(parentId, state): TaskStatus`
+- **役割**: 子タスクの状態変更発生時、親タスクのステータスおよび進捗率（Completion Rate）を自動計算・連動させるドメインエンジン。
 
-### (2) Navigation & Interaction Port (UX操作ポート)
-- **役割**: マウス Drag & Drop ペアレンティングおよびキーボード（十字キー）操作による状態・階層変更イベントの抽象化。
-- **抽象機能**:
-  - `on_parent_drop(sourceTaskId, targetParentId)`
-  - `on_arrow_key_move(activeTaskId, direction: 'UP' | 'DOWN' | 'LEFT' | 'RIGHT')`
+### (2) View Mode Switcher Port (ビュー切り替えポート)
+- **役割**: ツリーファーストビュー (`TREE_VIEW`) と カンバンビュー (`KANBAN_VIEW`) の表示モード切り替え抽象化。
 
 ### (3) Peer Discovery & Transport Port (P2P通信ポート)
 - **役割**: LAN 内の他ノード探査およびメッセージ送受信。
@@ -47,8 +42,7 @@
 ---
 
 ## 3. Dependency Injection (DI) 方針
-- `StatusAggregator` および `InteractionPort` は具象UIコードやファイル操作から分離され、ドメインサービスへコンストラクタ経由で外部注入（DI）されます。
-- テスト時には UI なしでキーボード移動・ドラッグペアレンティング・親ステータス自動計算を単体テスト可能とします。
+- `StatusAggregator` および `ViewMode` はドメインコアから独立したポートとして定義され、コンストラクタ経由で注入（DI）されます。
 
 ---
 

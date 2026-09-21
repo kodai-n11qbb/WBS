@@ -10,11 +10,11 @@
 ## ドキュメント一覧
 
 1. [概念とユースケース (`./01_concept.md`)](./01_concept.md)
-   - UX中心設計、視覚的ツリー表現＆開閉トグル、親ステータス自動連動、Drag-Dropペアレンティング＆十字キー操作
+   - ミニマル設計、樹状ツリーファーストメイン表示（案A）、全階層ステータスバッジ、親進捗率表示、ビューモード切り替え (Tree ⇄ Kanban)
 2. [システムアーキテクチャ抽象 (`./02_architecture.md`)](./02_architecture.md)
-   - StatusAggregator, Navigation & Interaction Port, P2P ネットワーク、DI（依存注入）レイヤー設計
+   - StatusAggregator, ViewModeSwitcherPort, P2P ネットワーク、DI（依存注入）レイヤー設計
 3. [データモデルと同期仕様 (`./03_data_sync.md`)](./03_data_sync.md)
-   - ビジュアルツリータスク仕様、親タスク自動ステータス計算ルール、Drag & Drop ペアレンティング、十字キーナビゲーション仕様
+   - ミニマルタスク仕様 (Minimal Task Spec)、親タスク進捗率算出、全階層ステータスバッジ、Gitライク JSONL ログ仕様
 4. [拡張性およびプラグイン設計 (`./04_extension_spec.md`)](./04_extension_spec.md)
    - プロトコル抽象化、ストレージ抽象化、UI/インターフェース分離設計
 

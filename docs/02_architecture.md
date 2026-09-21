@@ -54,8 +54,9 @@
   - 子タスクの状態から親タスクの進捗率（Completion Rate: 例 `33.3%`）を動的算出。
   - 1:Nの単一親ツリー構造 (`parentId?: string | null`) を厳守し、巡回（Cycle）参照の発生を防止。
 
-### (5) Standalone Executable Packaging Adapter (単体実行バイナリ)
-- **役割**: Node.js, Python, Cargo 等が入っていない環境でも、単一バイナリ (`.exe` / `.app`) をダブルクリックするだけでローカル Web サーバーが立ち上がり画面を自動オープンするアダプター構造。
+### (5) Standalone Executable Packaging Adapter (環境依存ゼロ・単一バイナリパッケージング)
+- **役割**: Node.js, Python, Docker, Rust 等が一切インストールされていない環境でも、単一バイナリ (`share-log-win.exe` / `share-log-macos-arm64`) をダブルクリックするだけでローカル Web サーバー (`http://localhost:3000`) が立ち上がり、規定のブラウザ画面を自動オープンするポータブルパッケージング構造。
+- **特徴**: アドレス手入力不要で自端末上で `localhost:3000` を開くだけで、UDP P2P通信により同一LAN内の全ノードと全自動同期。
 
 ---
 

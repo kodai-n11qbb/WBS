@@ -13,20 +13,28 @@
 
 ## 2. プラグイン・アダプターの拡張ポイント
 
-### (1) Standalone Desktop Executable Adapter (環境依存ゼロのバイナリ配布)
-Node.js, Python, Cargo (Rust) 等が**一切インストールされていない端末**でも、ダブルクリック一発で動作させるためのパッケージング手法。
+### (1) Standalone Desktop Executable Adapter (環境依存ゼロ・単一バイナリ配布仕様)
+Node.js, Python, Docker, Rust 等が**一切インストールされていない一般PC環境**でも、ダブルクリック一発で起動・P2P連携させるためのパッケージングアーキテクチャ。
 
-- **Node.js Single Executable Applications (SEA) / Bun compile**:
-  - バックグラウンド HTTP/WebSocket サーバーとフロントエンド静的資産を1つの独立した実行ファイル (`share-log-mac` / `share-log-win.exe`) にパッケージング。
-  - ダブルクリックするとローカルサーバーが起動し、標準ブラウザで Web アプリ UI が立ち上がる。
-- **Electron / Tauri パッケージング**:
-  - 専用のデスクトップウィンドウアプリ (`.app` / `.exe`) としての配布に対応。
+- **`@yao-pkg/pkg` パッケージング構造**:
+  - バックグラウンド Node.js 実行エンジン ＋ TypeScriptビルド済みJS (`dist/`) ＋ Webフロントエンド静的資産 (`public/`) を1つの独立したネイティブバイナリにパッケージング。
+  - **出力ターゲット**:
+    - Windows用: `bin/share-log-win.exe` (Windows 64bit用 `.exe`)
+    - Mac用 (Apple Silicon): `bin/share-log-macos-arm64` (M1/M2/M3 Mac用)
+    - Mac用 (Intel): `bin/share-log-macos-x64` (Intel Mac用)
+  - **実行メカニズム**:
+    - ダブルクリックするとバイナリ内部の VFS (Virtual File System) から Node.js がメモリ起動。
+    - ローカルWebサーバー (`http://localhost:3000`) を即座に立ち上げ、既定のWebブラウザでアプリケーションUIを自動オープン。
+    - 他端末へのアドレス手入力は一切不要（各自のPC上で `localhost:3000` が起動し、UDP P2P自動発見によりバックグラウンドで全端末間同期）。
+  - **安定性・実績**:
+    - Vercel 社発祥の8年以上の実績を持つ標準的パッケージング方式。
+    - 公式 Node.js ランタイムをそのまま内包するため 100% の動作互換性と高い動作安定性を保持。
 
 ### (2) Transport Adapter (通信基盤の差し替え)
 インターフェース `PeerDiscoveryPort` および `PeerTransportPort` を実装することで、通信方式を自由に切り替え可能とします。
 
-- **フェーズ1 (初期検証)**: LAN 内 UDP Broadcast / Multicast
-- **フェーズ2 (LAN内高度化)**: mDNS (Bonjour) + TCP Direct Socket
+- **フェーズ1 (実装済み)**: LAN 内 UDP Broadcast 自動発見 (`UdpPeerTransport`) ＋ WebSocket UI伝播
+- **フェーズ2 (LAN内高度化)**: mDNS (Bonjour) 応答 ＋ TCP Direct Socket 接続
 - **フェーズ3 (NAT越え/クロスネットワーク)**: WebRTC / libp2p アダプターの追加
 
 ### (3) Storage Adapter (永続化基盤の差し替え)

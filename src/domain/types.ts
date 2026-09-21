@@ -1,5 +1,6 @@
 export type TaskStatus = 'TODO' | 'IN_PROGRESS' | 'DONE';
 export type TaskPriority = 'HIGH' | 'MEDIUM' | 'LOW';
+export type ViewMode = 'TREE_VIEW' | 'OBSIDIAN_GRAPH_VIEW' | 'KANBAN_VIEW';
 
 export interface Task {
   id: string;

@@ -3,21 +3,39 @@
   let currentTasks = [];
   let draggedTaskId = null;
   let focusedTaskId = null;
-  let currentViewMode = 'TREE_VIEW'; // 'TREE_VIEW' | 'KANBAN_VIEW'
+
+  // View Modes: 'TREE_VIEW' | 'OBSIDIAN_GRAPH_VIEW' | 'KANBAN_VIEW'
+  let currentViewMode = 'TREE_VIEW';
+  let userPreferredViewMode = 'TREE_VIEW';
+
+  // Idle Timer
+  let idleTimer = null;
+  const IDLE_TIMEOUT_MS = 4000; // 4 seconds idle auto transition
+  let isAutoTransitioned = false;
+
+  // Canvas Animation Frame
+  let canvasAnimationId = null;
 
   // DOM Elements
   const nodeDisplay = document.getElementById('node-id-display');
   const errorToast = document.getElementById('error-toast');
+  const idleToast = document.getElementById('idle-toast');
 
-  const btnToggleView = document.getElementById('btn-toggle-view');
-  const viewModeIcon = document.getElementById('view-mode-icon');
-  const viewModeLabel = document.getElementById('view-mode-label');
+  const btnViewTree = document.getElementById('btn-view-tree');
+  const btnViewGraph = document.getElementById('btn-view-graph');
+  const btnViewKanban = document.getElementById('btn-view-kanban');
 
   const quickForm = document.getElementById('quick-task-form');
   const quickInputTitle = document.getElementById('quick-title-input');
   const selectQuickParent = document.getElementById('select-quick-parent');
 
-  const mainBoard = document.getElementById('main-board');
+  const pureTreeViewSection = document.getElementById('pure-tree-view');
+  const pureTreeContainer = document.getElementById('pure-tree-container');
+
+  const obsidianGraphViewSection = document.getElementById('obsidian-graph-view');
+  const canvas = document.getElementById('obsidian-canvas');
+
+  const kanbanViewSection = document.getElementById('kanban-view');
   const listTodo = document.getElementById('list-todo');
   const listInProgress = document.getElementById('list-in-progress');
   const listDone = document.getElementById('list-done');
@@ -45,7 +63,7 @@
           nodeDisplay.textContent = `Node: ${data.nodeId}`;
           currentTasks = data.state.tasks || [];
           updateParentTaskOptions();
-          renderBoard();
+          renderCurrentView();
         } else if (data.type === 'ERROR') {
           showErrorToast(data.message);
         }
@@ -78,67 +96,59 @@
     });
   }
 
-  // Toggle View Mode
-  btnToggleView.addEventListener('click', () => {
-    currentViewMode = currentViewMode === 'TREE_VIEW' ? 'KANBAN_VIEW' : 'TREE_VIEW';
-    if (currentViewMode === 'TREE_VIEW') {
-      viewModeIcon.textContent = '🌳';
-      viewModeLabel.textContent = 'ツリー表示';
-    } else {
-      viewModeIcon.textContent = '📋';
-      viewModeLabel.textContent = 'カンバン表示';
+  // 3-Mode View Buttons Setup
+  btnViewTree.addEventListener('click', () => setViewMode('TREE_VIEW', true));
+  btnViewGraph.addEventListener('click', () => setViewMode('OBSIDIAN_GRAPH_VIEW', true));
+  btnViewKanban.addEventListener('click', () => setViewMode('KANBAN_VIEW', true));
+
+  function setViewMode(mode, isUserAction = false) {
+    if (isUserAction) {
+      userPreferredViewMode = mode;
+      isAutoTransitioned = false;
+      idleToast.classList.add('hidden');
     }
-    renderBoard();
-  });
+    currentViewMode = mode;
 
-  // Render Board based on View Mode
-  function renderBoard() {
-    listTodo.innerHTML = '';
-    listInProgress.innerHTML = '';
-    listDone.innerHTML = '';
+    btnViewTree.classList.toggle('active', mode === 'TREE_VIEW');
+    btnViewGraph.classList.toggle('active', mode === 'OBSIDIAN_GRAPH_VIEW');
+    btnViewKanban.classList.toggle('active', mode === 'KANBAN_VIEW');
 
-    let todoCount = 0;
-    let inProgressCount = 0;
-    let doneCount = 0;
+    pureTreeViewSection.classList.toggle('hidden', mode !== 'TREE_VIEW');
+    obsidianGraphViewSection.classList.toggle('hidden', mode !== 'OBSIDIAN_GRAPH_VIEW');
+    kanbanViewSection.classList.toggle('hidden', mode !== 'KANBAN_VIEW');
 
-    currentTasks.forEach((t) => {
-      if (t.status === 'TODO') todoCount++;
-      if (t.status === 'IN_PROGRESS') inProgressCount++;
-      if (t.status === 'DONE') doneCount++;
+    renderCurrentView();
+  }
+
+  function renderCurrentView() {
+    if (canvasAnimationId) {
+      cancelAnimationFrame(canvasAnimationId);
+      canvasAnimationId = null;
+    }
+
+    if (currentViewMode === 'TREE_VIEW') {
+      renderPureTreeView();
+    } else if (currentViewMode === 'OBSIDIAN_GRAPH_VIEW') {
+      startObsidianGraphRenderer();
+    } else if (currentViewMode === 'KANBAN_VIEW') {
+      renderKanbanView();
+    }
+  }
+
+  // VIEW 1: Pure Tree View (Single-Canvas, No 3-Column Split)
+  function renderPureTreeView() {
+    pureTreeContainer.innerHTML = '';
+    const rootTasks = currentTasks.filter((t) => !t.parentId).sort((a, b) => a.orderIndex - b.orderIndex);
+
+    rootTasks.forEach((rootTask) => {
+      const nodeEl = renderTaskTreeNode(rootTask);
+      pureTreeContainer.appendChild(nodeEl);
     });
-
-    countTodo.textContent = todoCount;
-    countInProgress.textContent = inProgressCount;
-    countDone.textContent = doneCount;
-
-    if (currentViewMode === 'TREE_VIEW') {
-      // Tree-First View (Plan A)
-      const rootTasks = currentTasks.filter((t) => !t.parentId).sort((a, b) => a.orderIndex - b.orderIndex);
-      rootTasks.forEach((rootTask) => {
-        const nodeEl = renderTaskTreeNode(rootTask);
-        appendNodeToColumn(nodeEl, rootTask.status);
-      });
-    } else {
-      // 3-Column Kanban View
-      const sortedTasks = [...currentTasks].sort((a, b) => a.orderIndex - b.orderIndex);
-      sortedTasks.forEach((task) => {
-        const card = createTaskCard(task);
-        if (task.status === 'TODO') listTodo.appendChild(card);
-        else if (task.status === 'IN_PROGRESS') listInProgress.appendChild(card);
-        else if (task.status === 'DONE') listDone.appendChild(card);
-      });
-    }
 
     if (focusedTaskId) {
       const el = document.querySelector(`[data-task-id="${focusedTaskId}"]`);
       if (el) el.classList.add('focused');
     }
-  }
-
-  function appendNodeToColumn(nodeEl, status) {
-    if (status === 'TODO') listTodo.appendChild(nodeEl);
-    else if (status === 'IN_PROGRESS') listInProgress.appendChild(nodeEl);
-    else if (status === 'DONE') listDone.appendChild(nodeEl);
   }
 
   function renderTaskTreeNode(task) {
@@ -167,6 +177,138 @@
     return nodeWrapper;
   }
 
+  // VIEW 2: Obsidian Graph Canvas Renderer
+  function startObsidianGraphRenderer() {
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Resize canvas dynamically
+    const wrapper = canvas.parentElement;
+    canvas.width = wrapper.clientWidth;
+    canvas.height = wrapper.clientHeight;
+
+    // Calculate Node Positions with gentle floating physics
+    const nodes = currentTasks.map((task, idx) => {
+      const angle = (idx / Math.max(1, currentTasks.length)) * Math.PI * 2;
+      const radius = Math.min(canvas.width, canvas.height) * 0.3;
+      const centerX = canvas.width / 2;
+      const centerY = canvas.height / 2;
+
+      return {
+        task,
+        x: task.parentId ? centerX + Math.cos(angle) * radius * 0.8 : centerX + Math.cos(angle) * (radius * 0.5),
+        y: task.parentId ? centerY + Math.sin(angle) * radius * 0.8 : centerY + Math.sin(angle) * (radius * 0.5),
+        vx: (Math.random() - 0.5) * 0.3,
+        vy: (Math.random() - 0.5) * 0.3,
+      };
+    });
+
+    const nodeMap = new Map(nodes.map((n) => [n.task.id, n]));
+
+    function animate() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Draw Connection Edges (Glowing Lines between Parent & Child)
+      nodes.forEach((node) => {
+        if (node.task.parentId) {
+          const parentNode = nodeMap.get(node.task.parentId);
+          if (parentNode) {
+            ctx.beginPath();
+            ctx.moveTo(node.x, node.y);
+            ctx.lineTo(parentNode.x, parentNode.y);
+
+            const gradient = ctx.createLinearGradient(node.x, node.y, parentNode.x, parentNode.y);
+            gradient.addColorStop(0, 'rgba(129, 140, 248, 0.6)');
+            gradient.addColorStop(1, 'rgba(56, 189, 248, 0.6)');
+
+            ctx.strokeStyle = gradient;
+            ctx.lineWidth = 2;
+            ctx.setLineDash([4, 4]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+          }
+        }
+      });
+
+      // Draw Nodes
+      nodes.forEach((node) => {
+        // Floating motion
+        node.x += node.vx;
+        node.y += node.vy;
+
+        if (node.x < 50 || node.x > canvas.width - 50) node.vx *= -1;
+        if (node.y < 50 || node.y > canvas.height - 50) node.vy *= -1;
+
+        let nodeColor = '#38bdf8'; // TODO: Blue
+        if (node.task.status === 'IN_PROGRESS') nodeColor = '#fbbf24'; // Amber
+        if (node.task.status === 'DONE') nodeColor = '#34d399'; // Green
+
+        // Glowing halo
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, 16, 0, Math.PI * 2);
+        ctx.fillStyle = nodeColor;
+        ctx.globalAlpha = 0.25;
+        ctx.fill();
+
+        // Core Circle
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, 8, 0, Math.PI * 2);
+        ctx.globalAlpha = 1.0;
+        ctx.fillStyle = nodeColor;
+        ctx.shadowColor = nodeColor;
+        ctx.shadowBlur = 12;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        // Label
+        ctx.font = '12px Inter, sans-serif';
+        ctx.fillStyle = '#f8fafc';
+        ctx.textAlign = 'center';
+        ctx.fillText(node.task.title, node.x, node.y + 24);
+      });
+
+      canvasAnimationId = requestAnimationFrame(animate);
+    }
+
+    animate();
+  }
+
+  // VIEW 3: 3-Column Kanban View
+  function renderKanbanView() {
+    listTodo.innerHTML = '';
+    listInProgress.innerHTML = '';
+    listDone.innerHTML = '';
+
+    let todoCount = 0;
+    let inProgressCount = 0;
+    let doneCount = 0;
+
+    currentTasks.forEach((t) => {
+      if (t.status === 'TODO') todoCount++;
+      if (t.status === 'IN_PROGRESS') inProgressCount++;
+      if (t.status === 'DONE') doneCount++;
+    });
+
+    countTodo.textContent = todoCount;
+    countInProgress.textContent = inProgressCount;
+    countDone.textContent = doneCount;
+
+    const sortedTasks = [...currentTasks].sort((a, b) => a.orderIndex - b.orderIndex);
+    sortedTasks.forEach((task) => {
+      const card = createTaskCard(task);
+      if (task.status === 'TODO') listTodo.appendChild(card);
+      else if (task.status === 'IN_PROGRESS') listInProgress.appendChild(card);
+      else if (task.status === 'DONE') listDone.appendChild(card);
+    });
+
+    if (focusedTaskId) {
+      const el = document.querySelector(`[data-task-id="${focusedTaskId}"]`);
+      if (el) el.classList.add('focused');
+    }
+  }
+
+  // Create Task Card Element
   function createTaskCard(task) {
     const item = document.createElement('div');
     item.className = `task-item ${focusedTaskId === task.id ? 'focused' : ''}`;
@@ -178,7 +320,6 @@
       setFocusedTask(task.id);
     });
 
-    // Drag Events
     item.addEventListener('dragstart', (e) => {
       e.stopPropagation();
       draggedTaskId = task.id;
@@ -193,7 +334,6 @@
       document.querySelectorAll('.drop-target-parent').forEach((el) => el.classList.remove('drop-target-parent'));
     });
 
-    // Parenting Drop Target
     item.addEventListener('dragover', (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -258,7 +398,7 @@
     top.appendChild(btnDelete);
     item.appendChild(top);
 
-    // Parent Task Progress Bar (if parent task has children)
+    // Parent Task Progress Bar
     if (children.length > 0) {
       const completedCount = children.filter((c) => c.status === 'DONE').length;
       const percentage = Math.round((completedCount / children.length) * 100);
@@ -283,7 +423,7 @@
       item.appendChild(progressBox);
     }
 
-    // Card Footer with All-Level Status Button Selector
+    // Footer with All-Level Status Button Selector
     const footer = document.createElement('div');
     footer.className = 'task-footer';
 
@@ -366,7 +506,7 @@
 
       if (!focusedTaskId) {
         focusedTaskId = currentTasks[0].id;
-        renderBoard();
+        renderCurrentView();
         return;
       }
 
@@ -393,6 +533,33 @@
         else if (currentTask.status === 'IN_PROGRESS') updateTaskStatus(currentTask.id, 'TODO');
       }
     });
+  }
+
+  // Idle Timer Setup (4 Seconds Auto Transition to Obsidian Graph View)
+  function setupIdleTimer() {
+    function resetIdleTimer() {
+      if (idleTimer) clearTimeout(idleTimer);
+
+      if (isAutoTransitioned) {
+        isAutoTransitioned = false;
+        idleToast.classList.add('hidden');
+        setViewMode(userPreferredViewMode, false);
+      }
+
+      idleTimer = setTimeout(() => {
+        if (currentViewMode !== 'OBSIDIAN_GRAPH_VIEW') {
+          isAutoTransitioned = true;
+          idleToast.classList.remove('hidden');
+          setViewMode('OBSIDIAN_GRAPH_VIEW', false);
+        }
+      }, IDLE_TIMEOUT_MS);
+    }
+
+    ['mousemove', 'mousedown', 'keydown', 'touchstart'].forEach((evt) => {
+      window.addEventListener(evt, resetIdleTimer, { passive: true });
+    });
+
+    resetIdleTimer();
   }
 
   // Socket Emitters
@@ -468,5 +635,6 @@
 
   setupDragAndDrop();
   setupKeyboardNavigation();
+  setupIdleTimer();
   initWebSocket();
 })();

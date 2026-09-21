@@ -36,7 +36,7 @@ body {
 .blob-2 { width: 500px; height: 500px; background: radial-gradient(circle, #a855f7, #ec4899); bottom: -150px; right: -100px; }
 .blob-3 { width: 300px; height: 300px; background: radial-gradient(circle, #10b981, #06b6d4); top: 40%; left: 50%; }
 
-.app-container { max-width: 1280px; margin: 0 auto; padding: 2rem 1.5rem; }
+.app-container { max-width: 1300px; margin: 0 auto; padding: 2rem 1.5rem; }
 
 /* Header */
 .app-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
@@ -52,14 +52,23 @@ body {
 h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; }
 .subtitle { font-size: 0.875rem; color: var(--text-secondary); }
 
-.btn-toggle-view {
-  background: rgba(99, 102, 241, 0.2);
-  border: 1px solid rgba(99, 102, 241, 0.4);
-  color: white; padding: 0.55rem 1rem; border-radius: var(--radius-md);
-  font-weight: 600; font-size: 0.85rem; cursor: pointer; display: flex;
-  align-items: center; gap: 0.5rem; transition: all 0.2s ease;
+/* 3-Mode View Switcher Buttons */
+.view-switcher-group {
+  display: flex; background: rgba(15, 23, 42, 0.8); border: 1px solid var(--card-border);
+  padding: 0.25rem; border-radius: var(--radius-md); backdrop-filter: blur(10px);
 }
-.btn-toggle-view:hover { background: rgba(99, 102, 241, 0.35); transform: translateY(-1px); }
+
+.btn-mode {
+  background: transparent; border: none; color: var(--text-secondary);
+  padding: 0.45rem 0.85rem; border-radius: var(--radius-sm); font-size: 0.8rem;
+  font-weight: 600; cursor: pointer; transition: all 0.2s ease; white-space: nowrap;
+}
+
+.btn-mode:hover { color: var(--text-primary); }
+.btn-mode.active {
+  background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+  color: white; box-shadow: 0 2px 8px rgba(99, 102, 241, 0.4);
+}
 
 .node-pill {
   display: flex; align-items: center; gap: 0.5rem;
@@ -100,6 +109,20 @@ input[type="text"]::placeholder { color: var(--text-secondary); }
 
 .kb-hint { font-size: 0.75rem; color: var(--accent-blue); padding: 0.4rem 0.8rem; background: rgba(56, 189, 248, 0.08); border-radius: 99px; }
 
+/* Idle Toast Announcement */
+.idle-toast {
+  position: fixed; bottom: 2rem; left: 50%; transform: translateX(-50%);
+  background: rgba(129, 140, 248, 0.9); color: white; padding: 0.75rem 1.5rem;
+  border-radius: 999px; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5); font-size: 0.875rem;
+  font-weight: 600; backdrop-filter: blur(10px); z-index: 1000; animation: pulseGlow 2s infinite;
+}
+
+@keyframes pulseGlow {
+  0% { box-shadow: 0 0 10px rgba(129, 140, 248, 0.5); }
+  50% { box-shadow: 0 0 20px rgba(129, 140, 248, 0.9); }
+  100% { box-shadow: 0 0 10px rgba(129, 140, 248, 0.5); }
+}
+
 .toast {
   position: fixed; top: 1.5rem; right: 1.5rem; background: rgba(239, 68, 68, 0.9);
   color: white; padding: 0.75rem 1.25rem; border-radius: var(--radius-md);
@@ -107,9 +130,32 @@ input[type="text"]::placeholder { color: var(--text-secondary); }
 }
 .hidden { display: none !important; }
 
-/* Kanban Board Layout */
+/* VIEW 1: Pure Single-Canvas Tree View */
+.view-section { padding: 1.5rem; min-height: 600px; }
+
+.tree-canvas-header, .graph-canvas-header {
+  margin-bottom: 1.25rem; padding-bottom: 0.75rem; border-bottom: 1px solid var(--card-border);
+  display: flex; align-items: baseline; gap: 1rem;
+}
+
+.tree-subtitle, .graph-subtitle { font-size: 0.85rem; color: var(--text-secondary); }
+
+.pure-tree-container {
+  display: flex; flex-direction: column; gap: 1rem; padding: 0.5rem 0;
+}
+
+/* VIEW 2: Obsidian Graph Canvas */
+.canvas-wrapper {
+  width: 100%; height: 550px; background: rgba(10, 15, 30, 0.9);
+  border-radius: var(--radius-md); overflow: hidden; position: relative;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+#obsidian-canvas { width: 100%; height: 100%; display: block; }
+
+/* VIEW 3: Kanban Board Layout */
 .kanban-board {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 1.5rem;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 1.5rem; padding: 0; background: transparent; border: none; box-shadow: none;
 }
 
 .kanban-column {
@@ -140,9 +186,9 @@ input[type="text"]::placeholder { color: var(--text-secondary); }
 /* Visual Tree Nodes */
 .task-tree-node { display: flex; flex-direction: column; gap: 0.5rem; position: relative; }
 .task-tree-node.is-subtask {
-  margin-left: 1.5rem;
+  margin-left: 1.75rem;
   border-left: 2px dashed rgba(99, 102, 241, 0.4);
-  padding-left: 0.85rem;
+  padding-left: 1rem;
 }
 
 .task-item {

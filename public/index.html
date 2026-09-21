@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Share-Log | LAN P2P Tracker (Tree & Kanban)</title>
+  <title>Share-Log | Obsidian Graph & P2P Tree Tracker</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -19,20 +19,29 @@
   <div class="app-container">
     <header class="app-header">
       <div class="header-left">
-        <div class="logo-badge">TREE</div>
+        <div class="logo-badge">P2P GRAPH</div>
         <div>
           <h1 id="project-title">LAN Share-Log Tracker</h1>
-          <p class="subtitle">極小モデル・全階層ステータスバッジ・親進捗率自動化</p>
+          <p class="subtitle">Obsidian型ノードグラフ ＆ 無操作自動イマーシブ遷移</p>
         </div>
       </div>
 
       <div class="header-right">
-        <!-- View Mode Switcher -->
-        <button id="btn-toggle-view" class="btn-toggle-view">
-          <span id="view-mode-icon">🌳</span> <span id="view-mode-label">ツリー表示</span>
-        </button>
+        <!-- 3-Mode View Switcher -->
+        <div class="view-switcher-group">
+          <button id="btn-view-tree" class="btn-mode active" title="純粋ツリー表示 (単一キャンバス)">
+            🌳 ツリー
+          </button>
+          <button id="btn-view-graph" class="btn-mode" title="Obsidian型ノードグラフ">
+            🌌 Obsidian Graph
+          </button>
+          <button id="btn-view-kanban" class="btn-mode" title="3カラム カンバン表示">
+            📋 カンバン
+          </button>
+        </div>
 
-        <div class="kb-hint">💡 十字キー (↑↓←→) で操作</div>
+        <div class="kb-hint">💡 十字キー(↑↓←→) | 4秒無操作でGraph化</div>
+
         <div class="node-pill">
           <span class="status-dot online"></span>
           <span id="node-id-display">Node: Connecting...</span>
@@ -40,12 +49,17 @@
       </div>
     </header>
 
+    <!-- Idle Auto-Transition Notification Toast -->
+    <div id="idle-toast" class="idle-toast hidden">
+      ✨ 4秒間無操作のため Obsidian グラフ表示へ自動イマーシブ遷移中（操作再開で復帰）
+    </div>
+
     <!-- Error Toast Notification -->
     <div id="error-toast" class="toast hidden"></div>
 
     <main class="main-content">
       <!-- Minimal Task Input Bar -->
-      <section class="task-input-section">
+      <section class="task-input-section" id="input-section">
         <form id="quick-task-form" class="glass-card input-card">
           <select id="select-quick-parent" title="親タスクを指定 (任意)">
             <option value="">(親タスクなし - ルート)</option>
@@ -69,9 +83,28 @@
         </form>
       </section>
 
-      <!-- Main Board (Supports both Tree View and Kanban View) -->
-      <section class="kanban-board" id="main-board">
-        <!-- TODO Column -->
+      <!-- VIEW 1: Pure Single-Canvas Tree View (No 3-Column Split) -->
+      <section id="pure-tree-view" class="view-section glass-card">
+        <div class="tree-canvas-header">
+          <h2>🌳 純粋ツリー表示 (単一キャンバス)</h2>
+          <span class="tree-subtitle">TODO/PROGRESS/DONEのカラム区分けなしの樹状ツリー</span>
+        </div>
+        <div id="pure-tree-container" class="pure-tree-container"></div>
+      </section>
+
+      <!-- VIEW 2: Obsidian-like Node Graph Canvas View -->
+      <section id="obsidian-graph-view" class="view-section glass-card hidden">
+        <div class="graph-canvas-header">
+          <h2>🌌 Obsidian ノードグラフビュー</h2>
+          <span class="graph-subtitle">暗闇の中に発光ノードと接続エッジが浮かぶグラフィカル空間</span>
+        </div>
+        <div class="canvas-wrapper">
+          <canvas id="obsidian-canvas" width="1200" height="600"></canvas>
+        </div>
+      </section>
+
+      <!-- VIEW 3: 3-Column Kanban Board View -->
+      <section id="kanban-view" class="view-section kanban-board hidden">
         <div class="kanban-column glass-card" id="col-todo" data-status="TODO">
           <div class="column-header">
             <div class="column-title">
@@ -83,7 +116,6 @@
           <div class="task-list" id="list-todo"></div>
         </div>
 
-        <!-- IN PROGRESS Column -->
         <div class="kanban-column glass-card" id="col-in-progress" data-status="IN_PROGRESS">
           <div class="column-header">
             <div class="column-title">
@@ -95,7 +127,6 @@
           <div class="task-list" id="list-in-progress"></div>
         </div>
 
-        <!-- DONE Column -->
         <div class="kanban-column glass-card" id="col-done" data-status="DONE">
           <div class="column-header">
             <div class="column-title">

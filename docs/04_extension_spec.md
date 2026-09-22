@@ -25,23 +25,25 @@ Node.js, Python, Docker, Rust 等が**一切インストールされていない
   - **実行メカニズム**:
     - ダブルクリックするとバイナリ内部の VFS (Virtual File System) から Node.js がメモリ起動。
     - ローカルWebサーバー (`http://localhost:3000`) を即座に立ち上げ、既定のWebブラウザでアプリケーションUIを自動オープン。
-    - 他端末へのアドレス手入力は一切不要（各自のPC上で `localhost:3000` が起動し、UDP P2P自動発見によりバックグラウンドで全端末間同期）。
-  - **安定性・実績**:
-    - Vercel 社発祥の8年以上の実績を持つ標準的パッケージング方式。
-    - 公式 Node.js ランタイムをそのまま内包するため 100% の動作互換性と高い動作安定性を保持。
 
-### (2) Transport Adapter (通信基盤の差し替え)
+### (2) Interactive CLI Setup & Configuration Adapter (対話型セットアップ ＆ 設定ファイルアダプター)
+- **対話型スクリプト (`npm run setup`)**:
+  - ターミナルで動作モード（`P2P` / `CLIENT` / `HOST`）やアドレス（端末IP / `data/state.json` パス）に関する対話的質問に回答するだけで `config.json` を自動生成し、そのまま `bin/` へ設定済み単一バイナリを出力。
+- **起動時ハイブリッド設定ロジック**:
+  - `config.json` の設定値を自動ロード。CLI 引数（例: `--port 4000`）がある場合は引数を優先オーバライド適用。
+
+### (3) Transport Adapter (通信基盤の差し替え)
 インターフェース `PeerDiscoveryPort` および `PeerTransportPort` を実装することで、通信方式を自由に切り替え可能とします。
 
 - **フェーズ1 (実装済み)**: LAN 内 UDP Broadcast 自動発見 (`UdpPeerTransport`) ＋ WebSocket UI伝播
 - **フェーズ2 (LAN内高度化)**: mDNS (Bonjour) 応答 ＋ TCP Direct Socket 接続
 - **フェーズ3 (NAT越え/クロスネットワーク)**: WebRTC / libp2p アダプターの追加
 
-### (3) Storage Adapter (永続化基盤の差し替え)
+### (4) Storage Adapter (永続化基盤の差し替え)
 `ProjectRepositoryPort` を実装することで、利用環境に応じたストレージを選択可能とします。
 
+- **JSON State Snapshot / File**: `data/state.json` 単一状態ファイル ＆ イベントログ
 - **In-Memory Storage**: 単体テスト・デモ用
-- **JSON File / LocalStorage**: 簡易デスクトップ・ブラウザ利用時
 - **SQLite / RocksDB**: 大規模なイベントログ・オフラインキャッシュ管理用
 
 ---

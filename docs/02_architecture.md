@@ -11,7 +11,7 @@
 ```
 +-----------------------------------------------------------------------------------------+
 |                                   Presentation Layer                                    |
-| (Obsidian Canvas / Node Inspector / Gantt Timeline / Tree & Kanban / Theme Switcher)    |
+|         (Obsidian Canvas / Node Inspector / Gantt Timeline / Theme Switcher)            |
 +-------------------------------------------+---------------------------------------------+
                                             | (Interfaces)
 +-------------------------------------------v---------------------------------------------+
@@ -34,19 +34,22 @@
 - **機能**:
   - **階層型Y軸重力 (Hierarchical Gravity)**: 親の親（上位祖先）ほど自然と画面上部へ移動し、配下の子ノードは下方向へ浮遊配置される物理バイアス。
   - **画面端 ネスト表示深度コントロール (Edge Nest Depth Filter)**: 画面端に配置されたコントローラーから表示階層範囲（デフォルト / カスタム数値 / 全表示）を切り替え。
-  - **Obsidian Node Inspector Port**: ノードクリックによるツールバー表示（タイトル編集、1タップステータス切り替え、親切り離しルート化）。
+  - **Obsidian Node Inspector Port**: ノードクリックによるツールバー表示（タイトル編集、完了予定日設定、1タップステータス切り替え、親切り離しルート化）。
 
-### (2) Unified Parent Elevation & Drag Drop Port (共通親変更・ルート昇格ポート)
-- **役割**: 全ビュー（Obsidian, Tree, Kanban）における統一された子タスクのルート化 (`parentId: null`) インターフェース。
+### (2) Subtask to Root Elevation Port (親変更・ルート昇格ポート)
+- **役割**: Obsidianグラフおよびガントビューにおける子タスクのルート化 (`parentId: null`) インターフェース。
 - **機能**:
-  - ノード/カードからのワンタップ `[ ⇡ ルート化 ]` 操作。
-  - ドラッグ開始時に出現するヘッダー共通ドロップゾーン処理。
+  - ノードからのワンタップ `[ ルート化 ]` 操作。
+  - グラフキャンバス内最上部エリア (`Y <= 60px`) へのドラッグ＆ドロップ処理。
 
-### (3) Gantt Timeline View Port (イベントログ連携 ガントチャートポート)
-- **役割**: `events.jsonl` の不変イベント履歴（`TASK_CREATED`, `TASK_STATUS_UPDATED` 等）から、横軸時間のタスクライフサイクルバーおよび進行状況をレンダリングするポート。
+### (3) Gantt Timeline View Port (GanttProjectスタイル ガントチャートポート)
+- **役割**: `events.jsonl` の不変イベント履歴（`TASK_CREATED`, `TASK_STATUS_UPDATED`, `TASK_DUE_DATE_UPDATED` 等）から、左右2分割（左側ツリーテーブル＋右側タイムラインバー）の日付管理ガントチャートをレンダリングするポート。
+- **機能**:
+  - **日付管理 (Date Management)**: 開始日、完了予定日 (`dueDate`)、完了日/現状、所要日数を `YYYY/MM/DD` 形式で可視化。
+  - **順序保持 (Order Preservation)**: ステータス切替時に `orderIndex` を保持し、勝手な並び順変更を防止。
 
 ### (4) Minimalist Header & Theme Port (最小限ヘッダー＆テーマ切替ポート)
-- **役割**: タイトル、ネットワーク状態、4ビュー切替 (`グラフ`, `ツリー`, `カンバン`, `ガント`)、および Linear/Raycast スタイルの Dark/Light テーマ切り替え管理。
+- **役割**: タイトル、ネットワーク状態、2ビュー切替 (`[ グラフ | ガント ]`)、および Linear/Raycast スタイルの Dark/Light テーマ切り替え管理。
 
 ### (5) State Snapshot & Event Storage Port (最新状態スナップショット＆イベントリポジトリポート)
 - **役割**: 変更履歴 (`events.jsonl`) のバックグラウンド記録と、ディレクトリ直下への最新状態ファイル (`data/state.json`) のリアルタイム自動永続化。
@@ -70,4 +73,3 @@
 ---
 
 [次へ: データモデルと同期仕様](./03_data_sync.md)
-

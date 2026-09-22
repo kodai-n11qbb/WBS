@@ -24,8 +24,9 @@ export interface Task {
   parentId?: string | null;      // 親タスクのID（nullの場合はルート/独立浮遊タスク）
   title: string;                 // タスク名 (唯一の必須属性)
   status: 'TODO' | 'IN_PROGRESS' | 'DONE'; // ステータス
-  orderIndex: number;            // 表示順序
-  isCollapsed?: boolean;         // ツリーの折りたたみ状態（端末ローカルUI状態・P2P非同期）
+  orderIndex: number;            // 表示順序（ステータス変更時も保持）
+  dueDate?: number | null;       // 完了予定日 (タイムスタンプ / YYYY-MM-DD)
+  isCollapsed?: boolean;         // 端末ローカルUI状態
   updatedAt: number;
   authorNodeId: string;
 }
@@ -43,7 +44,8 @@ export interface Task {
       "status": "IN_PROGRESS",
       "parentId": null,
       "priority": "MEDIUM",
-      "orderIndex": 1789980009938
+      "orderIndex": 1789980009938,
+      "dueDate": 1792454400000
     }
   ]
 }
@@ -87,20 +89,16 @@ export interface Task {
 ### (2) Obsidian Graph View ＆ ノード・インスペクター
 - **ノード直接クリック動作**: ノードを選択・クリックするとノード近傍にインスペクターポップオーバーを表示。
   - **タイトル編集**: 即座のインライン入力・保存 (`TASK_TITLE_UPDATED`)。
+  - **完了予定日設定**: `<input type="date">` での予定日設定 (`TASK_DUE_DATE_UPDATED`)。
   - **1タップステータス切り替え**: `[ TODO ]` / `[ 進行中 ]` / `[ 完了 ]` の即時変更 (`TASK_STATUS_UPDATED`)。
   - **ルート化昇格**: `[ ルート化 ]` ボタンで親タスク解除 (`TASK_PARENT_CHANGED`)。
-- **キャンバスマウスドラッグによるルート化**: キャンバス上のノードドラッグ時、マウス位置が画面上部ヘッダーエリアに達してリリースされた場合にルート化を適用。
+- **キャンバスマウスドラッグによるルート化**: キャンバス上のノードドラッグ時、キャンバス内最上部エリア (`Y <= 60px`) に直接ドロップゾーンを描画し、そこでリリースされた場合にルート化を適用。
 
-### (3) 共通化された子要素のルート化メカニズム (Subtask-to-Root Unification)
-- Obsidian / ツリー / カンバンのすべてのビューにおいて：
-  - 各要素の `[ ルート化 ]` 操作ボタン
-  - ドラッグ時に画面上部に表示される `[ ここにドラッグでルート要素化 ]` ヘッダードロップゾーン
-  の両対応により、操作に迷わない統一感を提供。
-
-### (4) ツリー構造連動・稼働期間プロット ガントチャート (Tree-Structured Gantt Timeline View)
+### (3) GanttProject スタイル 日付管理ガントチャート (GanttProject Style Split Gantt View)
 - 縦軸 (Y軸) は樹状ツリー構造に従って親子階層順に配置。
-- `TODO` 期間（未着手）および `DONE` 完了後の放置期間を除外し、実際にステータスが `IN_PROGRESS` (進行中) であった着手〜完了（または現在）までの**実稼働期間のみを横軸時系列バーでプロット**。
-
+- 左側グリッドテーブルに `階層構造タスク名` | `状態` | `開始日` | `完了予定日` | `完了日` | `所要日数` を表示。
+- 右側タイムラインに日付刻みヘッダー軸と実稼働期間バー (`IN_PROGRESS` Window) および完了予定日マーカー (`gantt-due-marker`) を描画。
+- 実着手日・完了日時の詳細ロジックは将来的に練り直し可能な拡張設計とし、ステータス変更時にタスクの並び順 (`orderIndex`) をそのまま保持。
 
 ---
 
@@ -108,12 +106,13 @@ export interface Task {
 
 ### (1) イベントの種類 (`EventType`)
 1. `PROJECT_CREATED`: プロジェクト初期化
-2. `TASK_CREATED`: タスク生成
+2. `TASK_CREATED`: タスク生成 (`dueDate` 含む)
 3. `TASK_STATUS_UPDATED`: ステータス変更
 4. `TASK_TITLE_UPDATED`: タスク名（タイトル）変更
-5. `TASK_PARENT_CHANGED`: 親タスク変更（階層移動・ルート化）
-6. `TASK_REORDERED`: 表示順序変更
-7. `TASK_DELETED`: タスク削除
+5. `TASK_DUE_DATE_UPDATED`: 完了予定日変更
+6. `TASK_PARENT_CHANGED`: 親タスク変更（階層移動・ルート化）
+7. `TASK_REORDERED`: 表示順序変更
+8. `TASK_DELETED`: タスク削除
 
 ### (2) 同期フロー (LAN P2P Event Reconciliation)
 - 各ノードは起動時に UDP ピア発見を実行し、接続要求 (`SYNC_REQUEST`) を送信。
@@ -123,4 +122,3 @@ export interface Task {
 ---
 
 [次へ: 拡張性およびプラグイン設計](./04_extension_spec.md)
-

@@ -28,12 +28,6 @@
           <button id="btn-view-graph" class="btn-mode active" title="Obsidianノードグラフ (メイン)">
             グラフ
           </button>
-          <button id="btn-view-tree" class="btn-mode" title="ツリー表示">
-            ツリー
-          </button>
-          <button id="btn-view-kanban" class="btn-mode" title="カンバン表示">
-            カンバン
-          </button>
           <button id="btn-view-gantt" class="btn-mode" title="ガントチャート表示 (時系列ログ)">
             ガント
           </button>
@@ -69,7 +63,7 @@
     <div id="error-toast" class="toast hidden"></div>
 
     <main class="main-content">
-      <!-- Task Input Bar & Side-by-Side Unclassified Panel Dock -->
+      <!-- Task Input Bar -->
       <section class="task-input-section" id="input-section">
         <form id="quick-task-form" class="chatgpt-prompt-bar">
           <div class="prompt-pill-select">
@@ -85,15 +79,6 @@
             作成
           </button>
         </form>
-
-        <!-- Tree View Side-by-Side Unclassified Inbox Panel -->
-        <div id="tree-unclassified-panel" class="tree-unclassified-panel glass-card hidden">
-          <div class="unclassified-panel-header">
-            <span>未分類ボックス (ドラッグでツリーへ)</span>
-            <span id="unclassified-count-badge" class="unclassified-badge">0</span>
-          </div>
-          <div id="tree-unclassified-list" class="unclassified-panel-list"></div>
-        </div>
       </section>
 
       <!-- VIEW 1: Obsidian-like Node Graph Canvas View -->
@@ -116,6 +101,10 @@
           <div class="inspector-header">
             <span class="inspector-badge" id="inspector-status-badge">TODO</span>
             <input type="text" id="inspector-title-input" class="inspector-title-input" placeholder="タスクタイトル..." />
+            <div class="inspector-due-date-group">
+              <label for="inspector-due-date-input" class="due-date-label">予定日:</label>
+              <input type="date" id="inspector-due-date-input" class="inspector-due-date-input" title="終わる予定日を設定" />
+            </div>
             <button id="btn-inspector-close" class="btn-inspector-close" title="閉じる">✕</button>
           </div>
           <div class="inspector-actions">
@@ -136,56 +125,12 @@
         </div>
       </section>
 
-      <!-- VIEW 2: Pure Single-Canvas Tree View -->
-      <section id="pure-tree-view" class="view-section glass-card hidden">
-        <div class="tree-canvas-header">
-          <h2>樹状ツリー表示</h2>
-        </div>
-        <div id="pure-tree-container" class="pure-tree-container"></div>
-      </section>
-
-      <!-- VIEW 3: 3-Column Kanban Board View -->
-      <section id="kanban-view" class="view-section kanban-board hidden">
-        <div class="kanban-column glass-card" id="col-todo" data-status="TODO">
-          <div class="column-header">
-            <div class="column-title">
-              <span class="badge badge-todo">未着手</span>
-              <h2>To Do</h2>
-            </div>
-            <span class="task-count" id="count-todo">0</span>
-          </div>
-          <div class="task-list" id="list-todo"></div>
-        </div>
-
-        <div class="kanban-column glass-card" id="col-in-progress" data-status="IN_PROGRESS">
-          <div class="column-header">
-            <div class="column-title">
-              <span class="badge badge-progress">進行中</span>
-              <h2>In Progress</h2>
-            </div>
-            <span class="task-count" id="count-in-progress">0</span>
-          </div>
-          <div class="task-list" id="list-in-progress"></div>
-        </div>
-
-        <div class="kanban-column glass-card" id="col-done" data-status="DONE">
-          <div class="column-header">
-            <div class="column-title">
-              <span class="badge badge-done">完了</span>
-              <h2>Done</h2>
-            </div>
-            <span class="task-count" id="count-done">0</span>
-          </div>
-          <div class="task-list" id="list-done"></div>
-        </div>
-      </section>
-
-      <!-- VIEW 4: Event Log-Based Gantt Chart Timeline View Prototype -->
+      <!-- VIEW 2: GanttProject Style Gantt Chart Timeline View -->
       <section id="gantt-view" class="view-section glass-card gantt-chart-section hidden">
         <div class="gantt-header">
           <div class="gantt-title-group">
-            <h2>ガントチャート (進行中稼働ログ)</h2>
-            <span class="gantt-subtitle">ツリー構造の階層縦軸 × 進行中(IN_PROGRESS)稼働期間プロット</span>
+            <h2>ガントチャート (進行中稼働ログ ＆ 完了予定日)</h2>
+            <span class="gantt-subtitle">ツリー構造の階層縦軸 × 稼働期間プロット × 完了予定日マーカー</span>
           </div>
           <div class="gantt-stats" id="gantt-stats-badge">
             ログイベント数: 0件

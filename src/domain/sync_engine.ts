@@ -47,7 +47,7 @@ export class SyncEngine {
           break;
 
         case 'TASK_CREATED': {
-          const { taskId, parentId, title, priority, status, orderIndex, isCollapsed, assignedNodeId } =
+          const { taskId, parentId, title, priority, status, orderIndex, dueDate, isCollapsed, assignedNodeId } =
             event.payload;
           state.tasks.set(taskId, {
             id: taskId,
@@ -57,6 +57,7 @@ export class SyncEngine {
             priority: priority || 'MEDIUM',
             status: status || 'TODO',
             orderIndex: typeof orderIndex === 'number' ? orderIndex : 0,
+            dueDate: typeof dueDate === 'number' ? dueDate : null,
             isCollapsed: Boolean(isCollapsed),
             assignedNodeId,
             updatedAt: event.timestamp,
@@ -83,6 +84,16 @@ export class SyncEngine {
           const existing = state.tasks.get(taskId);
           if (existing && typeof title === 'string') {
             existing.title = title.trim();
+            existing.updatedAt = event.timestamp;
+          }
+          break;
+        }
+
+        case 'TASK_DUE_DATE_UPDATED': {
+          const { taskId, dueDate } = event.payload;
+          const existing = state.tasks.get(taskId);
+          if (existing) {
+            existing.dueDate = typeof dueDate === 'number' ? dueDate : null;
             existing.updatedAt = event.timestamp;
           }
           break;

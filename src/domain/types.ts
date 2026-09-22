@@ -1,6 +1,6 @@
 export type TaskStatus = 'TODO' | 'IN_PROGRESS' | 'DONE';
 export type TaskPriority = 'HIGH' | 'MEDIUM' | 'LOW';
-export type ViewMode = 'TREE_VIEW' | 'OBSIDIAN_GRAPH_VIEW' | 'KANBAN_VIEW' | 'GANTT_VIEW';
+export type ViewMode = 'OBSIDIAN_GRAPH_VIEW' | 'GANTT_VIEW';
 
 export interface Task {
   id: string;
@@ -10,6 +10,7 @@ export interface Task {
   priority: TaskPriority;
   status: TaskStatus;
   orderIndex: number;
+  dueDate?: number | null;
   isCollapsed?: boolean;
   assignedNodeId?: string;
   updatedAt: number;
@@ -27,6 +28,7 @@ export type EventType =
   | 'TASK_CREATED'
   | 'TASK_STATUS_UPDATED'
   | 'TASK_TITLE_UPDATED'
+  | 'TASK_DUE_DATE_UPDATED'
   | 'TASK_REORDERED'
   | 'TASK_PARENT_CHANGED'
   | 'TASK_COLLAPSE_TOGGLED'

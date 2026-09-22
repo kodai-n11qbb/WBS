@@ -12,6 +12,7 @@ export interface CreateTaskInput {
   priority?: TaskPriority;
   status?: TaskStatus;
   orderIndex?: number;
+  dueDate?: number | null;
 }
 
 export interface NodeServiceDependencies {
@@ -120,6 +121,7 @@ export class NodeService {
         priority: input.priority || 'MEDIUM',
         status: input.status || 'TODO',
         orderIndex: typeof input.orderIndex === 'number' ? input.orderIndex : Date.now(),
+        dueDate: typeof input.dueDate === 'number' ? input.dueDate : null,
         isCollapsed: false,
       },
     };
@@ -168,6 +170,27 @@ export class NodeService {
       sequence: ++this.sequenceCounter,
       type: 'TASK_TITLE_UPDATED',
       payload: { taskId, title: title.trim() },
+    };
+
+    await this.repository.saveEvent(event);
+    await this.transport.broadcast({ type: 'EVENT_BROADCAST', event });
+    await this.exportSnapshot(projectId);
+    return event;
+  }
+
+  public async updateTaskDueDate(
+    projectId: string,
+    taskId: string,
+    dueDate: number | null
+  ): Promise<SyncEvent> {
+    const event: SyncEvent = {
+      id: crypto.randomUUID(),
+      projectId,
+      authorNodeId: this.nodeId,
+      timestamp: Date.now(),
+      sequence: ++this.sequenceCounter,
+      type: 'TASK_DUE_DATE_UPDATED',
+      payload: { taskId, dueDate },
     };
 
     await this.repository.saveEvent(event);

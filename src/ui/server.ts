@@ -152,6 +152,30 @@ async function main() {
         title: '独立ルートタスク: 全体ロードマップの策定',
         status: 'DONE',
       });
+
+      // Distribute sample task timestamps & due dates across ~3 months (90 days) for realistic Gantt timeline
+      const now = Date.now();
+      const DAY_MS = 86400000;
+      const allEvts = await nodeService.getAllEvents();
+      const timeOffsets = [
+        85 * DAY_MS, 80 * DAY_MS, 70 * DAY_MS, 65 * DAY_MS, 60 * DAY_MS,
+        55 * DAY_MS, 50 * DAY_MS, 35 * DAY_MS, 30 * DAY_MS, 25 * DAY_MS,
+        45 * DAY_MS, 40 * DAY_MS, 38 * DAY_MS, 20 * DAY_MS, 15 * DAY_MS,
+        10 * DAY_MS, 5 * DAY_MS,
+      ];
+
+      allEvts.forEach((evt, idx) => {
+        const offset = timeOffsets[idx % timeOffsets.length] || (90 - idx * 4) * DAY_MS;
+        evt.timestamp = now - offset;
+
+        if (evt.type === 'TASK_CREATED') {
+          evt.payload.dueDate = now + (idx % 2 === 0 ? 10 : -10) * DAY_MS;
+        }
+      });
+
+      if (fs.existsSync(DATA_FILE)) {
+        fs.writeFileSync(DATA_FILE, allEvts.map((e) => JSON.stringify(e)).join('\n') + '\n', 'utf-8');
+      }
     }
 
     console.log(`[NodeService] Started Node "${NODE_ID}" with JSONL storage at: ${DATA_FILE}`);
@@ -273,6 +297,9 @@ async function main() {
               })
             );
           }
+        } else if (data.action === 'UPDATE_DUE_DATE') {
+          await nodeService.updateTaskDueDate(activeProjectId, data.taskId, data.dueDate || null);
+          await broadcastStateToUI();
         } else if (data.action === 'REORDER_TASK') {
           await nodeService.reorderTask(activeProjectId, data.taskId, data.newOrderIndex);
           await broadcastStateToUI();

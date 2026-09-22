@@ -2,13 +2,11 @@
   let socket = null;
   let currentTasks = [];
   let currentEvents = [];
-  let draggedTaskId = null;
   let focusedTaskId = null;
   let inspectorSelectedTaskId = null;
 
-  // View Modes: 'OBSIDIAN_GRAPH_VIEW' | 'TREE_VIEW' | 'KANBAN_VIEW' | 'GANTT_VIEW'
+  // View Modes: 'OBSIDIAN_GRAPH_VIEW' | 'GANTT_VIEW'
   let currentViewMode = 'OBSIDIAN_GRAPH_VIEW';
-  let userPreferredViewMode = 'OBSIDIAN_GRAPH_VIEW';
 
   // Edge Nest Depth Filter (1, 2, 3... or 'all')
   let currentMaxDepth = 2;
@@ -53,28 +51,6 @@
     return depth;
   }
 
-  // Local UI State: Tree collapse state is local to each client
-  const localCollapsedTaskIds = new Set(
-    JSON.parse(localStorage.getItem('share_log_local_collapsed_tasks') || '[]')
-  );
-
-  function isTaskCollapsed(taskId) {
-    return localCollapsedTaskIds.has(taskId);
-  }
-
-  function toggleTaskCollapse(taskId) {
-    if (localCollapsedTaskIds.has(taskId)) {
-      localCollapsedTaskIds.delete(taskId);
-    } else {
-      localCollapsedTaskIds.add(taskId);
-    }
-    localStorage.setItem(
-      'share_log_local_collapsed_tasks',
-      JSON.stringify(Array.from(localCollapsedTaskIds))
-    );
-    renderCurrentView();
-  }
-
   // Canvas Animation Frame & Physics State
   let canvasAnimationId = null;
   let graphNodes = [];
@@ -83,22 +59,13 @@
   // DOM Elements
   const nodeDisplay = document.getElementById('node-id-display');
   const errorToast = document.getElementById('error-toast');
-  const rootDropzone = document.getElementById('root-dropzone');
 
-  const btnViewTree = document.getElementById('btn-view-tree');
   const btnViewGraph = document.getElementById('btn-view-graph');
-  const btnViewKanban = document.getElementById('btn-view-kanban');
   const btnViewGantt = document.getElementById('btn-view-gantt');
 
   const quickForm = document.getElementById('quick-task-form');
   const quickInputTitle = document.getElementById('quick-title-input');
   const selectQuickParent = document.getElementById('select-quick-parent');
-
-  const pureTreeViewSection = document.getElementById('pure-tree-view');
-  const pureTreeContainer = document.getElementById('pure-tree-container');
-  const treeUnclassifiedPanel = document.getElementById('tree-unclassified-panel');
-  const treeUnclassifiedList = document.getElementById('tree-unclassified-list');
-  const unclassifiedCountBadge = document.getElementById('unclassified-count-badge');
 
   const obsidianGraphViewSection = document.getElementById('obsidian-graph-view');
   const canvas = document.getElementById('obsidian-canvas');
@@ -106,6 +73,7 @@
   const obsidianInspector = document.getElementById('obsidian-inspector');
   const inspectorStatusBadge = document.getElementById('inspector-status-badge');
   const inspectorTitleInput = document.getElementById('inspector-title-input');
+  const inspectorDueDateInput = document.getElementById('inspector-due-date-input');
   const btnInspectorClose = document.getElementById('btn-inspector-close');
   const btnInspectorElevate = document.getElementById('btn-inspector-elevate');
   const btnInspectorDelete = document.getElementById('btn-inspector-delete');
@@ -115,17 +83,6 @@
   const confirmModalText = document.getElementById('confirm-modal-text');
   const btnModalCancel = document.getElementById('btn-modal-cancel');
   const btnModalConfirm = document.getElementById('btn-modal-confirm');
-
-  const kanbanViewSection = document.getElementById('kanban-view');
-  const listTodo = document.getElementById('list-todo');
-  const listInProgress = document.getElementById('list-in-progress');
-  const listDone = document.getElementById('list-done');
-
-  const countTodo = document.getElementById('count-todo');
-  const countInProgress = document.getElementById('count-in-progress');
-  const countDone = document.getElementById('count-done');
-
-  const columns = document.querySelectorAll('.kanban-column');
 
   const ganttViewSection = document.getElementById('gantt-view');
   const ganttContainer = document.getElementById('gantt-container');
@@ -194,12 +151,12 @@
     }
   }
 
-  // 4-Mode View Buttons Setup
-  btnViewTree.addEventListener('click', () => setViewMode('TREE_VIEW', true));
-  btnViewGraph.addEventListener('click', () => setViewMode('OBSIDIAN_GRAPH_VIEW', true));
-  btnViewKanban.addEventListener('click', () => setViewMode('KANBAN_VIEW', true));
+  // 2-Mode View Buttons Setup
+  if (btnViewGraph) {
+    btnViewGraph.addEventListener('click', () => setViewMode('OBSIDIAN_GRAPH_VIEW'));
+  }
   if (btnViewGantt) {
-    btnViewGantt.addEventListener('click', () => setViewMode('GANTT_VIEW', true));
+    btnViewGantt.addEventListener('click', () => setViewMode('GANTT_VIEW'));
   }
 
   // Depth Filter Controls Setup
@@ -214,29 +171,14 @@
     });
   });
 
-  function setViewMode(mode, isUserAction = false) {
-    if (isUserAction) {
-      userPreferredViewMode = mode;
-    }
+  function setViewMode(mode) {
     currentViewMode = mode;
 
-    btnViewTree.classList.toggle('active', mode === 'TREE_VIEW');
-    btnViewGraph.classList.toggle('active', mode === 'OBSIDIAN_GRAPH_VIEW');
-    btnViewKanban.classList.toggle('active', mode === 'KANBAN_VIEW');
-    if (btnViewGantt) {
-      btnViewGantt.classList.toggle('active', mode === 'GANTT_VIEW');
-    }
+    if (btnViewGraph) btnViewGraph.classList.toggle('active', mode === 'OBSIDIAN_GRAPH_VIEW');
+    if (btnViewGantt) btnViewGantt.classList.toggle('active', mode === 'GANTT_VIEW');
 
-    pureTreeViewSection.classList.toggle('hidden', mode !== 'TREE_VIEW');
-    obsidianGraphViewSection.classList.toggle('hidden', mode !== 'OBSIDIAN_GRAPH_VIEW');
-    kanbanViewSection.classList.toggle('hidden', mode !== 'KANBAN_VIEW');
-    if (ganttViewSection) {
-      ganttViewSection.classList.toggle('hidden', mode !== 'GANTT_VIEW');
-    }
-
-    if (treeUnclassifiedPanel) {
-      treeUnclassifiedPanel.classList.toggle('hidden', mode !== 'TREE_VIEW');
-    }
+    if (obsidianGraphViewSection) obsidianGraphViewSection.classList.toggle('hidden', mode !== 'OBSIDIAN_GRAPH_VIEW');
+    if (ganttViewSection) ganttViewSection.classList.toggle('hidden', mode !== 'GANTT_VIEW');
 
     if (mode !== 'OBSIDIAN_GRAPH_VIEW' && obsidianInspector) {
       obsidianInspector.classList.add('hidden');
@@ -253,12 +195,8 @@
       canvasAnimationId = null;
     }
 
-    if (currentViewMode === 'TREE_VIEW') {
-      renderPureTreeView();
-    } else if (currentViewMode === 'OBSIDIAN_GRAPH_VIEW') {
+    if (currentViewMode === 'OBSIDIAN_GRAPH_VIEW') {
       startObsidianGraphRenderer();
-    } else if (currentViewMode === 'KANBAN_VIEW') {
-      renderKanbanView();
     } else if (currentViewMode === 'GANTT_VIEW') {
       renderGanttView();
     }
@@ -327,6 +265,23 @@
       }
       for (let y = 0; y < canvas.height; y += gridSize) {
         ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+      }
+
+      // Draw top in-canvas dropzone strip for drag-to-root
+      if (draggedGraphNode && draggedGraphNode.task.parentId) {
+        ctx.fillStyle = draggedGraphNode.y <= 60 ? (isLight ? 'rgba(16, 185, 129, 0.15)' : 'rgba(16, 185, 129, 0.25)') : (isLight ? 'rgba(0, 0, 0, 0.05)' : 'rgba(255, 255, 255, 0.05)');
+        ctx.strokeStyle = draggedGraphNode.y <= 60 ? '#10b981' : (isLight ? '#cbd5e1' : '#3f3f46');
+        ctx.lineWidth = 2;
+        ctx.setLineDash([6, 6]);
+        ctx.fillRect(20, 10, canvas.width - 40, 50);
+        ctx.strokeRect(20, 10, canvas.width - 40, 50);
+        ctx.setLineDash([]);
+
+        ctx.font = 'bold 13px Inter, sans-serif';
+        ctx.fillStyle = draggedGraphNode.y <= 60 ? '#10b981' : (isLight ? '#64748b' : '#a1a1aa');
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('[ ここにドロップでルート要素 (親なし) に昇格 ]', canvas.width / 2, 35);
       }
 
       // Physics calculation
@@ -500,7 +455,6 @@
         isMouseDown = true;
         draggedGraphNode = hitNode;
         hitNode.isPinned = true;
-        showRootDropzone();
       }
     };
 
@@ -509,21 +463,6 @@
         const rect = canvas.getBoundingClientRect();
         draggedGraphNode.x = e.clientX - rect.left;
         draggedGraphNode.y = e.clientY - rect.top;
-
-        // Check if mouse is hovering near top header dropzone
-        if (rootDropzone) {
-          const dropzoneRect = rootDropzone.getBoundingClientRect();
-          if (
-            e.clientX >= dropzoneRect.left &&
-            e.clientX <= dropzoneRect.right &&
-            e.clientY >= dropzoneRect.top &&
-            e.clientY <= dropzoneRect.bottom + 20
-          ) {
-            rootDropzone.classList.add('drag-over');
-          } else {
-            rootDropzone.classList.remove('drag-over');
-          }
-        }
       }
     };
 
@@ -532,28 +471,16 @@
       if (draggedGraphNode) {
         draggedGraphNode.isPinned = false;
 
-        // Check drop onto Top Root Dropzone Header
-        let droppedOnRootZone = false;
-        if (rootDropzone) {
-          const dropzoneRect = rootDropzone.getBoundingClientRect();
-          if (
-            e.clientX >= dropzoneRect.left &&
-            e.clientX <= dropzoneRect.right &&
-            e.clientY <= dropzoneRect.bottom + 30
-          ) {
-            droppedOnRootZone = true;
-          }
-        }
+        // Check in-canvas top strip drop for elevating to root
+        const droppedOnTopStrip = draggedGraphNode.y <= 65;
 
-        if (droppedOnRootZone) {
-          if (draggedGraphNode.task.parentId) {
-            changeTaskParent(draggedGraphNode.task.id, null);
-          }
+        if (droppedOnTopStrip && draggedGraphNode.task.parentId) {
+          changeTaskParent(draggedGraphNode.task.id, null);
         } else if (dist < 5) {
           // Click Node: Open Node Inspector
           const task = draggedGraphNode.task;
           openObsidianNodeInspector(task);
-        } else {
+        } else if (!droppedOnTopStrip) {
           // Dragged Node: Check drop target on another node
           const targetNode = graphNodes.find(
             (n) => n.task.id !== draggedGraphNode.task.id && Math.hypot(n.x - draggedGraphNode.x, n.y - draggedGraphNode.y) <= 45
@@ -568,7 +495,6 @@
           }
         }
       }
-      hideRootDropzone();
       isMouseDown = false;
       draggedGraphNode = null;
     };
@@ -582,12 +508,25 @@
     focusedTaskId = task.id;
 
     if (inspectorStatusBadge) {
-      inspectorStatusBadge.textContent = task.status;
+      const statusLabels = { TODO: '未着手', IN_PROGRESS: '進行中', DONE: '完了' };
+      inspectorStatusBadge.textContent = statusLabels[task.status] || task.status;
       inspectorStatusBadge.dataset.status = task.status;
     }
 
     if (inspectorTitleInput) {
       inspectorTitleInput.value = task.title;
+    }
+
+    if (inspectorDueDateInput) {
+      if (task.dueDate) {
+        const d = new Date(task.dueDate);
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        inspectorDueDateInput.value = `${yyyy}-${mm}-${dd}`;
+      } else {
+        inspectorDueDateInput.value = '';
+      }
     }
 
     const statusBtns = obsidianInspector.querySelectorAll('.btn-status-toggle');
@@ -658,18 +597,32 @@
     });
   }
 
+  if (inspectorDueDateInput) {
+    inspectorDueDateInput.addEventListener('change', () => {
+      if (!inspectorSelectedTaskId) return;
+      const val = inspectorDueDateInput.value;
+      const dueDateTs = val ? new Date(val + 'T23:59:59').getTime() : null;
+      updateTaskDueDate(inspectorSelectedTaskId, dueDateTs);
+    });
+  }
+
   function updateInspectorViewIfNeeded() {
     if (inspectorSelectedTaskId && obsidianInspector && !obsidianInspector.classList.contains('hidden')) {
       const updated = currentTasks.find((t) => t.id === inspectorSelectedTaskId);
       if (updated) {
+        const statusLabels = { TODO: '未着手', IN_PROGRESS: '進行中', DONE: '完了' };
         if (inspectorStatusBadge) {
-          inspectorStatusBadge.textContent = updated.status;
+          inspectorStatusBadge.textContent = statusLabels[updated.status] || updated.status;
           inspectorStatusBadge.dataset.status = updated.status;
         }
         if (btnInspectorElevate) {
           btnInspectorElevate.disabled = !updated.parentId;
           btnInspectorElevate.style.opacity = updated.parentId ? '1' : '0.4';
         }
+        const statusBtns = obsidianInspector.querySelectorAll('.btn-status-toggle');
+        statusBtns.forEach((btn) => {
+          btn.classList.toggle('active', btn.dataset.status === updated.status);
+        });
       } else {
         closeObsidianNodeInspector();
       }
@@ -677,217 +630,23 @@
   }
 
   // --------------------------------------------------------------------------
-  // VIEW 2: Pure Tree View
-  // --------------------------------------------------------------------------
-  function renderPureTreeView() {
-    pureTreeContainer.innerHTML = '';
-    if (treeUnclassifiedList) treeUnclassifiedList.innerHTML = '';
-
-    const hasSubtasks = (t) => currentTasks.some((child) => child.parentId === t.id);
-    const isRootTask = (t) => !t.parentId || !currentTasks.some((parent) => parent.id === t.parentId);
-
-    const unclassifiedTasks = currentTasks.filter((t) => isRootTask(t) && !hasSubtasks(t))
-      .sort((a, b) => a.orderIndex - b.orderIndex);
-
-    if (unclassifiedCountBadge) {
-      unclassifiedCountBadge.textContent = unclassifiedTasks.length;
-    }
-
-    if (treeUnclassifiedList) {
-      if (unclassifiedTasks.length === 0) {
-        const emptyMsg = document.createElement('div');
-        emptyMsg.style.cssText = 'font-size: 0.78rem; color: var(--text-muted); text-align: center; padding: 1rem;';
-        emptyMsg.textContent = '(未分類タスクはありません)';
-        treeUnclassifiedList.appendChild(emptyMsg);
-      } else {
-        unclassifiedTasks.forEach((task) => {
-          const item = document.createElement('div');
-          item.className = `unclassified-item ${focusedTaskId === task.id ? 'focused' : ''}`;
-          item.setAttribute('draggable', 'true');
-          item.dataset.taskId = task.id;
-
-          const titleSpan = document.createElement('span');
-          titleSpan.textContent = task.title;
-          titleSpan.style.cssText = 'white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px;';
-
-          const badge = document.createElement('span');
-          badge.className = `status-btn active-${task.status}`;
-          badge.style.cssText = 'font-size: 0.68rem; padding: 0.15rem 0.4rem; pointer-events: none;';
-          badge.textContent = task.status;
-
-          item.appendChild(titleSpan);
-          item.appendChild(badge);
-
-          item.addEventListener('click', (e) => {
-            e.stopPropagation();
-            setFocusedTask(task.id);
-          });
-
-          item.addEventListener('dragstart', (e) => {
-            e.stopPropagation();
-            draggedTaskId = task.id;
-            item.classList.add('dragging');
-            e.dataTransfer.setData('text/plain', task.id);
-            showRootDropzone();
-          });
-
-          item.addEventListener('dragend', (e) => {
-            e.stopPropagation();
-            draggedTaskId = null;
-            item.classList.remove('dragging');
-            hideRootDropzone();
-          });
-
-          treeUnclassifiedList.appendChild(item);
-        });
-      }
-    }
-
-    const rootTreeTasks = currentTasks.filter(isRootTask).sort((a, b) => a.orderIndex - b.orderIndex);
-
-    if (rootTreeTasks.length === 0) {
-      const emptyTreeMsg = document.createElement('div');
-      emptyTreeMsg.className = 'empty-tree-notice';
-      emptyTreeMsg.style.cssText = 'font-size: 0.85rem; color: var(--text-muted); text-align: center; padding: 3rem 1rem; border: 1px dashed var(--border-color); border-radius: var(--radius-md); margin-top: 1rem;';
-      emptyTreeMsg.textContent = 'ルートタスクがまだありません。上のプロンプトバーから新しいタスクを作成してください。';
-      pureTreeContainer.appendChild(emptyTreeMsg);
-    } else {
-      rootTreeTasks.forEach((rootTask) => {
-        const nodeEl = renderTaskTreeNode(rootTask);
-        pureTreeContainer.appendChild(nodeEl);
-      });
-    }
-
-    if (focusedTaskId) {
-      highlightFocusedTaskCard(focusedTaskId);
-    }
-  }
-
-  function renderTaskTreeNode(task) {
-    const nodeWrapper = document.createElement('div');
-    nodeWrapper.className = `task-tree-node ${task.parentId ? 'is-subtask' : ''}`;
-
-    const card = createTaskCard(task);
-
-    if (task.parentId) {
-      const quickElevateBtn = document.createElement('button');
-      quickElevateBtn.className = 'btn-quick-elevate';
-      quickElevateBtn.textContent = 'ルート化';
-      quickElevateBtn.title = '親タスクから切り離してルート階層へ昇格';
-      quickElevateBtn.onclick = (e) => {
-        e.stopPropagation();
-        changeTaskParent(task.id, null);
-      };
-      const cardTop = card.querySelector('.task-top');
-      if (cardTop) cardTop.appendChild(quickElevateBtn);
-    }
-
-    nodeWrapper.appendChild(card);
-
-    const children = currentTasks.filter((t) => t.parentId === task.id).sort((a, b) => a.orderIndex - b.orderIndex);
-    if (children.length > 0 && !isTaskCollapsed(task.id)) {
-      const childrenContainer = document.createElement('div');
-      childrenContainer.className = 'tree-children-container';
-      childrenContainer.style.display = 'flex';
-      childrenContainer.style.flexDirection = 'column';
-      childrenContainer.style.gap = '0.5rem';
-      childrenContainer.style.marginTop = '0.4rem';
-
-      children.forEach((childTask) => {
-        childrenContainer.appendChild(renderTaskTreeNode(childTask));
-      });
-
-      nodeWrapper.appendChild(childrenContainer);
-    }
-
-    return nodeWrapper;
-  }
-
-  // --------------------------------------------------------------------------
-  // VIEW 3: 3-Column Kanban View
-  // --------------------------------------------------------------------------
-  function renderKanbanView() {
-    listTodo.innerHTML = '';
-    listInProgress.innerHTML = '';
-    listDone.innerHTML = '';
-
-    let todoCount = 0;
-    let inProgressCount = 0;
-    let doneCount = 0;
-
-    currentTasks.forEach((t) => {
-      if (t.status === 'TODO') todoCount++;
-      if (t.status === 'IN_PROGRESS') inProgressCount++;
-      if (t.status === 'DONE') doneCount++;
-    });
-
-    countTodo.textContent = todoCount;
-    countInProgress.textContent = inProgressCount;
-    countDone.textContent = doneCount;
-
-    const isParentTask = (t) => currentTasks.some((child) => child.parentId === t.id);
-    const sortedTasks = [...currentTasks].sort((a, b) => {
-      const aIsParent = isParentTask(a) ? 0 : 1;
-      const bIsParent = isParentTask(b) ? 0 : 1;
-      if (aIsParent !== bIsParent) return aIsParent - bIsParent;
-      return a.orderIndex - b.orderIndex;
-    });
-
-    sortedTasks.forEach((task) => {
-      const card = createTaskCard(task, true);
-      if (task.status === 'TODO') listTodo.appendChild(card);
-      else if (task.status === 'IN_PROGRESS') listInProgress.appendChild(card);
-      else if (task.status === 'DONE') listDone.appendChild(card);
-    });
-
-    if (focusedTaskId) {
-      highlightFocusedTaskCard(focusedTaskId);
-    }
-  }
-
-  // --------------------------------------------------------------------------
-  // VIEW 4: Tree-Structured Gantt Timeline View Prototype (IN_PROGRESS windows)
+  // VIEW 2: Gantt Chart Timeline View (Tree Structure + Due Dates + Duration)
   // --------------------------------------------------------------------------
   function renderGanttView() {
     if (!ganttContainer) return;
     ganttContainer.innerHTML = '';
 
     if (ganttStatsBadge) {
-      ganttStatsBadge.textContent = `ログイベント数: ${currentEvents.length}件`;
+      ganttStatsBadge.textContent = `全タスク: ${currentTasks.length}件 / イベント数: ${currentEvents.length}件`;
     }
 
     if (currentTasks.length === 0) {
       const notice = document.createElement('div');
       notice.className = 'gantt-empty-notice';
-      notice.textContent = 'タスクおよびイベントログが存在しません。';
+      notice.textContent = 'タスクがありません。下部の入力バーから新しいタスクを作成してください。';
       ganttContainer.appendChild(notice);
       return;
     }
-
-    // Extract IN_PROGRESS working duration window for each task from event logs
-    const taskWorkingLogMap = new Map();
-    currentEvents.forEach((e) => {
-      if (e.payload && e.payload.taskId) {
-        const tid = e.payload.taskId;
-        if (!taskWorkingLogMap.has(tid)) {
-          taskWorkingLogMap.set(tid, {
-            inProgressStart: null,
-            doneTime: null,
-          });
-        }
-        const log = taskWorkingLogMap.get(tid);
-
-        if (e.type === 'TASK_CREATED' && e.payload.status === 'IN_PROGRESS') {
-          if (!log.inProgressStart) log.inProgressStart = e.timestamp;
-        } else if (e.type === 'TASK_STATUS_UPDATED') {
-          if (e.payload.status === 'IN_PROGRESS') {
-            if (!log.inProgressStart) log.inProgressStart = e.timestamp;
-          } else if (e.payload.status === 'DONE') {
-            if (!log.doneTime) log.doneTime = e.timestamp;
-          }
-        }
-      }
-    });
 
     // Build Tree-Ordered Task Array (Depth First Order)
     const treeOrderedTasks = [];
@@ -902,23 +661,38 @@
     }
     collectTreeTasks(null, 0);
 
-    // Compute global timeline bounds for active IN_PROGRESS intervals
+    // Compute Timeline Bounds (Start to Target Due Date / Finish / Current Time)
+    const now = Date.now();
     let minTime = Infinity;
     let maxTime = -Infinity;
 
     treeOrderedTasks.forEach(({ task }) => {
-      const log = taskWorkingLogMap.get(task.id);
-      if (log && log.inProgressStart) {
-        if (log.inProgressStart < minTime) minTime = log.inProgressStart;
-        const endTime = log.doneTime || task.updatedAt || Date.now();
-        if (endTime > maxTime) maxTime = endTime;
-      }
+      const created = task.createdAt || now;
+      if (created < minTime) minTime = created;
+      if (task.updatedAt && task.updatedAt > maxTime) maxTime = task.updatedAt;
+      if (task.dueDate && task.dueDate > maxTime) maxTime = task.dueDate;
     });
 
-    if (minTime === Infinity) minTime = Date.now() - 3600000;
-    if (maxTime === -Infinity || maxTime <= minTime) maxTime = minTime + 3600000;
+    if (minTime === Infinity) minTime = now - 86400000 * 7;
+    // Default at least 30-day timeline span
+    const thirtyDaysMs = 86400000 * 30;
+    if (maxTime < minTime + thirtyDaysMs) {
+      maxTime = minTime + thirtyDaysMs;
+    }
 
-    const timeSpan = Math.max(maxTime - minTime, 1000);
+    const totalSpan = maxTime - minTime;
+
+    // Render Timeline Ticks (5 Date Markers)
+    const ticksHeader = document.createElement('div');
+    ticksHeader.className = 'gantt-ticks-header';
+    const numTicks = 5;
+    for (let i = 0; i < numTicks; i++) {
+      const tickTime = minTime + (totalSpan * i) / (numTicks - 1);
+      const d = new Date(tickTime);
+      const span = document.createElement('span');
+      span.textContent = `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
+      ticksHeader.appendChild(span);
+    }
 
     const table = document.createElement('table');
     table.className = 'gantt-table';
@@ -926,11 +700,10 @@
     const thead = document.createElement('thead');
     thead.innerHTML = `
       <tr>
-        <th style="width: 32%;">ツリー構造タスク名</th>
-        <th style="width: 12%;">ステータス</th>
-        <th style="width: 16%;">着手時刻</th>
-        <th style="width: 16%;">完了/現在時刻</th>
-        <th class="gantt-bar-cell">稼働期間 (IN_PROGRESS) タイムライン</th>
+        <th style="width: 28%;">ツリータスク名</th>
+        <th style="width: 11%;">ステータス</th>
+        <th style="width: 13%;">完了予定日</th>
+        <th class="gantt-bar-cell">時系列タイムライン & 予定マーカー (🚩)</th>
       </tr>
     `;
     table.appendChild(thead);
@@ -939,54 +712,100 @@
 
     treeOrderedTasks.forEach(({ task, level }) => {
       const tr = document.createElement('tr');
-      const log = taskWorkingLogMap.get(task.id);
-
-      const hasActiveBar = (task.status === 'IN_PROGRESS' || (task.status === 'DONE' && log && log.inProgressStart));
-
-      let startTime = log ? log.inProgressStart : null;
-      let endTime = task.status === 'DONE' ? (log ? log.doneTime : task.updatedAt) : Date.now();
-
-      let startDateStr = '-';
-      let endDateStr = '-';
-      let startPercent = 0;
-      let widthPercent = 0;
-
-      if (hasActiveBar && startTime) {
-        startDateStr = new Date(startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        endDateStr = task.status === 'DONE' ? new Date(endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '進行中';
-
-        startPercent = Math.max(0, Math.min(100, ((startTime - minTime) / timeSpan) * 100));
-        const endPercent = Math.max(startPercent + 3, Math.min(100, ((endTime - minTime) / timeSpan) * 100));
-        widthPercent = Math.max(3, endPercent - startPercent);
-      }
-
       const indentStr = level > 0 ? '│  '.repeat(level - 1) + '├─ ' : '';
       const statusLabels = { TODO: '未着手', IN_PROGRESS: '進行中', DONE: '完了' };
 
-      tr.innerHTML = `
-        <td class="gantt-task-name">
-          <span class="gantt-tree-indent">${indentStr}</span>${task.title}
-        </td>
-        <td>
-          <span class="inspector-badge" data-status="${task.status}">${statusLabels[task.status] || task.status}</span>
-        </td>
-        <td style="color: var(--text-muted); font-family: monospace;">${startDateStr}</td>
-        <td style="color: var(--text-muted); font-family: monospace;">${endDateStr}</td>
-        <td class="gantt-bar-cell">
-          ${
-            hasActiveBar && startTime
-              ? `<div class="gantt-bar-track" title="着手: ${startDateStr} ~ ${endDateStr}">
-                   <div class="gantt-bar-fill" data-status="${task.status}" style="margin-left: ${startPercent.toFixed(1)}%; width: ${widthPercent.toFixed(1)}%;"></div>
-                 </div>`
-              : `<span class="gantt-empty-bar-notice">${task.status === 'TODO' ? '(未着手ため稼働ログなし)' : '(稼働期間ログなし)'}</span>`
-          }
-        </td>
+      // Format Due Date
+      let dueDateStr = '-';
+      let isOverdue = false;
+      if (task.dueDate) {
+        const d = new Date(task.dueDate);
+        dueDateStr = `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
+        if (task.status !== 'DONE' && task.dueDate < now) {
+          isOverdue = true;
+        }
+      }
+
+      // Bar timing calculation
+      const startTime = task.createdAt || minTime;
+      const endTime = task.status === 'DONE' ? (task.updatedAt || now) : Math.max(now, task.dueDate || now);
+
+      let startPct = Math.max(0, Math.min(100, ((startTime - minTime) / totalSpan) * 100));
+      let endPct = Math.max(startPct + 2, Math.min(100, ((endTime - minTime) / totalSpan) * 100));
+      let widthPct = Math.max(2, endPct - startPct);
+
+      // Duration in days calculation
+      const durationMs = Math.max(86400000, endTime - startTime);
+      const durationDays = Math.ceil(durationMs / 86400000);
+
+      // Target Due Date Marker Position
+      let dueMarkerHtml = '';
+      if (task.dueDate) {
+        const duePct = Math.max(0, Math.min(100, ((task.dueDate - minTime) / totalSpan) * 100));
+        dueMarkerHtml = `<div class="gantt-due-marker" style="left: ${duePct.toFixed(1)}%;" title="完了予定日: ${dueDateStr}"></div>`;
+      }
+
+      // Render Row
+      const taskTd = document.createElement('td');
+      taskTd.className = 'gantt-task-name';
+      taskTd.innerHTML = `<span class="gantt-tree-indent">${indentStr}</span>${task.title}`;
+
+      const statusTd = document.createElement('td');
+      const badge = document.createElement('span');
+      badge.className = 'inspector-badge';
+      badge.dataset.status = task.status;
+      badge.textContent = statusLabels[task.status] || task.status;
+      badge.title = 'クリックでステータス変更';
+      badge.onclick = (e) => {
+        e.stopPropagation();
+        const nextStatusMap = { TODO: 'IN_PROGRESS', IN_PROGRESS: 'DONE', DONE: 'TODO' };
+        updateTaskStatus(task.id, nextStatusMap[task.status] || 'TODO');
+      };
+      statusTd.appendChild(badge);
+
+      const dueTd = document.createElement('td');
+      if (task.dueDate) {
+        dueTd.innerHTML = `<span class="gantt-due-pill ${isOverdue ? 'overdue' : ''}">${isOverdue ? '⚠️ ' : ''}${dueDateStr}</span>`;
+      } else {
+        dueTd.style.cssText = 'color: var(--text-muted); font-size: 0.75rem;';
+        dueTd.textContent = '-';
+      }
+
+      const barTd = document.createElement('td');
+      barTd.className = 'gantt-bar-cell';
+      barTd.innerHTML = `
+        <div class="gantt-bar-track">
+          <div class="gantt-bar-fill" data-status="${task.status}" style="left: ${startPct.toFixed(1)}%; width: ${widthPct.toFixed(1)}%;" title="期間: 約${durationDays}日間 (${statusLabels[task.status]})">
+            ${durationDays > 1 ? `${durationDays}日` : ''}
+          </div>
+          ${dueMarkerHtml}
+        </div>
       `;
+
+      // Allow clicking bar to open inspector
+      const barFill = barTd.querySelector('.gantt-bar-fill');
+      if (barFill) {
+        barFill.onclick = (e) => {
+          e.stopPropagation();
+          setViewMode('OBSIDIAN_GRAPH_VIEW');
+          openObsidianNodeInspector(task);
+        };
+      }
+
+      tr.appendChild(taskTd);
+      tr.appendChild(statusTd);
+      tr.appendChild(dueTd);
+      tr.appendChild(barTd);
       tbody.appendChild(tr);
     });
 
     table.appendChild(tbody);
-    ganttContainer.appendChild(table);
+
+    const ganttWrapper = document.createElement('div');
+    ganttWrapper.appendChild(ticksHeader);
+    ganttWrapper.appendChild(table);
+
+    ganttContainer.appendChild(ganttWrapper);
   }
 
   // --------------------------------------------------------------------------
@@ -1042,286 +861,6 @@
     };
   }
 
-  function showRootDropzone() {
-    if (rootDropzone) {
-      rootDropzone.classList.remove('hidden');
-    }
-  }
-
-  function hideRootDropzone() {
-    if (rootDropzone) {
-      rootDropzone.classList.add('hidden');
-      rootDropzone.classList.remove('drag-over');
-    }
-  }
-
-  function createTaskCard(task, isKanbanView = false) {
-    const item = document.createElement('div');
-    item.className = `task-item ${focusedTaskId === task.id ? 'focused' : ''} ${isKanbanView ? 'kanban-item' : ''}`;
-    if (!isKanbanView) {
-      item.setAttribute('draggable', 'true');
-    }
-    item.dataset.taskId = task.id;
-
-    item.addEventListener('click', (e) => {
-      e.stopPropagation();
-      setFocusedTask(task.id);
-    });
-
-    if (!isKanbanView) {
-      item.addEventListener('dragstart', (e) => {
-        e.stopPropagation();
-        draggedTaskId = task.id;
-        item.classList.add('dragging');
-        e.dataTransfer.setData('text/plain', task.id);
-        showRootDropzone();
-      });
-
-      item.addEventListener('dragend', (e) => {
-        e.stopPropagation();
-        draggedTaskId = null;
-        item.classList.remove('dragging');
-        document.querySelectorAll('.drop-target-parent').forEach((el) => el.classList.remove('drop-target-parent'));
-        hideRootDropzone();
-      });
-
-      item.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (draggedTaskId && draggedTaskId !== task.id && !isDescendantOf(task.id, draggedTaskId)) {
-          item.classList.add('drop-target-parent');
-        }
-      });
-
-      item.addEventListener('dragleave', (e) => {
-        e.stopPropagation();
-        item.classList.remove('drop-target-parent');
-      });
-
-      item.addEventListener('drop', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        item.classList.remove('drop-target-parent');
-        const sourceTaskId = e.dataTransfer.getData('text/plain') || draggedTaskId;
-
-        if (sourceTaskId && sourceTaskId !== task.id) {
-          if (isDescendantOf(task.id, sourceTaskId)) {
-            showErrorToast('親タスクを自己の子孫タスクの中に移動することはできません。');
-            return;
-          }
-          changeTaskParent(sourceTaskId, task.id);
-        }
-      });
-    }
-
-    const top = document.createElement('div');
-    top.className = 'task-top';
-
-    const titleGroup = document.createElement('div');
-    titleGroup.className = 'task-title-group';
-
-    const children = currentTasks.filter((t) => t.parentId === task.id);
-    const isParent = children.length > 0;
-
-    if (isParent && currentViewMode === 'TREE_VIEW') {
-      const collapsed = isTaskCollapsed(task.id);
-      const btnToggle = document.createElement('button');
-      btnToggle.className = 'btn-toggle-tree';
-      btnToggle.textContent = collapsed ? '[+]' : '[-]';
-      btnToggle.title = collapsed ? '子タスクを展開' : '子タスクを折りたたむ';
-      btnToggle.onclick = (e) => {
-        e.stopPropagation();
-        toggleTaskCollapse(task.id);
-      };
-      titleGroup.appendChild(btnToggle);
-    }
-
-    const titleEl = document.createElement('div');
-    titleEl.className = 'task-title';
-    titleEl.textContent = task.title;
-    titleGroup.appendChild(titleEl);
-
-    const btnDelete = document.createElement('button');
-    btnDelete.className = 'btn-delete';
-    btnDelete.textContent = '削除';
-    btnDelete.title = 'タスクを削除';
-    btnDelete.onclick = (e) => {
-      e.stopPropagation();
-      if (confirm(`タスク「${task.title}」を削除しますか？`)) {
-        deleteTask(task.id);
-      }
-    };
-
-    top.appendChild(titleGroup);
-    top.appendChild(btnDelete);
-    item.appendChild(top);
-
-    if (isParent) {
-      const completedCount = children.filter((c) => c.status === 'DONE').length;
-      const percentage = Math.round((completedCount / children.length) * 100);
-
-      const progressBadge = document.createElement('span');
-      progressBadge.className = `progress-pill-badge ${percentage === 100 ? 'done' : ''}`;
-      progressBadge.textContent = `${completedCount}/${children.length} (${percentage}%)`;
-      titleGroup.appendChild(progressBadge);
-    }
-
-    const footer = document.createElement('div');
-    footer.className = 'task-footer';
-
-    if (isParent) {
-      const lockBadge = document.createElement('div');
-      lockBadge.className = 'status-locked-badge';
-      lockBadge.textContent = '子タスク連動';
-      footer.appendChild(lockBadge);
-    } else {
-      const statusGroup = document.createElement('div');
-      statusGroup.className = 'status-btn-group';
-
-      const statuses = [
-        { key: 'TODO', label: 'TODO' },
-        { key: 'IN_PROGRESS', label: 'PROGRESS' },
-        { key: 'DONE', label: 'DONE' },
-      ];
-
-      const labelNames = { TODO: '未着手(TODO)', IN_PROGRESS: '進行中(IN_PROGRESS)', DONE: '完了(DONE)' };
-      statuses.forEach((s) => {
-        const btn = document.createElement('button');
-        btn.className = `status-btn ${task.status === s.key ? `active-${s.key}` : ''}`;
-        btn.textContent = s.label;
-        btn.onclick = (e) => {
-          e.stopPropagation();
-          if (task.status !== s.key) {
-            if (currentViewMode === 'KANBAN_VIEW') {
-              promptActionConfirmation({
-                title: 'カンバン移動の確認',
-                message: `タスク「${task.title}」のステータスを「${labelNames[task.status]}」から「${labelNames[s.key]}」へ変更しますか？ (Enterキーで実行)`,
-                onConfirm: () => updateTaskStatus(task.id, s.key),
-              });
-            } else {
-              updateTaskStatus(task.id, s.key);
-            }
-          }
-        };
-        statusGroup.appendChild(btn);
-      });
-
-      footer.appendChild(statusGroup);
-    }
-
-    const authorSpan = document.createElement('span');
-    authorSpan.textContent = `Node: ${task.authorNodeId || 'local'}`;
-    footer.appendChild(authorSpan);
-
-    item.appendChild(footer);
-    return item;
-  }
-
-  function setFocusedTask(taskId) {
-    focusedTaskId = taskId;
-
-    let target = currentTasks.find((t) => t.id === taskId);
-    while (target && target.parentId) {
-      const parentTask = currentTasks.find((t) => t.id === target.parentId);
-      if (parentTask) {
-        if (localCollapsedTaskIds.has(parentTask.id)) {
-          localCollapsedTaskIds.delete(parentTask.id);
-          localStorage.setItem('share_log_local_collapsed_tasks', JSON.stringify(Array.from(localCollapsedTaskIds)));
-        }
-        target = parentTask;
-      } else {
-        break;
-      }
-    }
-
-    renderCurrentView();
-
-    setTimeout(() => {
-      highlightFocusedTaskCard(taskId);
-    }, 60);
-  }
-
-  function highlightFocusedTaskCard(taskId) {
-    let targetEl = null;
-    document.querySelectorAll('.task-item, .unclassified-item').forEach((el) => {
-      if (el.dataset.taskId === taskId) {
-        el.classList.add('focused');
-        targetEl = el;
-      } else {
-        el.classList.remove('focused');
-      }
-    });
-
-    if (targetEl) {
-      targetEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }
-  }
-
-  function setupDragAndDrop() {
-    columns.forEach((col) => {
-      col.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        col.classList.add('drag-over');
-      });
-
-      col.addEventListener('dragleave', () => {
-        col.classList.remove('drag-over');
-      });
-
-      col.addEventListener('drop', (e) => {
-        e.preventDefault();
-        col.classList.remove('drag-over');
-        const targetStatus = col.dataset.status;
-        const taskId = e.dataTransfer.getData('text/plain') || draggedTaskId;
-
-        if (taskId && targetStatus) {
-          const task = currentTasks.find((t) => t.id === taskId);
-          if (task && task.status !== targetStatus) {
-            const labelNames = { TODO: '未着手(TODO)', IN_PROGRESS: '進行中(IN_PROGRESS)', DONE: '完了(DONE)' };
-            promptActionConfirmation({
-              title: 'カンバン移動の確認',
-              message: `タスク「${task.title}」のステータスを「${labelNames[task.status]}」から「${labelNames[targetStatus]}」へ変更しますか？ (Enterキーで実行)`,
-              onConfirm: () => updateTaskStatus(taskId, targetStatus),
-            });
-          }
-        }
-      });
-    });
-
-    if (rootDropzone) {
-      rootDropzone.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        rootDropzone.classList.add('drag-over');
-      });
-      rootDropzone.addEventListener('dragleave', () => {
-        rootDropzone.classList.remove('drag-over');
-      });
-      rootDropzone.addEventListener('drop', (e) => {
-        e.preventDefault();
-        hideRootDropzone();
-        const sourceTaskId = e.dataTransfer.getData('text/plain') || draggedTaskId;
-        if (sourceTaskId) {
-          changeTaskParent(sourceTaskId, null);
-        }
-      });
-    }
-
-    if (pureTreeContainer) {
-      pureTreeContainer.addEventListener('dragover', (e) => {
-        e.preventDefault();
-      });
-      pureTreeContainer.addEventListener('drop', (e) => {
-        if (e.target === pureTreeContainer || e.target.classList.contains('empty-tree-notice')) {
-          e.preventDefault();
-          const sourceTaskId = e.dataTransfer.getData('text/plain') || draggedTaskId;
-          if (sourceTaskId) {
-            changeTaskParent(sourceTaskId, null);
-          }
-        }
-      });
-    }
-  }
-
   function setupKeyboardNavigation() {
     window.addEventListener('keydown', (e) => {
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) {
@@ -1332,7 +871,7 @@
         return;
       }
 
-      if (!confirmModal.classList.contains('hidden')) {
+      if (confirmModal && !confirmModal.classList.contains('hidden')) {
         return;
       }
 
@@ -1350,34 +889,9 @@
           nextIdx = currentIdx > 0 ? currentIdx - 1 : currentTasks.length - 1;
         }
 
-        setFocusedTask(currentTasks[nextIdx].id);
+        focusedTaskId = currentTasks[nextIdx].id;
+        renderCurrentView();
         return;
-      }
-
-      const activeSection = document.querySelector('.view-section:not(.hidden)');
-      if (!activeSection) return;
-
-      const visibleCards = Array.from(activeSection.querySelectorAll('.task-item, .unclassified-item'));
-      if (visibleCards.length === 0) return;
-
-      if (!focusedTaskId || !visibleCards.some((el) => el.dataset.taskId === focusedTaskId)) {
-        if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
-          e.preventDefault();
-          setFocusedTask(visibleCards[0].dataset.taskId);
-        }
-        return;
-      }
-
-      const currentCardIdx = visibleCards.findIndex((el) => el.dataset.taskId === focusedTaskId);
-
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        const nextIdx = currentCardIdx >= 0 && currentCardIdx < visibleCards.length - 1 ? currentCardIdx + 1 : 0;
-        setFocusedTask(visibleCards[nextIdx].dataset.taskId);
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        const prevIdx = currentCardIdx > 0 ? currentCardIdx - 1 : visibleCards.length - 1;
-        setFocusedTask(visibleCards[prevIdx].dataset.taskId);
       }
     });
   }
@@ -1390,7 +904,7 @@
           action: 'UPDATE_STATUS',
           taskId,
           status: newStatus,
-          newOrderIndex: Date.now(),
+          // Note: preserve existing orderIndex by omitting newOrderIndex
         })
       );
     }
@@ -1403,6 +917,18 @@
           action: 'UPDATE_TITLE',
           taskId,
           title: newTitle,
+        })
+      );
+    }
+  }
+
+  function updateTaskDueDate(taskId, dueDate) {
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(
+        JSON.stringify({
+          action: 'UPDATE_DUE_DATE',
+          taskId,
+          dueDate,
         })
       );
     }
@@ -1456,7 +982,6 @@
   });
 
   initTheme();
-  setupDragAndDrop();
   setupKeyboardNavigation();
   initWebSocket();
 })();

@@ -673,6 +673,12 @@
       if (task.dueDate && task.dueDate > maxTime) maxTime = task.dueDate;
     });
 
+    // Ensure timeline bounds fit the furthest completion due date with padding
+    const maxDueDate = Math.max(...currentTasks.map((t) => t.dueDate || 0), 0);
+    if (maxDueDate > 0) {
+      maxTime = Math.max(maxTime, maxDueDate + 86400000 * 2);
+    }
+
     if (minTime === Infinity) minTime = now - 86400000 * 7;
     // Default at least 30-day timeline span
     const thirtyDaysMs = 86400000 * 30;
@@ -867,11 +873,18 @@
         return;
       }
 
-      if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter'].includes(e.key)) {
+      if (confirmModal && !confirmModal.classList.contains('hidden')) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          if (btnModalConfirm) btnModalConfirm.click();
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          if (btnModalCancel) btnModalCancel.click();
+        }
         return;
       }
 
-      if (confirmModal && !confirmModal.classList.contains('hidden')) {
+      if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter', 'Escape'].includes(e.key)) {
         return;
       }
 

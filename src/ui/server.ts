@@ -169,7 +169,8 @@ async function main() {
         evt.timestamp = now - offset;
 
         if (evt.type === 'TASK_CREATED') {
-          evt.payload.dueDate = now + (idx % 2 === 0 ? 10 : -10) * DAY_MS;
+          const dueOffsets = [15 * DAY_MS, 30 * DAY_MS, 45 * DAY_MS, 60 * DAY_MS, 75 * DAY_MS, 90 * DAY_MS];
+          evt.payload.dueDate = now + dueOffsets[idx % dueOffsets.length];
         }
       });
 

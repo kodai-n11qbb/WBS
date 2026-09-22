@@ -78,21 +78,29 @@ export interface Task {
 
 ---
 
-## 4. UI ビジュアル仕様
+## 4. UI ビジュアル ＆ インタラクション仕様
 
-### (1) Obsidian Graph View（前面メイン表示）
-- 全画面キャンバス上にタスクネットワークを描画。
-- **階層型Y軸重力 (Hierarchical Gravity)**: 上位の親・祖先ノードほど画面上部へ移動し、配下の子・孫ノードは下方向へぶら下がるように物理配置。
-- **実用重視の静かな描画**: 過度な装飾やド派手なエフェクトを排した直感的なノード表示。
+### (1) クリーン・モノトーンデザイン ＆ テーマ切り替え (Linear / Raycast Style)
+- 過度なBlobアニメーション背景やネオングローを全廃し、Linear / Raycast 風のソリッドで機能美を重視したデザインを採用。
+- CSSカスタムプロパティ (`[data-theme="dark"]` / `[data-theme="light"]`) による瞬時のテーマ切替と `localStorage` 永続化。
 
-### (2) 画面端 ネスト表示深度コントロール (Screen Edge Nesting Depth Control)
-- 画面端に配置されたコントロールにより、表示するネストの深さを切り替え可能：
-  - **デフォルト (Default)**: 主要階層までのバランス表示
-  - **数値指定 (Custom Number)**: 階層数 (1, 2, 3...) の明示指定
-  - **すべて表示 (All)**: 全深度の展開表示
+### (2) Obsidian Graph View ＆ ノード・インスペクター
+- **ノード直接クリック動作**: ノードを選択・クリックするとノード近傍にインスペクターポップオーバーを表示。
+  - **タイトル編集**: 即座のインライン入力・保存 (`TASK_TITLE_UPDATED`)。
+  - **1タップステータス切り替え**: `TODO` / `IN_PROGRESS` / `DONE` の即時変更 (`TASK_STATUS_UPDATED`)。
+  - **ルート化昇格**: `[ ⇡ ルート化 ]` ボタンで親タスク解除 (`TASK_PARENT_CHANGED`)。
 
-### (3) 整理された最小限ヘッダー (Minimal Header)
-- 最小限のタイトル表記、ネットワーク接続ステータス、最低限のボタンのみで構成されるクリーンなヘッダー。
+### (3) 共通化された子要素のルート化メカニズム (Subtask-to-Root Unification)
+- Obsidian / ツリー / カンバンのすべてのビューにおいて：
+  - 各要素の `[ ⇡ ルート化 ]` 操作ボタン
+  - ドラッグ時に画面上部に表示される `[ ⇡ ルート化エリア ]` ヘッダードロップゾーン
+  の両対応により、操作に迷わない統一感を提供。
+
+### (4) イベントログ連携 ガントチャート表示 (Gantt Chart Timeline View)
+- `events.jsonl` の全イベントログを時間軸にリデュース：
+  - 開始時間 (`TASK_CREATED` イベントの timestamp)
+  - 状態変更・完了時間 (`TASK_STATUS_UPDATED` イベントの timestamp)
+  - 経過時間（作業所要時間）のプロットおよびステータスカラー表示。
 
 ---
 
@@ -102,9 +110,10 @@ export interface Task {
 1. `PROJECT_CREATED`: プロジェクト初期化
 2. `TASK_CREATED`: タスク生成
 3. `TASK_STATUS_UPDATED`: ステータス変更
-4. `TASK_PARENT_CHANGED`: 親タスク変更（階層移動）
-5. `TASK_REORDERED`: 表示順序変更
-6. `TASK_DELETED`: タスク削除
+4. `TASK_TITLE_UPDATED`: タスク名（タイトル）変更
+5. `TASK_PARENT_CHANGED`: 親タスク変更（階層移動・ルート化）
+6. `TASK_REORDERED`: 表示順序変更
+7. `TASK_DELETED`: タスク削除
 
 ### (2) 同期フロー (LAN P2P Event Reconciliation)
 - 各ノードは起動時に UDP ピア発見を実行し、接続要求 (`SYNC_REQUEST`) を送信。
@@ -114,3 +123,4 @@ export interface Task {
 ---
 
 [次へ: 拡張性およびプラグイン設計](./04_extension_spec.md)
+

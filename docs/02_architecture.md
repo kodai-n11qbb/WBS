@@ -11,7 +11,7 @@
 ```
 +-----------------------------------------------------------------------------------------+
 |                                   Presentation Layer                                    |
-|   (Obsidian Graph Canvas [Primary] / Minimalist Header / Edge Depth Control / Prompt Bar)|
+| (Obsidian Canvas / Node Inspector / Gantt Timeline / Tree & Kanban / Theme Switcher)    |
 +-------------------------------------------+---------------------------------------------+
                                             | (Interfaces)
 +-------------------------------------------v---------------------------------------------+
@@ -34,30 +34,40 @@
 - **機能**:
   - **階層型Y軸重力 (Hierarchical Gravity)**: 親の親（上位祖先）ほど自然と画面上部へ移動し、配下の子ノードは下方向へ浮遊配置される物理バイアス。
   - **画面端 ネスト表示深度コントロール (Edge Nest Depth Filter)**: 画面端に配置されたコントローラーから表示階層範囲（デフォルト / カスタム数値 / 全表示）を切り替え。
-  - ノードドラッグ時のバネ弾性追従と、過度な装飾を排した実用的で静かな視覚表現。
+  - **Obsidian Node Inspector Port**: ノードクリックによるツールバー表示（タイトル編集、1タップステータス切り替え、親切り離しルート化）。
 
-### (2) Minimalist Header & Prompt Bar Port (最小限ヘッダー＆プロンプトバーポート)
-- **役割**: 余計な情報を削ぎ落とした最小限のタイトル表示、ネットワーク接続ステータス、最低限の操作ボタン、および画面下部固定のタスク追加入力。
+### (2) Unified Parent Elevation & Drag Drop Port (共通親変更・ルート昇格ポート)
+- **役割**: 全ビュー（Obsidian, Tree, Kanban）における統一された子タスクのルート化 (`parentId: null`) インターフェース。
+- **機能**:
+  - ノード/カードからのワンタップ `[ ⇡ ルート化 ]` 操作。
+  - ドラッグ開始時に出現するヘッダー共通ドロップゾーン処理。
 
-### (3) State Snapshot & Event Storage Port (最新状態スナップショット＆イベントリポジトリポート)
+### (3) Gantt Timeline View Port (イベントログ連携 ガントチャートポート)
+- **役割**: `events.jsonl` の不変イベント履歴（`TASK_CREATED`, `TASK_STATUS_UPDATED` 等）から、横軸時間のタスクライフサイクルバーおよび進行状況をレンダリングするポート。
+
+### (4) Minimalist Header & Theme Port (最小限ヘッダー＆テーマ切替ポート)
+- **役割**: タイトル、ネットワーク状態、4ビュー切替 (`グラフ`, `ツリー`, `カンバン`, `ガント`)、および Linear/Raycast スタイルの Dark/Light テーマ切り替え管理。
+
+### (5) State Snapshot & Event Storage Port (最新状態スナップショット＆イベントリポジトリポート)
 - **役割**: 変更履歴 (`events.jsonl`) のバックグラウンド記録と、ディレクトリ直下への最新状態ファイル (`data/state.json`) のリアルタイム自動永続化。
 - **機能**:
   - `data/state.json` に最新の全タスク状態（Materialized Snapshot）を常時出力し、アプリ起動速度 $O(1)$ および他ツール・手動参照の可視性を実現。
   - `data/events.jsonl` により P2P ネットワーク差分マージ (`SYNC_REQUEST` / `SYNC_RESPONSE`) と改ざん防止ハッシュチェーンを維持。
 
-### (4) Status Aggregator & Single-Parent Hierarchy Port (進捗算出・単一親構造ポート)
+### (6) Status Aggregator & Single-Parent Hierarchy Port (進捗算出・単一親構造ポート)
 - **役割**:
   - 子タスクの状態から親タスクの進捗率を動的算出。
   - 1:Nの単一親ツリー構造 (`parentId?: string | null`) を厳守し、巡回（Cycle）参照の発生を防止。
 
-### (5) Standalone Executable Packaging Adapter (環境依存ゼロ・単一バイナリパッケージング)
+### (7) Standalone Executable Packaging Adapter (環境依存ゼロ・単一バイナリパッケージング)
 - **役割**: Node.js, Python, Docker, Rust 等が一切インストールされていない環境でも、単一バイナリ (`share-log-win.exe` / `share-log-macos-arm64`) をダブルクリックするだけでローカル Web サーバー (`http://localhost:3000`) が立ち上がり、規定のブラウザ画面を自動オープンするポータブルパッケージング構造。
 
 ---
 
 ## 3. Dependency Injection (DI) 方針
-- `StateSnapshotStorage` および `ObsidianPhysicsRenderer` もドメインコアから分離された独立ポートとして外部注入（DI）可能とします。
+- `StateSnapshotStorage`, `ObsidianPhysicsRenderer`, `GanttTimelineRenderer` もドメインコアから分離された独立ポートとして外部注入（DI）可能とします。
 
 ---
 
 [次へ: データモデルと同期仕様](./03_data_sync.md)
+

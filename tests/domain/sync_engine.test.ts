@@ -114,4 +114,32 @@ describe('SyncEngine (Tree Structure & Optional Attributes)', () => {
     expect(state.tasks.has('t-parent')).toBe(false);
     expect(state.tasks.has('t-child')).toBe(false);
   });
+
+  it('should handle TASK_TITLE_UPDATED event', () => {
+    const engine = new SyncEngine();
+    const events: SyncEvent[] = [
+      {
+        id: 'e1',
+        projectId: 'p1',
+        authorNodeId: 'node-A',
+        timestamp: 1000,
+        sequence: 1,
+        type: 'TASK_CREATED',
+        payload: { taskId: 't1', title: 'Old Title', status: 'TODO', orderIndex: 0 },
+      },
+      {
+        id: 'e2',
+        projectId: 'p1',
+        authorNodeId: 'node-A',
+        timestamp: 1100,
+        sequence: 2,
+        type: 'TASK_TITLE_UPDATED',
+        payload: { taskId: 't1', title: 'New Updated Title' },
+      },
+    ];
+
+    const state = engine.reduceEvents(events);
+    expect(state.tasks.get('t1')?.title).toBe('New Updated Title');
+  });
 });
+

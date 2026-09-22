@@ -84,28 +84,73 @@ async function main() {
     await repository.init();
     await nodeService.start();
 
-    const allEvents = await nodeService.getAllEvents();
-    if (allEvents.length === 0) {
-      await nodeService.createProject('LAN Share-Log Project');
+    const state = await nodeService.getProjectState(activeProjectId);
+    if (state.tasks.size === 0) {
+      const allEvents = await nodeService.getAllEvents();
+      if (allEvents.length === 0) {
+        await nodeService.createProject('LAN Share-Log Project');
+      }
 
-      const parentEvent = await nodeService.createTask(activeProjectId, {
+      // Root 1: Multi-level Core Task
+      const root1 = await nodeService.createTask(activeProjectId, {
         title: '親タスク: LAN内P2Pローカルファースト開発',
         priority: 'HIGH',
         status: 'IN_PROGRESS',
       });
+      const root1Id = root1.payload.taskId;
 
-      const parentId = parentEvent.payload.taskId;
+      // Mid Level 1 under Root 1
+      const mid1 = await nodeService.createTask(activeProjectId, {
+        parentId: root1Id,
+        title: '中階層: ストレージ＆同期基盤の構築',
+        status: 'IN_PROGRESS',
+      });
+      const mid1Id = mid1.payload.taskId;
 
+      // Leaf tasks under Mid 1
       await nodeService.createTask(activeProjectId, {
-        parentId,
-        title: '子タスク 1: JSONLファイル永続化の検証',
+        parentId: mid1Id,
+        title: '子タスク: JSONLイベントログの永続化',
         status: 'DONE',
       });
 
       await nodeService.createTask(activeProjectId, {
-        parentId,
-        title: '子タスク 2: ツリー構造・Drag&Dropの確認',
+        parentId: mid1Id,
+        title: '子タスク: P2P差分同期エンジンの検証',
+        status: 'IN_PROGRESS',
+      });
+
+      // Mid Level 2 under Root 1
+      const mid2 = await nodeService.createTask(activeProjectId, {
+        parentId: root1Id,
+        title: '中階層: UI＆可視化レイヤーの開発',
         status: 'TODO',
+      });
+      const mid2Id = mid2.payload.taskId;
+
+      // Leaf tasks under Mid 2
+      await nodeService.createTask(activeProjectId, {
+        parentId: mid2Id,
+        title: '子タスク: Obsidianノードグラフバネ物理の実装',
+        status: 'DONE',
+      });
+
+      await nodeService.createTask(activeProjectId, {
+        parentId: mid2Id,
+        title: '子タスク: 樹状ツリー＆カンバン表示の統合',
+        status: 'IN_PROGRESS',
+      });
+
+      await nodeService.createTask(activeProjectId, {
+        parentId: mid2Id,
+        title: '子タスク: ログベース・ガントチャートプロット',
+        status: 'TODO',
+      });
+
+      // Root 2: Standalone Task
+      await nodeService.createTask(activeProjectId, {
+        title: '独立ルートタスク: 全体ロードマップの策定',
+        status: 'DONE',
       });
     }
 
@@ -173,12 +218,14 @@ async function main() {
     connectedClients.add(ws);
 
     const state = await nodeService.getProjectState(activeProjectId);
+    const events = await nodeService.getAllEvents();
     ws.send(
       JSON.stringify({
         type: 'STATE_INIT',
         nodeId: NODE_ID,
         projectId: activeProjectId,
         dataFile: DATA_FILE,
+        events,
         state: {
           project: state.project,
           tasks: Array.from(state.tasks.values()),
@@ -214,6 +261,18 @@ async function main() {
             data.newOrderIndex
           );
           await broadcastStateToUI();
+        } else if (data.action === 'UPDATE_TITLE') {
+          try {
+            await nodeService.updateTaskTitle(activeProjectId, data.taskId, data.title);
+            await broadcastStateToUI();
+          } catch (err: any) {
+            ws.send(
+              JSON.stringify({
+                type: 'ERROR',
+                message: err.message || 'タイトル更新エラー',
+              })
+            );
+          }
         } else if (data.action === 'REORDER_TASK') {
           await nodeService.reorderTask(activeProjectId, data.taskId, data.newOrderIndex);
           await broadcastStateToUI();
@@ -238,10 +297,12 @@ async function main() {
 
   async function broadcastStateToUI() {
     const state = await nodeService.getProjectState(activeProjectId);
+    const events = await nodeService.getAllEvents();
     const payload = JSON.stringify({
       type: 'STATE_UPDATE',
       nodeId: NODE_ID,
       projectId: activeProjectId,
+      events,
       state: {
         project: state.project,
         tasks: Array.from(state.tasks.values()),

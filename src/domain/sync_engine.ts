@@ -78,6 +78,17 @@ export class SyncEngine {
           break;
         }
 
+        case 'TASK_TITLE_UPDATED': {
+          const { taskId, title } = event.payload;
+          const existing = state.tasks.get(taskId);
+          if (existing && typeof title === 'string') {
+            existing.title = title.trim();
+            existing.updatedAt = event.timestamp;
+          }
+          break;
+        }
+
+
         case 'TASK_REORDERED': {
           const { taskId, newOrderIndex } = event.payload;
           const existing = state.tasks.get(taskId);

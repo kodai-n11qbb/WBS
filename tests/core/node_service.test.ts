@@ -64,4 +64,24 @@ describe('NodeService (with Tree Tasks & Flexible Attributes)', () => {
     const state = await service.getProjectState('p1');
     expect(state.tasks.get(taskId)?.parentId).toBe('new-parent-id');
   });
+
+  it('should update task title via updateTaskTitle', async () => {
+    const taskEvent = await service.createTask('p1', { title: 'Initial Title' });
+    const taskId = taskEvent.payload.taskId;
+
+    await service.updateTaskTitle('p1', taskId, 'Updated Title via NodeService');
+
+    const state = await service.getProjectState('p1');
+    expect(state.tasks.get(taskId)?.title).toBe('Updated Title via NodeService');
+  });
+
+  it('should throw error when updating task title to empty string', async () => {
+    const taskEvent = await service.createTask('p1', { title: 'Valid Title' });
+    const taskId = taskEvent.payload.taskId;
+
+    await expect(service.updateTaskTitle('p1', taskId, '   ')).rejects.toThrow(
+      'タスクタイトルは空にできません'
+    );
+  });
 });
+

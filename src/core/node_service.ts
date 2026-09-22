@@ -152,6 +152,31 @@ export class NodeService {
     return event;
   }
 
+  public async updateTaskTitle(
+    projectId: string,
+    taskId: string,
+    title: string
+  ): Promise<SyncEvent> {
+    if (!title || !title.trim()) {
+      throw new Error('タスクタイトルは空にできません');
+    }
+    const event: SyncEvent = {
+      id: crypto.randomUUID(),
+      projectId,
+      authorNodeId: this.nodeId,
+      timestamp: Date.now(),
+      sequence: ++this.sequenceCounter,
+      type: 'TASK_TITLE_UPDATED',
+      payload: { taskId, title: title.trim() },
+    };
+
+    await this.repository.saveEvent(event);
+    await this.transport.broadcast({ type: 'EVENT_BROADCAST', event });
+    await this.exportSnapshot(projectId);
+    return event;
+  }
+
+
   public async reorderTask(
     projectId: string,
     taskId: string,

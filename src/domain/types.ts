@@ -1,6 +1,6 @@
 export type TaskStatus = 'TODO' | 'IN_PROGRESS' | 'DONE';
 export type TaskPriority = 'HIGH' | 'MEDIUM' | 'LOW';
-export type ViewMode = 'TREE_VIEW' | 'OBSIDIAN_GRAPH_VIEW' | 'KANBAN_VIEW';
+export type ViewMode = 'TREE_VIEW' | 'OBSIDIAN_GRAPH_VIEW' | 'KANBAN_VIEW' | 'GANTT_VIEW';
 
 export interface Task {
   id: string;
@@ -26,10 +26,12 @@ export type EventType =
   | 'PROJECT_CREATED'
   | 'TASK_CREATED'
   | 'TASK_STATUS_UPDATED'
+  | 'TASK_TITLE_UPDATED'
   | 'TASK_REORDERED'
   | 'TASK_PARENT_CHANGED'
   | 'TASK_COLLAPSE_TOGGLED'
   | 'TASK_DELETED';
+
 
 export interface SyncEvent {
   id: string;

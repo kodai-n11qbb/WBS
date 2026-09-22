@@ -1,15 +1,45 @@
 (function () {
   let socket = null;
   let currentTasks = [];
+  let currentEvents = [];
   let draggedTaskId = null;
   let focusedTaskId = null;
+  let inspectorSelectedTaskId = null;
 
-  // View Modes: 'OBSIDIAN_GRAPH_VIEW' | 'TREE_VIEW' | 'KANBAN_VIEW'
+  // View Modes: 'OBSIDIAN_GRAPH_VIEW' | 'TREE_VIEW' | 'KANBAN_VIEW' | 'GANTT_VIEW'
   let currentViewMode = 'OBSIDIAN_GRAPH_VIEW';
   let userPreferredViewMode = 'OBSIDIAN_GRAPH_VIEW';
 
   // Edge Nest Depth Filter (1, 2, 3... or 'all')
   let currentMaxDepth = 2;
+
+  // 1. Theme Manager (Dark / Light Theme Switcher)
+  const btnThemeToggle = document.getElementById('btn-theme-toggle');
+  const themeToggleIcon = document.getElementById('theme-toggle-icon');
+
+  function initTheme() {
+    const savedTheme = localStorage.getItem('share_log_theme') || 'dark';
+    applyTheme(savedTheme);
+  }
+
+  function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    if (themeToggleIcon) {
+      themeToggleIcon.textContent = theme === 'dark' ? 'ダーク' : 'ライト';
+    }
+    localStorage.setItem('share_log_theme', theme);
+  }
+
+  if (btnThemeToggle) {
+    btnThemeToggle.addEventListener('click', () => {
+      const current = document.documentElement.getAttribute('data-theme') || 'dark';
+      const next = current === 'dark' ? 'light' : 'dark';
+      applyTheme(next);
+      if (currentViewMode === 'OBSIDIAN_GRAPH_VIEW') {
+        renderCurrentView();
+      }
+    });
+  }
 
   function getTaskDepth(task) {
     let depth = 0;
@@ -23,7 +53,7 @@
     return depth;
   }
 
-  // Local UI State: Tree collapse state is local to each client and NOT synced over P2P/WebSocket
+  // Local UI State: Tree collapse state is local to each client
   const localCollapsedTaskIds = new Set(
     JSON.parse(localStorage.getItem('share_log_local_collapsed_tasks') || '[]')
   );
@@ -49,15 +79,16 @@
   let canvasAnimationId = null;
   let graphNodes = [];
   let draggedGraphNode = null;
-  let pendingParentingAction = null; // { childTaskId, parentTaskId }
 
   // DOM Elements
   const nodeDisplay = document.getElementById('node-id-display');
   const errorToast = document.getElementById('error-toast');
+  const rootDropzone = document.getElementById('root-dropzone');
 
   const btnViewTree = document.getElementById('btn-view-tree');
   const btnViewGraph = document.getElementById('btn-view-graph');
   const btnViewKanban = document.getElementById('btn-view-kanban');
+  const btnViewGantt = document.getElementById('btn-view-gantt');
 
   const quickForm = document.getElementById('quick-task-form');
   const quickInputTitle = document.getElementById('quick-title-input');
@@ -72,8 +103,14 @@
   const obsidianGraphViewSection = document.getElementById('obsidian-graph-view');
   const canvas = document.getElementById('obsidian-canvas');
 
+  const obsidianInspector = document.getElementById('obsidian-inspector');
+  const inspectorStatusBadge = document.getElementById('inspector-status-badge');
+  const inspectorTitleInput = document.getElementById('inspector-title-input');
+  const btnInspectorClose = document.getElementById('btn-inspector-close');
+  const btnInspectorElevate = document.getElementById('btn-inspector-elevate');
+  const btnInspectorDelete = document.getElementById('btn-inspector-delete');
+
   const confirmModal = document.getElementById('confirm-parent-modal');
-  const confirmModalIcon = document.getElementById('confirm-modal-icon');
   const confirmModalTitle = document.getElementById('confirm-modal-title');
   const confirmModalText = document.getElementById('confirm-modal-text');
   const btnModalCancel = document.getElementById('btn-modal-cancel');
@@ -90,23 +127,9 @@
 
   const columns = document.querySelectorAll('.kanban-column');
 
-  const floatingInboxContainer = document.getElementById('floating-inbox-container');
-  const floatingInboxDrawer = document.getElementById('floating-inbox-drawer');
-  const btnToggleInbox = document.getElementById('btn-toggle-inbox');
-  const btnCloseInbox = document.getElementById('btn-close-inbox');
-  const floatingInboxBadge = document.getElementById('floating-inbox-badge');
-  const floatingInboxList = document.getElementById('floating-inbox-list');
-
-  if (btnToggleInbox && floatingInboxDrawer) {
-    btnToggleInbox.addEventListener('click', () => {
-      floatingInboxDrawer.classList.toggle('hidden');
-    });
-  }
-  if (btnCloseInbox && floatingInboxDrawer) {
-    btnCloseInbox.addEventListener('click', () => {
-      floatingInboxDrawer.classList.add('hidden');
-    });
-  }
+  const ganttViewSection = document.getElementById('gantt-view');
+  const ganttContainer = document.getElementById('gantt-container');
+  const ganttStatsBadge = document.getElementById('gantt-stats-badge');
 
   // WebSocket Setup
   function initWebSocket() {
@@ -124,7 +147,9 @@
         if (data.type === 'STATE_INIT' || data.type === 'STATE_UPDATE') {
           nodeDisplay.textContent = `Node: ${data.nodeId}`;
           currentTasks = data.state.tasks || [];
+          currentEvents = data.events || [];
           updateParentTaskOptions();
+          updateInspectorViewIfNeeded();
           renderCurrentView();
         } else if (data.type === 'ERROR') {
           showErrorToast(data.message);
@@ -154,13 +179,13 @@
 
     const rootOpt = document.createElement('option');
     rootOpt.value = '';
-    rootOpt.textContent = '📁 ルートタスク (親指定なし)';
+    rootOpt.textContent = 'ルートタスク (親指定なし)';
     selectQuickParent.appendChild(rootOpt);
 
     currentTasks.forEach((t) => {
       const opt = document.createElement('option');
       opt.value = t.id;
-      opt.textContent = `📁 ${t.title}`;
+      opt.textContent = `タスク: ${t.title}`;
       selectQuickParent.appendChild(opt);
     });
 
@@ -169,10 +194,13 @@
     }
   }
 
-  // 3-Mode View Buttons Setup
+  // 4-Mode View Buttons Setup
   btnViewTree.addEventListener('click', () => setViewMode('TREE_VIEW', true));
   btnViewGraph.addEventListener('click', () => setViewMode('OBSIDIAN_GRAPH_VIEW', true));
   btnViewKanban.addEventListener('click', () => setViewMode('KANBAN_VIEW', true));
+  if (btnViewGantt) {
+    btnViewGantt.addEventListener('click', () => setViewMode('GANTT_VIEW', true));
+  }
 
   // Depth Filter Controls Setup
   const depthButtons = document.querySelectorAll('.depth-btn');
@@ -195,13 +223,23 @@
     btnViewTree.classList.toggle('active', mode === 'TREE_VIEW');
     btnViewGraph.classList.toggle('active', mode === 'OBSIDIAN_GRAPH_VIEW');
     btnViewKanban.classList.toggle('active', mode === 'KANBAN_VIEW');
+    if (btnViewGantt) {
+      btnViewGantt.classList.toggle('active', mode === 'GANTT_VIEW');
+    }
 
     pureTreeViewSection.classList.toggle('hidden', mode !== 'TREE_VIEW');
     obsidianGraphViewSection.classList.toggle('hidden', mode !== 'OBSIDIAN_GRAPH_VIEW');
     kanbanViewSection.classList.toggle('hidden', mode !== 'KANBAN_VIEW');
+    if (ganttViewSection) {
+      ganttViewSection.classList.toggle('hidden', mode !== 'GANTT_VIEW');
+    }
 
     if (treeUnclassifiedPanel) {
       treeUnclassifiedPanel.classList.toggle('hidden', mode !== 'TREE_VIEW');
+    }
+
+    if (mode !== 'OBSIDIAN_GRAPH_VIEW' && obsidianInspector) {
+      obsidianInspector.classList.add('hidden');
     }
 
     requestAnimationFrame(() => {
@@ -221,130 +259,14 @@
       startObsidianGraphRenderer();
     } else if (currentViewMode === 'KANBAN_VIEW') {
       renderKanbanView();
+    } else if (currentViewMode === 'GANTT_VIEW') {
+      renderGanttView();
     }
   }
 
-  // VIEW 1: Pure Tree View with Bottom-Right Unclassified Inbox Panel
-  function renderPureTreeView() {
-    pureTreeContainer.innerHTML = '';
-    if (treeUnclassifiedList) treeUnclassifiedList.innerHTML = '';
-
-    const hasSubtasks = (t) => currentTasks.some((child) => child.parentId === t.id);
-    const isRootTask = (t) => !t.parentId || !currentTasks.some((parent) => parent.id === t.parentId);
-
-    // 1. Render Unclassified Standalone Root Tasks in Bottom-Right Panel
-    const unclassifiedTasks = currentTasks.filter((t) => isRootTask(t) && !hasSubtasks(t))
-      .sort((a, b) => a.orderIndex - b.orderIndex);
-
-    if (unclassifiedCountBadge) {
-      unclassifiedCountBadge.textContent = unclassifiedTasks.length;
-    }
-
-    if (treeUnclassifiedList) {
-      if (unclassifiedTasks.length === 0) {
-        const emptyMsg = document.createElement('div');
-        emptyMsg.style.cssText = 'font-size: 0.78rem; color: var(--text-secondary); text-align: center; padding: 1rem;';
-        emptyMsg.textContent = '(未分類タスクはありません)';
-        treeUnclassifiedList.appendChild(emptyMsg);
-      } else {
-        unclassifiedTasks.forEach((task) => {
-          const item = document.createElement('div');
-          item.className = `unclassified-item ${focusedTaskId === task.id ? 'focused' : ''}`;
-          item.setAttribute('draggable', 'true');
-          item.dataset.taskId = task.id;
-
-          const titleSpan = document.createElement('span');
-          titleSpan.textContent = task.title;
-          titleSpan.style.cssText = 'white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px;';
-
-          const badge = document.createElement('span');
-          badge.className = `status-btn active-${task.status}`;
-          badge.style.cssText = 'font-size: 0.68rem; padding: 0.15rem 0.4rem; pointer-events: none;';
-          badge.textContent = task.status;
-
-          item.appendChild(titleSpan);
-          item.appendChild(badge);
-
-          item.addEventListener('click', (e) => {
-            e.stopPropagation();
-            setFocusedTask(task.id);
-          });
-
-          item.addEventListener('dragstart', (e) => {
-            e.stopPropagation();
-            draggedTaskId = task.id;
-            item.classList.add('dragging');
-            e.dataTransfer.setData('text/plain', task.id);
-          });
-
-          item.addEventListener('dragend', (e) => {
-            e.stopPropagation();
-            draggedTaskId = null;
-            item.classList.remove('dragging');
-            document.querySelectorAll('.drop-target-parent').forEach((el) => el.classList.remove('drop-target-parent'));
-          });
-
-          treeUnclassifiedList.appendChild(item);
-        });
-      }
-    }
-
-    // 2. Render All Root Tree Tasks in Container (Supports dropping unclassified items onto any root task)
-    const rootTreeTasks = currentTasks.filter(isRootTask).sort((a, b) => a.orderIndex - b.orderIndex);
-
-    if (rootTreeTasks.length === 0) {
-      const emptyTreeMsg = document.createElement('div');
-      emptyTreeMsg.className = 'empty-tree-notice';
-      emptyTreeMsg.style.cssText = 'font-size: 0.9rem; color: var(--text-secondary); text-align: center; padding: 3rem 1rem; border: 1px dashed var(--card-border); border-radius: var(--radius-md); margin-top: 1rem;';
-      emptyTreeMsg.textContent = 'ルートタスクがまだありません。上のプロンプトバーから新しいタスクを作成してください。';
-      pureTreeContainer.appendChild(emptyTreeMsg);
-    } else {
-      rootTreeTasks.forEach((rootTask) => {
-        const nodeEl = renderTaskTreeNode(rootTask);
-        pureTreeContainer.appendChild(nodeEl);
-      });
-    }
-
-    if (focusedTaskId) {
-      highlightFocusedTaskCard(focusedTaskId);
-    }
-  }
-
-  function renderTaskTreeNode(task) {
-    const isUnclassified = !task.parentId && (task.title.includes('未分類') || task.title.toLowerCase().includes('tmp'));
-    const nodeWrapper = document.createElement('div');
-    nodeWrapper.className = `task-tree-node ${task.parentId ? 'is-subtask' : ''} ${isUnclassified ? 'is-unclassified-container' : ''}`;
-
-    if (isUnclassified) {
-      const inboxHeader = document.createElement('div');
-      inboxHeader.className = 'inbox-section-banner';
-      inboxHeader.innerHTML = `<span>[ 未分類インボックス ] ドラッグ＆ドロップで各親タスクへ分類可能</span>`;
-      nodeWrapper.appendChild(inboxHeader);
-    }
-
-    const card = createTaskCard(task);
-    nodeWrapper.appendChild(card);
-
-    const children = currentTasks.filter((t) => t.parentId === task.id).sort((a, b) => a.orderIndex - b.orderIndex);
-    if (children.length > 0 && !isTaskCollapsed(task.id)) {
-      const childrenContainer = document.createElement('div');
-      childrenContainer.className = 'tree-children-container';
-      childrenContainer.style.display = 'flex';
-      childrenContainer.style.flexDirection = 'column';
-      childrenContainer.style.gap = '0.75rem';
-      childrenContainer.style.marginTop = '0.5rem';
-
-      children.forEach((childTask) => {
-        childrenContainer.appendChild(renderTaskTreeNode(childTask));
-      });
-
-      nodeWrapper.appendChild(childrenContainer);
-    }
-
-    return nodeWrapper;
-  }
-
-  // VIEW 2: Obsidian Graph Canvas Renderer with Spring Physics & Node Dragging
+  // --------------------------------------------------------------------------
+  // VIEW 1: Obsidian Canvas View & Node Click Quick Inspector
+  // --------------------------------------------------------------------------
   function startObsidianGraphRenderer() {
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -358,7 +280,6 @@
     canvas.width = Math.max(width, 300);
     canvas.height = Math.max(height, 300);
 
-    // Initialize or Sync Node Array
     const visibleTasks = currentTasks.filter((task) => {
       if (currentMaxDepth === 'all') return true;
       return getTaskDepth(task) < currentMaxDepth;
@@ -395,8 +316,20 @@
     function animate() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // 1. Calculate Spring Physics Elasticity & Repulsion (Overlap Prevention)
-      // (A) Spring Attraction between Parent & Child Nodes
+      const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+
+      // Draw subtle background grid
+      ctx.strokeStyle = isLight ? 'rgba(0, 0, 0, 0.04)' : 'rgba(255, 255, 255, 0.04)';
+      ctx.lineWidth = 1;
+      const gridSize = 40;
+      for (let x = 0; x < canvas.width; x += gridSize) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+      }
+      for (let y = 0; y < canvas.height; y += gridSize) {
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+      }
+
+      // Physics calculation
       graphNodes.forEach((node) => {
         if (node.task.parentId) {
           const parentNode = nodeMap.get(node.task.parentId);
@@ -404,8 +337,8 @@
             const dx = node.x - parentNode.x;
             const dy = node.y - parentNode.y;
             const dist = Math.hypot(dx, dy) || 1;
-            const restLength = 130; // Natural spring distance
-            const stiffness = 0.04; // Spring elasticity
+            const restLength = 130;
+            const stiffness = 0.04;
             const force = (dist - restLength) * stiffness;
             const fx = (dx / dist) * force;
             const fy = (dy / dist) * force;
@@ -422,14 +355,11 @@
         }
       });
 
-      // (B) Node-to-Node Repulsion Physics (Bypassed for actively dragged nodes)
       const minRepelDist = 130;
       for (let i = 0; i < graphNodes.length; i++) {
         for (let j = i + 1; j < graphNodes.length; j++) {
           const nodeA = graphNodes[i];
           const nodeB = graphNodes[j];
-
-          // If a node is currently grabbed by mouse, disable repulsion so it can overlap smoothly
           if (nodeA.isPinned || nodeB.isPinned) continue;
 
           const dx = nodeB.x - nodeA.x;
@@ -445,20 +375,10 @@
             nodeA.vy -= fy;
             nodeB.vx += fx;
             nodeB.vy += fy;
-
-            // Hard Separation Boundary (70px limit when idle)
-            if (dist < 70) {
-              const push = (70 - dist) / 2;
-              const px = (dx / dist) * push;
-              const py = (dy / dist) * push;
-              nodeA.x -= px; nodeA.y -= py;
-              nodeB.x += px; nodeB.y += py;
-            }
           }
         }
       }
 
-      // (C) Ambient Floating Motion & Hierarchical Y-Axis Gravity, Damping & Border Constraints
       const nowTime = Date.now() * 0.0012;
       graphNodes.forEach((node, idx) => {
         if (!node.isPinned) {
@@ -466,18 +386,15 @@
           const targetYRatio = depth === 0 ? 0.22 : (depth === 1 ? 0.48 : (depth === 2 ? 0.72 : 0.88));
           const targetY = canvas.height * targetYRatio;
 
-          // Hierarchical Y-Axis gravity force (Ancestors float top, children float below)
           const hierarchicalGravityY = (targetY - node.y) * 0.015;
           node.vy += hierarchicalGravityY;
 
-          // Gentle ambient floating wave forces
           const driftX = Math.cos(nowTime * 0.8 + idx * 1.5) * 0.06;
           const driftY = Math.sin(nowTime * 0.7 + idx * 2.1) * 0.06;
 
           node.vx += driftX;
           node.vy += driftY;
 
-          // Smooth Damping for continuous floating motion
           node.vx *= 0.94;
           node.vy *= 0.94;
 
@@ -492,7 +409,7 @@
         }
       });
 
-      // 2. Draw Connection Edges (Glowing Lines)
+      // Draw Edges
       graphNodes.forEach((node) => {
         if (node.task.parentId) {
           const parentNode = nodeMap.get(node.task.parentId);
@@ -500,13 +417,8 @@
             ctx.beginPath();
             ctx.moveTo(node.x, node.y);
             ctx.lineTo(parentNode.x, parentNode.y);
-
-            const gradient = ctx.createLinearGradient(node.x, node.y, parentNode.x, parentNode.y);
-            gradient.addColorStop(0, 'rgba(129, 140, 248, 0.65)');
-            gradient.addColorStop(1, 'rgba(56, 189, 248, 0.65)');
-
-            ctx.strokeStyle = gradient;
-            ctx.lineWidth = 2;
+            ctx.strokeStyle = isLight ? 'rgba(0, 0, 0, 0.22)' : 'rgba(255, 255, 255, 0.25)';
+            ctx.lineWidth = 1.5;
             ctx.setLineDash([4, 4]);
             ctx.stroke();
             ctx.setLineDash([]);
@@ -514,25 +426,24 @@
         }
       });
 
-      // 3. Draw Nodes (Dynamically Scaled by Child Task Count)
+      // Draw Nodes
       graphNodes.forEach((node) => {
-        let nodeColor = '#38bdf8'; // TODO: Blue
-        if (node.task.status === 'IN_PROGRESS') nodeColor = '#fbbf24'; // Amber
-        if (node.task.status === 'DONE') nodeColor = '#34d399'; // Green
+        let nodeColor = isLight ? '#64748b' : '#a1a1aa';
+        if (node.task.status === 'IN_PROGRESS') nodeColor = '#f59e0b';
+        if (node.task.status === 'DONE') nodeColor = '#10b981';
 
-        const isFocused = focusedTaskId === node.task.id;
+        const isFocused = focusedTaskId === node.task.id || inspectorSelectedTaskId === node.task.id;
         const childCount = currentTasks.filter((t) => t.parentId === node.task.id).length;
 
-        // Dynamic Sizing based on subtask count
-        const baseRadius = 8;
-        const coreRadius = baseRadius + Math.min(childCount * 4, 18); // Core radius scales from 8px to 26px
-        const haloRadius = coreRadius + (isFocused ? 12 : 8); // Glowing halo scales proportionally
+        const baseRadius = 9;
+        const coreRadius = baseRadius + Math.min(childCount * 4, 16);
+        const haloRadius = coreRadius + (isFocused ? 10 : 6);
 
-        // Glowing halo
+        // Halo
         ctx.beginPath();
         ctx.arc(node.x, node.y, haloRadius, 0, Math.PI * 2);
         ctx.fillStyle = nodeColor;
-        ctx.globalAlpha = isFocused ? 0.45 : 0.22;
+        ctx.globalAlpha = isFocused ? 0.35 : 0.15;
         ctx.fill();
 
         // Core Circle
@@ -540,24 +451,26 @@
         ctx.arc(node.x, node.y, coreRadius, 0, Math.PI * 2);
         ctx.globalAlpha = 1.0;
         ctx.fillStyle = nodeColor;
-        ctx.shadowColor = nodeColor;
-        ctx.shadowBlur = isFocused ? 22 : 12;
         ctx.fill();
-        ctx.shadowBlur = 0;
 
-        // Badge indicating child count for major hubs
+        if (isFocused) {
+          ctx.strokeStyle = isLight ? '#18181b' : '#ffffff';
+          ctx.lineWidth = 2.5;
+          ctx.stroke();
+        }
+
         if (childCount > 0) {
           ctx.font = 'bold 10px Inter, sans-serif';
-          ctx.fillStyle = '#0f172a';
+          ctx.fillStyle = '#ffffff';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
           ctx.fillText(`${childCount}`, node.x, node.y);
-          ctx.textBaseline = 'alphabetic'; // Reset
+          ctx.textBaseline = 'alphabetic';
         }
 
         // Label
-        ctx.font = childCount > 0 ? 'bold 12px Inter, sans-serif' : '12px Inter, sans-serif';
-        ctx.fillStyle = '#f8fafc';
+        ctx.font = isFocused ? 'bold 12px Inter, sans-serif' : '11px Inter, sans-serif';
+        ctx.fillStyle = isLight ? '#18181b' : '#f4f4f5';
         ctx.textAlign = 'center';
         ctx.fillText(node.task.title, node.x, node.y + haloRadius + 14);
       });
@@ -569,24 +482,6 @@
     setupCanvasInteractivity();
   }
 
-  // Cycle Prevention Helper Function
-  function isDescendantOf(candidateParentId, taskId) {
-    if (!candidateParentId || !taskId) return false;
-    if (candidateParentId === taskId) return true;
-
-    let currentId = candidateParentId;
-    const visited = new Set();
-    while (currentId) {
-      if (currentId === taskId) return true;
-      if (visited.has(currentId)) break;
-      visited.add(currentId);
-      const parentTask = currentTasks.find((t) => t.id === currentId);
-      currentId = parentTask ? parentTask.parentId : null;
-    }
-    return false;
-  }
-
-  // Canvas Mouse Dragging, Node Focus & Parent Drag-Drop Confirmation
   function setupCanvasInteractivity() {
     let isMouseDown = false;
     let clickStartX = 0;
@@ -605,6 +500,7 @@
         isMouseDown = true;
         draggedGraphNode = hitNode;
         hitNode.isPinned = true;
+        showRootDropzone();
       }
     };
 
@@ -613,6 +509,21 @@
         const rect = canvas.getBoundingClientRect();
         draggedGraphNode.x = e.clientX - rect.left;
         draggedGraphNode.y = e.clientY - rect.top;
+
+        // Check if mouse is hovering near top header dropzone
+        if (rootDropzone) {
+          const dropzoneRect = rootDropzone.getBoundingClientRect();
+          if (
+            e.clientX >= dropzoneRect.left &&
+            e.clientX <= dropzoneRect.right &&
+            e.clientY >= dropzoneRect.top &&
+            e.clientY <= dropzoneRect.bottom + 20
+          ) {
+            rootDropzone.classList.add('drag-over');
+          } else {
+            rootDropzone.classList.remove('drag-over');
+          }
+        }
       }
     };
 
@@ -621,78 +532,280 @@
       if (draggedGraphNode) {
         draggedGraphNode.isPinned = false;
 
-        if (dist < 5) {
-          // Clicked Node: Focus task & switch to tree/kanban view
-          const taskId = draggedGraphNode.task.id;
-          setViewMode(userPreferredViewMode === 'OBSIDIAN_GRAPH_VIEW' ? 'TREE_VIEW' : userPreferredViewMode, true);
-          setFocusedTask(taskId);
+        // Check drop onto Top Root Dropzone Header
+        let droppedOnRootZone = false;
+        if (rootDropzone) {
+          const dropzoneRect = rootDropzone.getBoundingClientRect();
+          if (
+            e.clientX >= dropzoneRect.left &&
+            e.clientX <= dropzoneRect.right &&
+            e.clientY <= dropzoneRect.bottom + 30
+          ) {
+            droppedOnRootZone = true;
+          }
+        }
+
+        if (droppedOnRootZone) {
+          if (draggedGraphNode.task.parentId) {
+            changeTaskParent(draggedGraphNode.task.id, null);
+          }
+        } else if (dist < 5) {
+          // Click Node: Open Node Inspector
+          const task = draggedGraphNode.task;
+          openObsidianNodeInspector(task);
         } else {
-          // Dragged Node: Check if dropped onto another node (Threshold 45px)
+          // Dragged Node: Check drop target on another node
           const targetNode = graphNodes.find(
             (n) => n.task.id !== draggedGraphNode.task.id && Math.hypot(n.x - draggedGraphNode.x, n.y - draggedGraphNode.y) <= 45
           );
 
           if (targetNode) {
             if (isDescendantOf(targetNode.task.id, draggedGraphNode.task.id)) {
-              showErrorToast('⚠️ 親タスクを自己の子孫タスクの中に移動することはできません。');
+              showErrorToast('親タスクを自己の子孫タスクの中に移動することはできません。');
             } else {
               promptParentingConfirmation(draggedGraphNode.task, targetNode.task);
             }
           }
         }
       }
+      hideRootDropzone();
       isMouseDown = false;
       draggedGraphNode = null;
     };
   }
 
-  let pendingActionCallback = null;
+  // Obsidian Node Inspector Open & Logic
+  function openObsidianNodeInspector(task) {
+    if (!obsidianInspector) return;
 
-  function promptActionConfirmation({ icon = '📁', title = '確認', message = '', onConfirm = () => {} }) {
-    if (confirmModalIcon) confirmModalIcon.textContent = icon;
-    if (confirmModalTitle) confirmModalTitle.textContent = title;
-    confirmModalText.textContent = message;
-    pendingActionCallback = onConfirm;
-    confirmModal.classList.remove('hidden');
+    inspectorSelectedTaskId = task.id;
+    focusedTaskId = task.id;
+
+    if (inspectorStatusBadge) {
+      inspectorStatusBadge.textContent = task.status;
+      inspectorStatusBadge.dataset.status = task.status;
+    }
+
+    if (inspectorTitleInput) {
+      inspectorTitleInput.value = task.title;
+    }
+
+    const statusBtns = obsidianInspector.querySelectorAll('.btn-status-toggle');
+    statusBtns.forEach((btn) => {
+      const btnStatus = btn.dataset.status;
+      btn.classList.toggle('active', btnStatus === task.status);
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        if (task.status !== btnStatus) {
+          updateTaskStatus(task.id, btnStatus);
+        }
+      };
+    });
+
+    if (btnInspectorElevate) {
+      btnInspectorElevate.disabled = !task.parentId;
+      btnInspectorElevate.style.opacity = task.parentId ? '1' : '0.4';
+      btnInspectorElevate.onclick = (e) => {
+        e.stopPropagation();
+        if (task.parentId) {
+          changeTaskParent(task.id, null);
+        }
+      };
+    }
+
+    if (btnInspectorDelete) {
+      btnInspectorDelete.onclick = (e) => {
+        e.stopPropagation();
+        if (confirm(`タスク「${task.title}」を削除しますか？`)) {
+          deleteTask(task.id);
+          closeObsidianNodeInspector();
+        }
+      };
+    }
+
+    obsidianInspector.classList.remove('hidden');
   }
 
-  function promptParentingConfirmation(childTask, parentTask) {
-    promptActionConfirmation({
-      icon: '📁',
-      title: '親タスク設定の確認',
-      message: `タスク「${childTask.title}」を「${parentTask.title}」の子タスクに変更しますか？ (Enterキーで実行)`,
-      onConfirm: () => changeTaskParent(childTask.id, parentTask.id),
+  function closeObsidianNodeInspector() {
+    if (obsidianInspector) {
+      obsidianInspector.classList.add('hidden');
+    }
+    inspectorSelectedTaskId = null;
+  }
+
+  if (btnInspectorClose) {
+    btnInspectorClose.addEventListener('click', closeObsidianNodeInspector);
+  }
+
+  if (inspectorTitleInput) {
+    inspectorTitleInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const newTitle = inspectorTitleInput.value.trim();
+        if (newTitle && inspectorSelectedTaskId) {
+          updateTaskTitle(inspectorSelectedTaskId, newTitle);
+          inspectorTitleInput.blur();
+        }
+      }
+    });
+
+    inspectorTitleInput.addEventListener('blur', () => {
+      const newTitle = inspectorTitleInput.value.trim();
+      const currentTask = currentTasks.find((t) => t.id === inspectorSelectedTaskId);
+      if (newTitle && currentTask && newTitle !== currentTask.title) {
+        updateTaskTitle(inspectorSelectedTaskId, newTitle);
+      }
     });
   }
 
-  btnModalCancel.onclick = () => {
-    confirmModal.classList.add('hidden');
-    pendingActionCallback = null;
-  };
-
-  btnModalConfirm.onclick = () => {
-    if (pendingActionCallback) {
-      pendingActionCallback();
-    }
-    confirmModal.classList.add('hidden');
-    pendingActionCallback = null;
-  };
-
-  window.addEventListener('keydown', (e) => {
-    if (!confirmModal.classList.contains('hidden')) {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        e.stopPropagation();
-        btnModalConfirm.click();
-      } else if (e.key === 'Escape') {
-        e.preventDefault();
-        e.stopPropagation();
-        btnModalCancel.click();
+  function updateInspectorViewIfNeeded() {
+    if (inspectorSelectedTaskId && obsidianInspector && !obsidianInspector.classList.contains('hidden')) {
+      const updated = currentTasks.find((t) => t.id === inspectorSelectedTaskId);
+      if (updated) {
+        if (inspectorStatusBadge) {
+          inspectorStatusBadge.textContent = updated.status;
+          inspectorStatusBadge.dataset.status = updated.status;
+        }
+        if (btnInspectorElevate) {
+          btnInspectorElevate.disabled = !updated.parentId;
+          btnInspectorElevate.style.opacity = updated.parentId ? '1' : '0.4';
+        }
+      } else {
+        closeObsidianNodeInspector();
       }
     }
-  }, true);
+  }
 
-  // VIEW 3: 3-Column Kanban View (Parent Tasks Priority Sorted to Top)
+  // --------------------------------------------------------------------------
+  // VIEW 2: Pure Tree View
+  // --------------------------------------------------------------------------
+  function renderPureTreeView() {
+    pureTreeContainer.innerHTML = '';
+    if (treeUnclassifiedList) treeUnclassifiedList.innerHTML = '';
+
+    const hasSubtasks = (t) => currentTasks.some((child) => child.parentId === t.id);
+    const isRootTask = (t) => !t.parentId || !currentTasks.some((parent) => parent.id === t.parentId);
+
+    const unclassifiedTasks = currentTasks.filter((t) => isRootTask(t) && !hasSubtasks(t))
+      .sort((a, b) => a.orderIndex - b.orderIndex);
+
+    if (unclassifiedCountBadge) {
+      unclassifiedCountBadge.textContent = unclassifiedTasks.length;
+    }
+
+    if (treeUnclassifiedList) {
+      if (unclassifiedTasks.length === 0) {
+        const emptyMsg = document.createElement('div');
+        emptyMsg.style.cssText = 'font-size: 0.78rem; color: var(--text-muted); text-align: center; padding: 1rem;';
+        emptyMsg.textContent = '(未分類タスクはありません)';
+        treeUnclassifiedList.appendChild(emptyMsg);
+      } else {
+        unclassifiedTasks.forEach((task) => {
+          const item = document.createElement('div');
+          item.className = `unclassified-item ${focusedTaskId === task.id ? 'focused' : ''}`;
+          item.setAttribute('draggable', 'true');
+          item.dataset.taskId = task.id;
+
+          const titleSpan = document.createElement('span');
+          titleSpan.textContent = task.title;
+          titleSpan.style.cssText = 'white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px;';
+
+          const badge = document.createElement('span');
+          badge.className = `status-btn active-${task.status}`;
+          badge.style.cssText = 'font-size: 0.68rem; padding: 0.15rem 0.4rem; pointer-events: none;';
+          badge.textContent = task.status;
+
+          item.appendChild(titleSpan);
+          item.appendChild(badge);
+
+          item.addEventListener('click', (e) => {
+            e.stopPropagation();
+            setFocusedTask(task.id);
+          });
+
+          item.addEventListener('dragstart', (e) => {
+            e.stopPropagation();
+            draggedTaskId = task.id;
+            item.classList.add('dragging');
+            e.dataTransfer.setData('text/plain', task.id);
+            showRootDropzone();
+          });
+
+          item.addEventListener('dragend', (e) => {
+            e.stopPropagation();
+            draggedTaskId = null;
+            item.classList.remove('dragging');
+            hideRootDropzone();
+          });
+
+          treeUnclassifiedList.appendChild(item);
+        });
+      }
+    }
+
+    const rootTreeTasks = currentTasks.filter(isRootTask).sort((a, b) => a.orderIndex - b.orderIndex);
+
+    if (rootTreeTasks.length === 0) {
+      const emptyTreeMsg = document.createElement('div');
+      emptyTreeMsg.className = 'empty-tree-notice';
+      emptyTreeMsg.style.cssText = 'font-size: 0.85rem; color: var(--text-muted); text-align: center; padding: 3rem 1rem; border: 1px dashed var(--border-color); border-radius: var(--radius-md); margin-top: 1rem;';
+      emptyTreeMsg.textContent = 'ルートタスクがまだありません。上のプロンプトバーから新しいタスクを作成してください。';
+      pureTreeContainer.appendChild(emptyTreeMsg);
+    } else {
+      rootTreeTasks.forEach((rootTask) => {
+        const nodeEl = renderTaskTreeNode(rootTask);
+        pureTreeContainer.appendChild(nodeEl);
+      });
+    }
+
+    if (focusedTaskId) {
+      highlightFocusedTaskCard(focusedTaskId);
+    }
+  }
+
+  function renderTaskTreeNode(task) {
+    const nodeWrapper = document.createElement('div');
+    nodeWrapper.className = `task-tree-node ${task.parentId ? 'is-subtask' : ''}`;
+
+    const card = createTaskCard(task);
+
+    if (task.parentId) {
+      const quickElevateBtn = document.createElement('button');
+      quickElevateBtn.className = 'btn-quick-elevate';
+      quickElevateBtn.textContent = 'ルート化';
+      quickElevateBtn.title = '親タスクから切り離してルート階層へ昇格';
+      quickElevateBtn.onclick = (e) => {
+        e.stopPropagation();
+        changeTaskParent(task.id, null);
+      };
+      const cardTop = card.querySelector('.task-top');
+      if (cardTop) cardTop.appendChild(quickElevateBtn);
+    }
+
+    nodeWrapper.appendChild(card);
+
+    const children = currentTasks.filter((t) => t.parentId === task.id).sort((a, b) => a.orderIndex - b.orderIndex);
+    if (children.length > 0 && !isTaskCollapsed(task.id)) {
+      const childrenContainer = document.createElement('div');
+      childrenContainer.className = 'tree-children-container';
+      childrenContainer.style.display = 'flex';
+      childrenContainer.style.flexDirection = 'column';
+      childrenContainer.style.gap = '0.5rem';
+      childrenContainer.style.marginTop = '0.4rem';
+
+      children.forEach((childTask) => {
+        childrenContainer.appendChild(renderTaskTreeNode(childTask));
+      });
+
+      nodeWrapper.appendChild(childrenContainer);
+    }
+
+    return nodeWrapper;
+  }
+
+  // --------------------------------------------------------------------------
+  // VIEW 3: 3-Column Kanban View
+  // --------------------------------------------------------------------------
   function renderKanbanView() {
     listTodo.innerHTML = '';
     listInProgress.innerHTML = '';
@@ -712,7 +825,6 @@
     countInProgress.textContent = inProgressCount;
     countDone.textContent = doneCount;
 
-    // Priority Sort: Parent tasks (tasks with subtasks) come FIRST, then by orderIndex
     const isParentTask = (t) => currentTasks.some((child) => child.parentId === t.id);
     const sortedTasks = [...currentTasks].sort((a, b) => {
       const aIsParent = isParentTask(a) ? 0 : 1;
@@ -733,7 +845,216 @@
     }
   }
 
-  // Create Task Card Element
+  // --------------------------------------------------------------------------
+  // VIEW 4: Tree-Structured Gantt Timeline View Prototype (IN_PROGRESS windows)
+  // --------------------------------------------------------------------------
+  function renderGanttView() {
+    if (!ganttContainer) return;
+    ganttContainer.innerHTML = '';
+
+    if (ganttStatsBadge) {
+      ganttStatsBadge.textContent = `ログイベント数: ${currentEvents.length}件`;
+    }
+
+    if (currentTasks.length === 0) {
+      const notice = document.createElement('div');
+      notice.className = 'gantt-empty-notice';
+      notice.textContent = 'タスクおよびイベントログが存在しません。';
+      ganttContainer.appendChild(notice);
+      return;
+    }
+
+    // Extract IN_PROGRESS working duration window for each task from event logs
+    const taskWorkingLogMap = new Map();
+    currentEvents.forEach((e) => {
+      if (e.payload && e.payload.taskId) {
+        const tid = e.payload.taskId;
+        if (!taskWorkingLogMap.has(tid)) {
+          taskWorkingLogMap.set(tid, {
+            inProgressStart: null,
+            doneTime: null,
+          });
+        }
+        const log = taskWorkingLogMap.get(tid);
+
+        if (e.type === 'TASK_CREATED' && e.payload.status === 'IN_PROGRESS') {
+          if (!log.inProgressStart) log.inProgressStart = e.timestamp;
+        } else if (e.type === 'TASK_STATUS_UPDATED') {
+          if (e.payload.status === 'IN_PROGRESS') {
+            if (!log.inProgressStart) log.inProgressStart = e.timestamp;
+          } else if (e.payload.status === 'DONE') {
+            if (!log.doneTime) log.doneTime = e.timestamp;
+          }
+        }
+      }
+    });
+
+    // Build Tree-Ordered Task Array (Depth First Order)
+    const treeOrderedTasks = [];
+    function collectTreeTasks(parentId = null, level = 0) {
+      const children = currentTasks.filter((t) => (parentId ? t.parentId === parentId : (!t.parentId || !currentTasks.some((p) => p.id === t.parentId))))
+        .sort((a, b) => a.orderIndex - b.orderIndex);
+
+      children.forEach((child) => {
+        treeOrderedTasks.push({ task: child, level });
+        collectTreeTasks(child.id, level + 1);
+      });
+    }
+    collectTreeTasks(null, 0);
+
+    // Compute global timeline bounds for active IN_PROGRESS intervals
+    let minTime = Infinity;
+    let maxTime = -Infinity;
+
+    treeOrderedTasks.forEach(({ task }) => {
+      const log = taskWorkingLogMap.get(task.id);
+      if (log && log.inProgressStart) {
+        if (log.inProgressStart < minTime) minTime = log.inProgressStart;
+        const endTime = log.doneTime || task.updatedAt || Date.now();
+        if (endTime > maxTime) maxTime = endTime;
+      }
+    });
+
+    if (minTime === Infinity) minTime = Date.now() - 3600000;
+    if (maxTime === -Infinity || maxTime <= minTime) maxTime = minTime + 3600000;
+
+    const timeSpan = Math.max(maxTime - minTime, 1000);
+
+    const table = document.createElement('table');
+    table.className = 'gantt-table';
+
+    const thead = document.createElement('thead');
+    thead.innerHTML = `
+      <tr>
+        <th style="width: 32%;">ツリー構造タスク名</th>
+        <th style="width: 12%;">ステータス</th>
+        <th style="width: 16%;">着手時刻</th>
+        <th style="width: 16%;">完了/現在時刻</th>
+        <th class="gantt-bar-cell">稼働期間 (IN_PROGRESS) タイムライン</th>
+      </tr>
+    `;
+    table.appendChild(thead);
+
+    const tbody = document.createElement('tbody');
+
+    treeOrderedTasks.forEach(({ task, level }) => {
+      const tr = document.createElement('tr');
+      const log = taskWorkingLogMap.get(task.id);
+
+      const hasActiveBar = (task.status === 'IN_PROGRESS' || (task.status === 'DONE' && log && log.inProgressStart));
+
+      let startTime = log ? log.inProgressStart : null;
+      let endTime = task.status === 'DONE' ? (log ? log.doneTime : task.updatedAt) : Date.now();
+
+      let startDateStr = '-';
+      let endDateStr = '-';
+      let startPercent = 0;
+      let widthPercent = 0;
+
+      if (hasActiveBar && startTime) {
+        startDateStr = new Date(startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        endDateStr = task.status === 'DONE' ? new Date(endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '進行中';
+
+        startPercent = Math.max(0, Math.min(100, ((startTime - minTime) / timeSpan) * 100));
+        const endPercent = Math.max(startPercent + 3, Math.min(100, ((endTime - minTime) / timeSpan) * 100));
+        widthPercent = Math.max(3, endPercent - startPercent);
+      }
+
+      const indentStr = level > 0 ? '│  '.repeat(level - 1) + '├─ ' : '';
+      const statusLabels = { TODO: '未着手', IN_PROGRESS: '進行中', DONE: '完了' };
+
+      tr.innerHTML = `
+        <td class="gantt-task-name">
+          <span class="gantt-tree-indent">${indentStr}</span>${task.title}
+        </td>
+        <td>
+          <span class="inspector-badge" data-status="${task.status}">${statusLabels[task.status] || task.status}</span>
+        </td>
+        <td style="color: var(--text-muted); font-family: monospace;">${startDateStr}</td>
+        <td style="color: var(--text-muted); font-family: monospace;">${endDateStr}</td>
+        <td class="gantt-bar-cell">
+          ${
+            hasActiveBar && startTime
+              ? `<div class="gantt-bar-track" title="着手: ${startDateStr} ~ ${endDateStr}">
+                   <div class="gantt-bar-fill" data-status="${task.status}" style="margin-left: ${startPercent.toFixed(1)}%; width: ${widthPercent.toFixed(1)}%;"></div>
+                 </div>`
+              : `<span class="gantt-empty-bar-notice">${task.status === 'TODO' ? '(未着手ため稼働ログなし)' : '(稼働期間ログなし)'}</span>`
+          }
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    table.appendChild(tbody);
+    ganttContainer.appendChild(table);
+  }
+
+  // --------------------------------------------------------------------------
+  // Common Helpers & Component Builders
+  // --------------------------------------------------------------------------
+  function isDescendantOf(candidateParentId, taskId) {
+    if (!candidateParentId || !taskId) return false;
+    if (candidateParentId === taskId) return true;
+
+    let currentId = candidateParentId;
+    const visited = new Set();
+    while (currentId) {
+      if (currentId === taskId) return true;
+      if (visited.has(currentId)) break;
+      visited.add(currentId);
+      const parentTask = currentTasks.find((t) => t.id === currentId);
+      currentId = parentTask ? parentTask.parentId : null;
+    }
+    return false;
+  }
+
+  let pendingActionCallback = null;
+
+  function promptActionConfirmation({ title = '確認', message = '', onConfirm = () => {} }) {
+    if (confirmModalTitle) confirmModalTitle.textContent = title;
+    confirmModalText.textContent = message;
+    pendingActionCallback = onConfirm;
+    confirmModal.classList.remove('hidden');
+  }
+
+  function promptParentingConfirmation(childTask, parentTask) {
+    promptActionConfirmation({
+      title: '親タスク設定の確認',
+      message: `タスク「${childTask.title}」を「${parentTask.title}」の子タスクに変更しますか？ (Enterキーで実行)`,
+      onConfirm: () => changeTaskParent(childTask.id, parentTask.id),
+    });
+  }
+
+  if (btnModalCancel) {
+    btnModalCancel.onclick = () => {
+      confirmModal.classList.add('hidden');
+      pendingActionCallback = null;
+    };
+  }
+
+  if (btnModalConfirm) {
+    btnModalConfirm.onclick = () => {
+      if (pendingActionCallback) {
+        pendingActionCallback();
+      }
+      confirmModal.classList.add('hidden');
+      pendingActionCallback = null;
+    };
+  }
+
+  function showRootDropzone() {
+    if (rootDropzone) {
+      rootDropzone.classList.remove('hidden');
+    }
+  }
+
+  function hideRootDropzone() {
+    if (rootDropzone) {
+      rootDropzone.classList.add('hidden');
+      rootDropzone.classList.remove('drag-over');
+    }
+  }
+
   function createTaskCard(task, isKanbanView = false) {
     const item = document.createElement('div');
     item.className = `task-item ${focusedTaskId === task.id ? 'focused' : ''} ${isKanbanView ? 'kanban-item' : ''}`;
@@ -753,6 +1074,7 @@
         draggedTaskId = task.id;
         item.classList.add('dragging');
         e.dataTransfer.setData('text/plain', task.id);
+        showRootDropzone();
       });
 
       item.addEventListener('dragend', (e) => {
@@ -760,6 +1082,7 @@
         draggedTaskId = null;
         item.classList.remove('dragging');
         document.querySelectorAll('.drop-target-parent').forEach((el) => el.classList.remove('drop-target-parent'));
+        hideRootDropzone();
       });
 
       item.addEventListener('dragover', (e) => {
@@ -783,7 +1106,7 @@
 
         if (sourceTaskId && sourceTaskId !== task.id) {
           if (isDescendantOf(task.id, sourceTaskId)) {
-            showErrorToast('⚠️ 親タスクを自己の子孫タスクの中に移動することはできません。');
+            showErrorToast('親タスクを自己の子孫タスクの中に移動することはできません。');
             return;
           }
           changeTaskParent(sourceTaskId, task.id);
@@ -791,7 +1114,6 @@
       });
     }
 
-    // Card Top (Title + Toggle + Delete)
     const top = document.createElement('div');
     top.className = 'task-top';
 
@@ -805,7 +1127,7 @@
       const collapsed = isTaskCollapsed(task.id);
       const btnToggle = document.createElement('button');
       btnToggle.className = 'btn-toggle-tree';
-      btnToggle.textContent = collapsed ? '▶' : '▼';
+      btnToggle.textContent = collapsed ? '[+]' : '[-]';
       btnToggle.title = collapsed ? '子タスクを展開' : '子タスクを折りたたむ';
       btnToggle.onclick = (e) => {
         e.stopPropagation();
@@ -821,7 +1143,7 @@
 
     const btnDelete = document.createElement('button');
     btnDelete.className = 'btn-delete';
-    btnDelete.innerHTML = '🗑️';
+    btnDelete.textContent = '削除';
     btnDelete.title = 'タスクを削除';
     btnDelete.onclick = (e) => {
       e.stopPropagation();
@@ -834,37 +1156,25 @@
     top.appendChild(btnDelete);
     item.appendChild(top);
 
-    // Parent Task Progress Calculation & Background Fill
-    let percentage = 0;
     if (isParent) {
       const completedCount = children.filter((c) => c.status === 'DONE').length;
-      percentage = Math.round((completedCount / children.length) * 100);
+      const percentage = Math.round((completedCount / children.length) * 100);
 
-      // Save vertical height by filling progress directly in card background gradient
-      item.style.background = `linear-gradient(90deg, rgba(52, 211, 153, 0.22) 0%, rgba(52, 211, 153, 0.22) ${percentage}%, rgba(15, 23, 42, 0.8) ${percentage}%, rgba(15, 23, 42, 0.8) 100%)`;
-      if (percentage === 100) {
-        item.style.borderColor = 'rgba(52, 211, 153, 0.5)';
-      }
-
-      // Progress Badge next to Title for zero extra vertical space
       const progressBadge = document.createElement('span');
       progressBadge.className = `progress-pill-badge ${percentage === 100 ? 'done' : ''}`;
       progressBadge.textContent = `${completedCount}/${children.length} (${percentage}%)`;
       titleGroup.appendChild(progressBadge);
     }
 
-    // Footer with Status Controls: Read-only Lock for Parents, Interactive Buttons for Leaf Tasks
     const footer = document.createElement('div');
     footer.className = 'task-footer';
 
     if (isParent) {
-      // Parent Node Status Lock
       const lockBadge = document.createElement('div');
       lockBadge.className = 'status-locked-badge';
-      lockBadge.innerHTML = `🔒 子タスク連動`;
+      lockBadge.textContent = '子タスク連動';
       footer.appendChild(lockBadge);
     } else {
-      // Leaf Node All-Level Status Buttons
       const statusGroup = document.createElement('div');
       statusGroup.className = 'status-btn-group';
 
@@ -884,7 +1194,6 @@
           if (task.status !== s.key) {
             if (currentViewMode === 'KANBAN_VIEW') {
               promptActionConfirmation({
-                icon: '📋',
                 title: 'カンバン移動の確認',
                 message: `タスク「${task.title}」のステータスを「${labelNames[task.status]}」から「${labelNames[s.key]}」へ変更しますか？ (Enterキーで実行)`,
                 onConfirm: () => updateTaskStatus(task.id, s.key),
@@ -901,7 +1210,7 @@
     }
 
     const authorSpan = document.createElement('span');
-    authorSpan.textContent = `By: ${task.authorNodeId || 'local'}`;
+    authorSpan.textContent = `Node: ${task.authorNodeId || 'local'}`;
     footer.appendChild(authorSpan);
 
     item.appendChild(footer);
@@ -911,7 +1220,6 @@
   function setFocusedTask(taskId) {
     focusedTaskId = taskId;
 
-    // Uncollapse any collapsed parent ancestors so target card is rendered in Tree View
     let target = currentTasks.find((t) => t.id === taskId);
     while (target && target.parentId) {
       const parentTask = currentTasks.find((t) => t.id === target.parentId);
@@ -946,12 +1254,9 @@
 
     if (targetEl) {
       targetEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      targetEl.classList.add('highlight-flash');
-      setTimeout(() => targetEl.classList.remove('highlight-flash'), 1500);
     }
   }
 
-  // Setup Drag & Drop for Kanban Columns & Tree Canvas Background
   function setupDragAndDrop() {
     columns.forEach((col) => {
       col.addEventListener('dragover', (e) => {
@@ -974,7 +1279,6 @@
           if (task && task.status !== targetStatus) {
             const labelNames = { TODO: '未着手(TODO)', IN_PROGRESS: '進行中(IN_PROGRESS)', DONE: '完了(DONE)' };
             promptActionConfirmation({
-              icon: '📋',
               title: 'カンバン移動の確認',
               message: `タスク「${task.title}」のステータスを「${labelNames[task.status]}」から「${labelNames[targetStatus]}」へ変更しますか？ (Enterキーで実行)`,
               onConfirm: () => updateTaskStatus(taskId, targetStatus),
@@ -983,6 +1287,24 @@
         }
       });
     });
+
+    if (rootDropzone) {
+      rootDropzone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        rootDropzone.classList.add('drag-over');
+      });
+      rootDropzone.addEventListener('dragleave', () => {
+        rootDropzone.classList.remove('drag-over');
+      });
+      rootDropzone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        hideRootDropzone();
+        const sourceTaskId = e.dataTransfer.getData('text/plain') || draggedTaskId;
+        if (sourceTaskId) {
+          changeTaskParent(sourceTaskId, null);
+        }
+      });
+    }
 
     if (pureTreeContainer) {
       pureTreeContainer.addEventListener('dragover', (e) => {
@@ -1000,7 +1322,6 @@
     }
   }
 
-  // Setup Unified Keyboard Navigation for Tree, Obsidian Graph, and Kanban Views
   function setupKeyboardNavigation() {
     window.addEventListener('keydown', (e) => {
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) {
@@ -1017,7 +1338,6 @@
 
       if (currentTasks.length === 0) return;
 
-      // Handle Obsidian Graph View
       if (currentViewMode === 'OBSIDIAN_GRAPH_VIEW') {
         if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return;
         e.preventDefault();
@@ -1034,7 +1354,6 @@
         return;
       }
 
-      // Handle Tree View and Kanban View
       const activeSection = document.querySelector('.view-section:not(.hidden)');
       if (!activeSection) return;
 
@@ -1059,44 +1378,6 @@
         e.preventDefault();
         const prevIdx = currentCardIdx > 0 ? currentCardIdx - 1 : visibleCards.length - 1;
         setFocusedTask(visibleCards[prevIdx].dataset.taskId);
-      } else if (['ArrowRight', 'ArrowLeft', 'Enter'].includes(e.key)) {
-        const task = currentTasks.find((t) => t.id === focusedTaskId);
-        if (!task) return;
-
-        if (currentViewMode === 'KANBAN_VIEW') {
-          let targetStatus = null;
-          if (e.key === 'ArrowRight') {
-            if (task.status === 'TODO') targetStatus = 'IN_PROGRESS';
-            else if (task.status === 'IN_PROGRESS') targetStatus = 'DONE';
-          } else if (e.key === 'ArrowLeft') {
-            if (task.status === 'DONE') targetStatus = 'IN_PROGRESS';
-            else if (task.status === 'IN_PROGRESS') targetStatus = 'TODO';
-          } else if (e.key === 'Enter') {
-            if (task.status === 'TODO') targetStatus = 'IN_PROGRESS';
-            else if (task.status === 'IN_PROGRESS') targetStatus = 'DONE';
-            else if (task.status === 'DONE') targetStatus = 'TODO';
-          }
-
-          if (targetStatus && targetStatus !== task.status) {
-            e.preventDefault();
-            const labelNames = { TODO: '未着手(TODO)', IN_PROGRESS: '進行中(IN_PROGRESS)', DONE: '完了(DONE)' };
-            promptActionConfirmation({
-              icon: '📋',
-              title: 'カンバン移動の確認',
-              message: `タスク「${task.title}」のステータスを「${labelNames[task.status]}」から「${labelNames[targetStatus]}」へ変更しますか？ (Enterキーで実行)`,
-              onConfirm: () => updateTaskStatus(task.id, targetStatus),
-            });
-          }
-        } else if (currentViewMode === 'TREE_VIEW') {
-          e.preventDefault();
-          if (e.key === 'ArrowRight') {
-            if (task.status === 'TODO') updateTaskStatus(task.id, 'IN_PROGRESS');
-            else if (task.status === 'IN_PROGRESS') updateTaskStatus(task.id, 'DONE');
-          } else if (e.key === 'ArrowLeft') {
-            if (task.status === 'DONE') updateTaskStatus(task.id, 'IN_PROGRESS');
-            else if (task.status === 'IN_PROGRESS') updateTaskStatus(task.id, 'TODO');
-          }
-        }
       }
     });
   }
@@ -1110,6 +1391,18 @@
           taskId,
           status: newStatus,
           newOrderIndex: Date.now(),
+        })
+      );
+    }
+  }
+
+  function updateTaskTitle(taskId, newTitle) {
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(
+        JSON.stringify({
+          action: 'UPDATE_TITLE',
+          taskId,
+          title: newTitle,
         })
       );
     }
@@ -1162,6 +1455,7 @@
     quickInputTitle.value = '';
   });
 
+  initTheme();
   setupDragAndDrop();
   setupKeyboardNavigation();
   initWebSocket();

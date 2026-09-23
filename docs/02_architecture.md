@@ -11,7 +11,7 @@
 ```
 +-----------------------------------------------------------------------------------------+
 |                                   Presentation Layer                                    |
-|         (Obsidian Canvas / Node Inspector / Gantt Timeline / Theme Switcher)            |
+| (Obsidian Canvas / Node Inspector / Gantt Drag Marker / Gantt Timeline / Theme Switcher)|
 +-------------------------------------------+---------------------------------------------+
                                             | (Interfaces)
 +-------------------------------------------v---------------------------------------------+
@@ -33,7 +33,7 @@
 - **役割**: 前面メインビューとして、タスクの親子ネットワークを Obsidian 風のノード・バネ物理 ＋ 階層型Y軸重力で描画するプレゼンテーションポート。
 - **機能**:
   - **階層型Y軸重力 (Hierarchical Gravity)**: 親の親（上位祖先）ほど自然と画面上部へ移動し、配下の子ノードは下方向へ浮遊配置される物理バイアス。
-  - **画面端 ネスト表示深度コントロール (Edge Nest Depth Filter)**: 画面端に配置されたコントローラーから表示階層範囲（デフォルト / カスタム数値 / 全表示）を切り替え。
+  - **画面端 ネスト表示深度コントロール (Edge Nest Depth Filter)**: 画面端に配置されたコントローラーから表示階層範囲（デフォルト: すべて `'all'`）を切り替え。
   - **Obsidian Node Inspector Port**: ノードクリックによるツールバー表示（タイトル編集、完了予定日設定、1タップステータス切り替え、親切り離しルート化）。
   - **キーボードショートカット連携**: ノード結合ダイアログ等での Enter キー確定 / Esc キーキャンセル。
 
@@ -43,9 +43,10 @@
   - ノードからのワンタップ `[ ルート化 ]` 操作。
   - グラフキャンバス内最上部エリア (`Y <= 60px`) へのドラッグ＆ドロップ処理。
 
-### (3) Gantt Timeline View Port (GanttProjectスタイル ガントチャートポート)
-- **役割**: `events.jsonl` の不変イベント履歴（`TASK_CREATED`, `TASK_STATUS_UPDATED`, `TASK_DUE_DATE_UPDATED` 等）から、日付単位（日スケール）管理ガントチャートをレンダリングするポート。
+### (3) Gantt Timeline View & Interactive Due Marker Port (ガントチャート ＆ 予定日マーカードラッグポート)
+- **役割**: `events.jsonl` の不変イベント履歴（`TASK_CREATED`, `TASK_STATUS_UPDATED`, `TASK_DUE_DATE_UPDATED` 等）から、日付単位（日スケール）管理ガントチャートをレンダリングし、マーカー操作を受け付けるポート。
 - **機能**:
+  - **完了予定日マーカードラッグ (Drag & Drop Due Date Marker)**: タイムライン上の完了予定日マーカー (`gantt-due-marker` 🚩) をマウスで掴んで左右ドラッグ移動し、直接 `dueDate` を変更・リアルタイム同期 (`TASK_DUE_DATE_UPDATED`)。
   - **日付単位管理 ＆ 最長完了予定日自動収容 (Date Management & Auto-Fit)**: 開始日、完了予定日 (`dueDate`)、所要日数を `YYYY/MM/DD` 形式で可視化。一番遠い完了予定日（最長3ヶ月後等）を判定してタイムライン右端内に完全に収まるよう範囲を自動調整。
   - **順序保持 (Order Preservation)**: ステータス切替時に `orderIndex` を保持し、勝手な並び順変更を防止。
 

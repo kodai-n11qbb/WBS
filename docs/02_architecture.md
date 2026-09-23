@@ -55,11 +55,13 @@
   - **ヘッダー幅の完全一致 (`gantt-ticks-header` Alignment)**: `gantt-ticks-header` のグリッドセル幅と `gantt-bar-cell` の幅を完全一致させ表示ズレを防止。
   - **完了予定日マーカードラッグ (Drag & Drop Due Date Marker)**: 🚩 マーカーの左右ドラッグ操作による直感的な `dueDate` 変更。
 
-### (5) Protected Hidden Directory Storage Port (保護隠しディレクトリ永続化ポート)
-- **役割**: 変更履歴 (`events.jsonl`) とスナップショット (`state.json`) を隠しディレクトリ **`./.wbser_data`** 内で安全に永続化。
+### (5) Terminal-Relative Absolute Path Storage Port (絶対パス指定永続化ストレージポート)
+- **役割**: 変更履歴 (`events.jsonl`) とスナップショット (`state.json`) を、ターミナル目線で把握しやすい標準ディレクトリ `data/` および指定された絶対パスで確実に永続化・同期。
 - **機能**:
-  - Finder/エクスプローラー等での誤操作防止。
-  - 既存 `./data` ディレクトリの自動フォールバック対応。
+  - `path.resolve(process.cwd(), ...)` による絶対パス自動変換・統一。
+  - 複数端末・複数プロセス間での共有フォルダ絶対パス参照対応。
+  - 単一バイナリ (pkg) 内の固定初期データ (VFS `/snapshot/`) と動的永続化ログの相互解離。
+  - 既存 `./.wbser_data` ディレクトリの自動フォールバック対応。
 
 ---
 

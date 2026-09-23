@@ -6,7 +6,8 @@
   "bin": "dist/bundle.cjs",
   "pkg": {
     "assets": [
-      "public/**/*"
+      "public/**/*",
+      "config.json"
     ],
     "bytecode": false,
     "targets": [

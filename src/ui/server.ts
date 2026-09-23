@@ -50,11 +50,10 @@ async function main() {
   const configAdapter = new JsonConfigAdapter();
   const config = await configAdapter.loadConfig();
 
-  const SNAPSHOT_FILE = path.isAbsolute(config.dataPath)
-    ? config.dataPath
-    : path.join(process.cwd(), config.dataPath);
+  // Resolve Data Directory
+  const DATA_DIR = config.dataDir;
 
-  const DATA_DIR = path.dirname(SNAPSHOT_FILE);
+  const SNAPSHOT_FILE = path.join(DATA_DIR, 'state.json');
   const DATA_FILE = path.join(DATA_DIR, 'events.jsonl');
 
   const PORT = config.port;
@@ -85,97 +84,117 @@ async function main() {
     await nodeService.start();
 
     const state = await nodeService.getProjectState(activeProjectId);
-    if (state.tasks.size === 0) {
-      const allEvents = await nodeService.getAllEvents();
-      if (allEvents.length === 0) {
-        await nodeService.createProject('LAN Share-Log Project');
+    const allEvents = await nodeService.getAllEvents();
+
+    if (state.tasks.size === 0 && allEvents.length === 0) {
+      // 1. Hydrate state from existing state.json snapshot if present
+      const existingSnapshot = await snapshotExporter.loadSnapshot();
+      if (existingSnapshot && Array.isArray(existingSnapshot.tasks) && existingSnapshot.tasks.length > 0) {
+        console.log(`[Bootstrap] Hydrating ${existingSnapshot.tasks.length} tasks from existing state.json...`);
+        const pId = existingSnapshot.projectId || activeProjectId;
+        activeProjectId = pId;
+        await nodeService.createProject(existingSnapshot.projectName || 'LAN Share-Log Project');
+
+        for (const task of existingSnapshot.tasks) {
+          await nodeService.createTask(pId, {
+            title: task.title,
+            parentId: task.parentId || undefined,
+            status: task.status,
+            priority: task.priority,
+            dueDate: task.dueDate || null,
+          });
+        }
+        console.log(`[Bootstrap] Successfully hydrated state.json snapshot.`);
+        return;
       }
 
-      // Root 1: Multi-level Core Task
-      const root1 = await nodeService.createTask(activeProjectId, {
-        title: '親タスク: LAN内P2Pローカルファースト開発',
-        priority: 'HIGH',
-        status: 'IN_PROGRESS',
-      });
-      const root1Id = root1.payload.taskId;
+      // 2. If no events AND no snapshot exist, check if demo mode requested or initialize clean project
+      if (process.env.CREATE_DEMO_TASKS === 'true') {
+        console.log('[Bootstrap] Creating initial demo tasks...');
+        await nodeService.createProject('LAN Share-Log Project');
 
-      // Mid Level 1 under Root 1
-      const mid1 = await nodeService.createTask(activeProjectId, {
-        parentId: root1Id,
-        title: '中階層: ストレージ＆同期基盤の構築',
-        status: 'IN_PROGRESS',
-      });
-      const mid1Id = mid1.payload.taskId;
+        const root1 = await nodeService.createTask(activeProjectId, {
+          title: '親タスク: LAN内P2Pローカルファースト開発',
+          priority: 'HIGH',
+          status: 'IN_PROGRESS',
+        });
+        const root1Id = root1.payload.taskId;
 
-      // Leaf tasks under Mid 1
-      await nodeService.createTask(activeProjectId, {
-        parentId: mid1Id,
-        title: '子タスク: JSONLイベントログの永続化',
-        status: 'DONE',
-      });
+        const mid1 = await nodeService.createTask(activeProjectId, {
+          parentId: root1Id,
+          title: '中階層: ストレージ＆同期基盤の構築',
+          status: 'IN_PROGRESS',
+        });
+        const mid1Id = mid1.payload.taskId;
 
-      await nodeService.createTask(activeProjectId, {
-        parentId: mid1Id,
-        title: '子タスク: P2P差分同期エンジンの検証',
-        status: 'IN_PROGRESS',
-      });
+        await nodeService.createTask(activeProjectId, {
+          parentId: mid1Id,
+          title: '子タスク: JSONLイベントログの永続化',
+          status: 'DONE',
+        });
 
-      // Mid Level 2 under Root 1
-      const mid2 = await nodeService.createTask(activeProjectId, {
-        parentId: root1Id,
-        title: '中階層: UI＆可視化レイヤーの開発',
-        status: 'TODO',
-      });
-      const mid2Id = mid2.payload.taskId;
+        await nodeService.createTask(activeProjectId, {
+          parentId: mid1Id,
+          title: '子タスク: P2P差分同期エンジンの検証',
+          status: 'IN_PROGRESS',
+        });
 
-      // Leaf tasks under Mid 2
-      await nodeService.createTask(activeProjectId, {
-        parentId: mid2Id,
-        title: '子タスク: Obsidianノードグラフバネ物理の実装',
-        status: 'DONE',
-      });
+        const mid2 = await nodeService.createTask(activeProjectId, {
+          parentId: root1Id,
+          title: '中階層: UI＆可視化レイヤーの開発',
+          status: 'TODO',
+        });
+        const mid2Id = mid2.payload.taskId;
 
-      await nodeService.createTask(activeProjectId, {
-        parentId: mid2Id,
-        title: '子タスク: 樹状ツリー＆カンバン表示の統合',
-        status: 'IN_PROGRESS',
-      });
+        await nodeService.createTask(activeProjectId, {
+          parentId: mid2Id,
+          title: '子タスク: Obsidianノードグラフバネ物理の実装',
+          status: 'DONE',
+        });
 
-      await nodeService.createTask(activeProjectId, {
-        parentId: mid2Id,
-        title: '子タスク: ログベース・ガントチャートプロット',
-        status: 'TODO',
-      });
+        await nodeService.createTask(activeProjectId, {
+          parentId: mid2Id,
+          title: '子タスク: 樹状ツリー＆カンバン表示の統合',
+          status: 'IN_PROGRESS',
+        });
 
-      // Root 2: Standalone Task
-      await nodeService.createTask(activeProjectId, {
-        title: '独立ルートタスク: 全体ロードマップの策定',
-        status: 'DONE',
-      });
+        await nodeService.createTask(activeProjectId, {
+          parentId: mid2Id,
+          title: '子タスク: ログベース・ガントチャートプロット',
+          status: 'TODO',
+        });
 
-      // Distribute sample task timestamps & due dates across ~3 months (90 days) for realistic Gantt timeline
-      const now = Date.now();
-      const DAY_MS = 86400000;
-      const allEvts = await nodeService.getAllEvents();
-      const timeOffsets = [
-        85 * DAY_MS, 80 * DAY_MS, 70 * DAY_MS, 65 * DAY_MS, 60 * DAY_MS,
-        55 * DAY_MS, 50 * DAY_MS, 35 * DAY_MS, 30 * DAY_MS, 25 * DAY_MS,
-        45 * DAY_MS, 40 * DAY_MS, 38 * DAY_MS, 20 * DAY_MS, 15 * DAY_MS,
-        10 * DAY_MS, 5 * DAY_MS,
-      ];
+        await nodeService.createTask(activeProjectId, {
+          title: '独立ルートタスク: 全体ロードマップの策定',
+          status: 'DONE',
+        });
 
-      allEvts.forEach((evt, idx) => {
-        const offset = timeOffsets[idx % timeOffsets.length] || (90 - idx * 4) * DAY_MS;
-        evt.timestamp = now - offset;
+        const now = Date.now();
+        const DAY_MS = 86400000;
+        const allEvts = await nodeService.getAllEvents();
+        const timeOffsets = [
+          85 * DAY_MS, 80 * DAY_MS, 70 * DAY_MS, 65 * DAY_MS, 60 * DAY_MS,
+          55 * DAY_MS, 50 * DAY_MS, 35 * DAY_MS, 30 * DAY_MS, 25 * DAY_MS,
+          45 * DAY_MS, 40 * DAY_MS, 38 * DAY_MS, 20 * DAY_MS, 15 * DAY_MS,
+          10 * DAY_MS, 5 * DAY_MS,
+        ];
 
-        if (evt.type === 'TASK_CREATED') {
-          const dueOffsets = [15 * DAY_MS, 30 * DAY_MS, 45 * DAY_MS, 60 * DAY_MS, 75 * DAY_MS, 90 * DAY_MS];
-          evt.payload.dueDate = now + dueOffsets[idx % dueOffsets.length];
+        allEvts.forEach((evt, idx) => {
+          const offset = timeOffsets[idx % timeOffsets.length] || (90 - idx * 4) * DAY_MS;
+          evt.timestamp = now - offset;
+
+          if (evt.type === 'TASK_CREATED') {
+            const dueOffsets = [15 * DAY_MS, 30 * DAY_MS, 45 * DAY_MS, 60 * DAY_MS, 75 * DAY_MS, 90 * DAY_MS];
+            evt.payload.dueDate = now + dueOffsets[idx % dueOffsets.length];
+          }
+        });
+
+        if (fs.existsSync(DATA_FILE)) {
+          fs.writeFileSync(DATA_FILE, allEvts.map((e) => JSON.stringify(e)).join('\n') + '\n', 'utf-8');
         }
-      });
-
-      if (fs.existsSync(DATA_FILE)) {
-        fs.writeFileSync(DATA_FILE, allEvts.map((e) => JSON.stringify(e)).join('\n') + '\n', 'utf-8');
+      } else {
+        console.log('[Bootstrap] No existing events or snapshot found. Initializing clean project...');
+        await nodeService.createProject('LAN Share-Log Project');
       }
     }
 

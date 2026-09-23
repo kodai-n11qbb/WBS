@@ -26,7 +26,7 @@ describe('JsonConfigAdapter', () => {
 
     expect(config.mode).toBe('P2P');
     expect(config.port).toBe(3000);
-    expect(config.dataPath).toContain('state.json');
+    expect(config.dataDir).toContain('data');
     expect(config.autoOpen).toBe(true);
   });
 
@@ -35,23 +35,32 @@ describe('JsonConfigAdapter', () => {
     await adapter.saveConfig({
       mode: 'HOST',
       port: 8080,
-      dataPath: './custom/state.json',
+      dataDir: './custom/data',
     });
 
     const reloaded = await adapter.loadConfig();
     expect(reloaded.mode).toBe('HOST');
     expect(reloaded.port).toBe(8080);
-    expect(reloaded.dataPath).toBe('./custom/state.json');
+    expect(reloaded.dataDir).toContain(path.normalize('custom/data'));
   });
 
-  it('should override config with CLI arguments', async () => {
-    const cliArgs = ['--mode', 'CLIENT', '--host', '192.168.1.100:4000', '--port', '9090', '--no-auto-open'];
+  it('should override config with CLI arguments including --data-dir', async () => {
+    const cliArgs = ['--mode', 'CLIENT', '--host', '192.168.1.100:4000', '--port', '9090', '--data-dir', './cli_data', '--no-auto-open'];
     const adapter = new JsonConfigAdapter(configPath, cliArgs);
     const config = await adapter.loadConfig();
 
     expect(config.mode).toBe('CLIENT');
     expect(config.hostAddress).toBe('192.168.1.100:4000');
     expect(config.port).toBe(9090);
+    expect(config.dataDir).toContain('cli_data');
     expect(config.autoOpen).toBe(false);
+  });
+
+  it('should fallback legacy dataPath to dataDir directory', async () => {
+    fs.writeFileSync(configPath, JSON.stringify({ mode: 'P2P', port: 3000, dataPath: './legacy/state.json' }));
+    const adapter = new JsonConfigAdapter(configPath, []);
+    const config = await adapter.loadConfig();
+
+    expect(config.dataDir).toContain('legacy');
   });
 });

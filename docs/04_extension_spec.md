@@ -28,9 +28,9 @@ Node.js, Python, Docker, Rust 等が**一切インストールされていない
 
 ### (2) Interactive CLI Setup & Configuration Adapter (対話型セットアップ ＆ 設定ファイルアダプター)
 - **対話型スクリプト (`npm run setup`)**:
-  - ターミナルで動作モード（`P2P` / `CLIENT` / `HOST`）やアドレス（端末IP / `data/state.json` パス）に関する対話的質問に回答するだけで `config.json` を自動生成し、そのまま `bin/` へ設定済み単一バイナリを出力。
+  - ターミナルで動作モード（`P2P` / `CLIENT` / `HOST`）やアドレス（端末IP / データ保存ディレクトリ `./data` のパス）に関する対話的質問に回答するだけで `config.json` を自動生成し、そのまま `bin/` へ設定済み単一バイナリを出力。
 - **起動時ハイブリッド設定ロジック**:
-  - `config.json` の設定値を自動ロード。CLI 引数（例: `--port 4000`）がある場合は引数を優先オーバライド適用。
+  - `config.json` の設定値を自動ロード。CLI 引数（例: `--port 4000`, `--data-dir ./data`）がある場合は引数を優先オーバライド適用。
 
 ### (3) Transport Adapter (通信基盤の差し替え)
 インターフェース `PeerDiscoveryPort` および `PeerTransportPort` を実装することで、通信方式を自由に切り替え可能とします。
@@ -42,7 +42,7 @@ Node.js, Python, Docker, Rust 等が**一切インストールされていない
 ### (4) Storage Adapter (永続化基盤の差し替え)
 `ProjectRepositoryPort` を実装することで、利用環境に応じたストレージを選択可能とします。
 
-- **JSON State Snapshot / File**: `data/state.json` 単一状態ファイル ＆ イベントログ
+- **JSON State Snapshot & Event Directory**: `./data` ディレクトリ管理 (`state.json` 状態ファイル ＆ `events.jsonl` イベントログ)
 - **In-Memory Storage**: 単体テスト・デモ用
 - **SQLite / RocksDB**: 大規模なイベントログ・オフラインキャッシュ管理用
 

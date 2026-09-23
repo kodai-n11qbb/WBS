@@ -8,27 +8,58 @@ export class JsonConfigAdapter implements ConfigPort {
   private cliArgs: string[];
 
   constructor(configPath?: string, cliArgs?: string[]) {
-    this.configPath = configPath || path.join(process.cwd(), 'config.json');
+    this.configPath = configPath || this.resolveConfigPath();
     this.cliArgs = cliArgs || process.argv.slice(2);
+  }
+
+  private resolveConfigPath(): string {
+    const isPkg = (process as any).pkg !== undefined;
+    const execDir = path.dirname(process.execPath);
+
+    const candidates = [
+      path.join(process.cwd(), 'config.json'),
+      path.join(execDir, 'config.json'),
+      '/snapshot/share-log/config.json',
+      '/snapshot/config.json',
+    ];
+
+    for (const cand of candidates) {
+      try {
+        if (fs.existsSync(cand)) {
+          return cand;
+        }
+      } catch {}
+    }
+
+    return isPkg ? path.join(execDir, 'config.json') : path.join(process.cwd(), 'config.json');
   }
 
   public async loadConfig(): Promise<AppConfig> {
     const defaultConfig: AppConfig = {
       mode: 'P2P',
-      dataPath: path.join(process.cwd(), 'data', 'state.json'),
+      dataDir: './data',
       port: 3000,
       nodeName: `node-${crypto.randomUUID().slice(0, 6)}`,
       autoOpen: true,
       udpPort: 41234,
     };
 
-    let fileConfig: Partial<AppConfig> = {};
+    let fileConfig: Partial<AppConfig> & { dataPath?: string } = {};
     if (fs.existsSync(this.configPath)) {
       try {
         const raw = fs.readFileSync(this.configPath, 'utf-8');
         fileConfig = JSON.parse(raw);
       } catch (err) {
         console.warn(`[ConfigAdapter] Failed to parse ${this.configPath}, falling back to defaults:`, err);
+      }
+    }
+
+    // Handle legacy dataPath if present in fileConfig
+    if (fileConfig.dataPath && !fileConfig.dataDir) {
+      if (fileConfig.dataPath.endsWith('.json') || fileConfig.dataPath.endsWith('.jsonl')) {
+        fileConfig.dataDir = path.dirname(fileConfig.dataPath);
+      } else {
+        fileConfig.dataDir = fileConfig.dataPath;
       }
     }
 
@@ -43,6 +74,22 @@ export class JsonConfigAdapter implements ConfigPort {
       ...merged,
       ...cliConfig,
     };
+
+    // Ensure dataDir is resolved relative to the config file or binary location
+    if (finalConfig.dataDir && !path.isAbsolute(finalConfig.dataDir)) {
+      let baseDir = process.cwd();
+      if (fs.existsSync(this.configPath)) {
+        const dir = path.dirname(this.configPath);
+        if (!dir.startsWith('/snapshot')) {
+          baseDir = dir;
+        } else if ((process as any).pkg) {
+          baseDir = path.dirname(process.execPath);
+        }
+      } else if ((process as any).pkg) {
+        baseDir = path.dirname(process.execPath);
+      }
+      finalConfig.dataDir = path.resolve(baseDir, finalConfig.dataDir);
+    }
 
     return finalConfig;
   }
@@ -90,11 +137,13 @@ export class JsonConfigAdapter implements ConfigPort {
         i++;
       } else if (arg.startsWith('--host-address=') || arg.startsWith('--host=')) {
         parsed.hostAddress = arg.split('=')[1];
-      } else if (arg === '--data-path' && args[i + 1]) {
-        parsed.dataPath = args[i + 1];
+      } else if ((arg === '--data-dir' || arg === '--data-path' || arg === '--data') && args[i + 1]) {
+        const rawPath = args[i + 1];
+        parsed.dataDir = (rawPath.endsWith('.json') || rawPath.endsWith('.jsonl')) ? path.dirname(rawPath) : rawPath;
         i++;
-      } else if (arg.startsWith('--data-path=')) {
-        parsed.dataPath = arg.split('=')[1];
+      } else if (arg.startsWith('--data-dir=') || arg.startsWith('--data-path=') || arg.startsWith('--data=')) {
+        const rawPath = arg.split('=')[1];
+        parsed.dataDir = (rawPath.endsWith('.json') || rawPath.endsWith('.jsonl')) ? path.dirname(rawPath) : rawPath;
       } else if (arg === '--no-auto-open' || arg === '--auto-open=false') {
         parsed.autoOpen = false;
       }

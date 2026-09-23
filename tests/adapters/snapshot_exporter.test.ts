@@ -75,4 +75,41 @@ describe('JsonStateSnapshotExporter (State Snapshot Exporter)', () => {
     expect(parsedData.tasks[1].id).toBe('t2');
     expect(parsedData.tasks[1].parentId).toBe('t1');
   });
+
+  it('should load snapshot correctly when file exists, or return null if file does not exist', async () => {
+    const exporter = new JsonStateSnapshotExporter(snapshotPath);
+
+    const nonExistentSnapshot = await exporter.loadSnapshot();
+    expect(nonExistentSnapshot).toBeNull();
+
+    const mockData = {
+      projectId: 'p2',
+      projectName: 'Loaded Project',
+      totalTasks: 1,
+      tasks: [
+        {
+          id: 't_loaded',
+          projectId: 'p2',
+          parentId: null,
+          title: 'Existing Task',
+          status: 'IN_PROGRESS',
+          priority: 'HIGH',
+          orderIndex: 10,
+          isCollapsed: false,
+          updatedAt: 3000,
+          authorNodeId: 'n_host',
+        },
+      ],
+    };
+
+    fs.writeFileSync(snapshotPath, JSON.stringify(mockData, null, 2), 'utf-8');
+
+    const loadedSnapshot = await exporter.loadSnapshot();
+    expect(loadedSnapshot).not.toBeNull();
+    expect(loadedSnapshot?.projectId).toBe('p2');
+    expect(loadedSnapshot?.projectName).toBe('Loaded Project');
+    expect(loadedSnapshot?.tasks).toHaveLength(1);
+    expect(loadedSnapshot?.tasks[0].id).toBe('t_loaded');
+    expect(loadedSnapshot?.tasks[0].title).toBe('Existing Task');
+  });
 });

@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { StateSnapshotExporterPort } from '../ports/snapshot.js';
+import { StateSnapshotExporterPort, RawSnapshotData } from '../ports/snapshot.js';
 import { ProjectState } from '../domain/types.js';
 
 export class JsonStateSnapshotExporter implements StateSnapshotExporterPort {
@@ -28,6 +28,7 @@ export class JsonStateSnapshotExporter implements StateSnapshotExporterPort {
       orderIndex: t.orderIndex,
       isCollapsed: !!t.isCollapsed,
       updatedAt: t.updatedAt,
+      dueDate: t.dueDate || null,
       authorNodeId: t.authorNodeId,
     }));
 
@@ -41,5 +42,22 @@ export class JsonStateSnapshotExporter implements StateSnapshotExporterPort {
 
     const jsonContent = JSON.stringify(snapshotData, null, 2);
     fs.writeFileSync(this.filePath, jsonContent, 'utf-8');
+  }
+
+  public async loadSnapshot(): Promise<RawSnapshotData | null> {
+    if (!fs.existsSync(this.filePath)) {
+      return null;
+    }
+    try {
+      const raw = fs.readFileSync(this.filePath, 'utf-8');
+      const parsed = JSON.parse(raw) as RawSnapshotData;
+      if (parsed && Array.isArray(parsed.tasks)) {
+        return parsed;
+      }
+      return null;
+    } catch (err) {
+      console.warn(`[SnapshotExporter] Failed to load snapshot at ${this.filePath}:`, err);
+      return null;
+    }
   }
 }

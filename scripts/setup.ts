@@ -29,14 +29,14 @@ async function runWizard() {
   if (modeAns === '3') mode = 'HOST';
 
   let hostAddress = '';
-  let dataPath = './data/state.json';
+  let dataDir = './data';
 
   if (mode === 'CLIENT') {
     const hostAns = (await question('? 接続先ホストの端末アドレスを入力してください (例: 192.168.1.50:3000): ')).trim();
     hostAddress = hostAns || 'localhost:3000';
   } else {
-    const dataAns = (await question(`? 共有データのアドレス (state.json のパス) [初期値: ${dataPath}]: `)).trim();
-    if (dataAns) dataPath = dataAns;
+    const dataAns = (await question(`? 共有データディレクトリのパス (state.json / events.jsonl の保存先) [初期値: ${dataDir}]: `)).trim();
+    if (dataAns) dataDir = dataAns;
   }
 
   const portAns = (await question('? Web UIのポート番号を入力してください [初期値: 3000]: ')).trim();
@@ -50,7 +50,7 @@ async function runWizard() {
   const configAdapter = new JsonConfigAdapter();
   await configAdapter.saveConfig({
     mode,
-    dataPath,
+    dataDir,
     hostAddress: mode === 'CLIENT' ? hostAddress : undefined,
     port,
     autoOpen,
@@ -59,7 +59,7 @@ async function runWizard() {
   console.log('\n✅ config.json が作成・保存されました！');
   console.log(`   モード: ${mode}`);
   if (mode === 'CLIENT') console.log(`   接続先ホスト端末: ${hostAddress}`);
-  if (mode !== 'CLIENT') console.log(`   データアドレス (state.json): ${dataPath}`);
+  if (mode !== 'CLIENT') console.log(`   データ保存ディレクトリ: ${dataDir}`);
   console.log(`   ポート: ${port}`);
   console.log(`   ブラウザ自動オープン: ${autoOpen ? '有効' : '無効'}\n`);
 

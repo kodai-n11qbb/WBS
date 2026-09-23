@@ -4,6 +4,7 @@
   let currentEvents = [];
   let focusedTaskId = null;
   let inspectorSelectedTaskId = null;
+  let doubleClickedSubtreeId = null;
 
   // View Modes: 'OBSIDIAN_GRAPH_VIEW' | 'GANTT_VIEW'
   let currentViewMode = 'OBSIDIAN_GRAPH_VIEW';
@@ -87,13 +88,13 @@
     return null;
   }
 
-  // Dynamic Y Ratio calculation automatically adjusting to the max visible nest depth
-  function computeDynamicYRatio(depth, maxTreeDepth, isSelectedTree = false) {
+  // Dynamic Y Ratio calculation automatically adjusting to the max visible nest depth & inspector panel
+  function computeDynamicYRatio(depth, maxTreeDepth, isSelectedTree = false, isInspectorOpen = false) {
     const topY = 0.18;
-    const bottomY = isSelectedTree ? 0.82 : 0.85;
+    const bottomY = isInspectorOpen ? 0.65 : (isSelectedTree ? 0.82 : 0.85);
 
     if (maxTreeDepth <= 0) {
-      return 0.45; // Center single-level tasks vertically
+      return isInspectorOpen ? 0.35 : 0.45; // Center single-level tasks vertically, slightly higher if inspector open
     }
 
     const ratio = Math.min(1, Math.max(0, depth / maxTreeDepth));
@@ -376,10 +377,25 @@
     const width = cssWidth;
     const height = cssHeight;
 
-    const visibleTasks = currentTasks.filter((task) => {
-      if (currentMaxDepth === 'all') return true;
-      return getTaskDepth(task) < currentMaxDepth;
-    });
+    let visibleTasks = currentTasks;
+    if (doubleClickedSubtreeId) {
+      const activeSubtreeSet = getDescendantIds(doubleClickedSubtreeId);
+      if (activeSubtreeSet) {
+        visibleTasks = visibleTasks.filter((t) => activeSubtreeSet.has(t.id));
+      }
+      if (currentMaxDepth !== 'all') {
+        const maxRelDepth = typeof currentMaxDepth === 'number' ? currentMaxDepth : parseInt(currentMaxDepth, 10);
+        visibleTasks = visibleTasks.filter((t) => {
+          const rDepth = getRelativeDepth(t, doubleClickedSubtreeId);
+          return rDepth !== null && rDepth < maxRelDepth;
+        });
+      }
+    } else {
+      if (currentMaxDepth !== 'all') {
+        const maxDepth = typeof currentMaxDepth === 'number' ? currentMaxDepth : parseInt(currentMaxDepth, 10);
+        visibleTasks = visibleTasks.filter((t) => getTaskDepth(t) < maxDepth);
+      }
+    }
 
     const maxVisibleDepth = visibleTasks.reduce((max, t) => Math.max(max, getTaskDepth(t)), 0);
     const existingNodeMap = new Map(graphNodes.map((n) => [n.task.id, n]));
@@ -505,7 +521,8 @@
         }
       }
 
-      const selectedId = focusedTaskId || inspectorSelectedTaskId;
+      const isInspectorOpen = obsidianInspector && !obsidianInspector.classList.contains('hidden');
+      const selectedId = doubleClickedSubtreeId || focusedTaskId || inspectorSelectedTaskId;
       const activeTreeSet = selectedId ? getDescendantIds(selectedId) : null;
       const maxVisibleDepth = visibleTasks.reduce((max, t) => Math.max(max, getTaskDepth(t)), 0);
 
@@ -521,6 +538,17 @@
         });
       }
 
+      // Physics Repulsion Shield from Inspector Bottom Modal
+      if (isInspectorOpen) {
+        const inspectorCenterX = width / 2;
+        const inspectorTopY = height - 170;
+        graphNodes.forEach((node) => {
+          if (Math.abs(node.x - inspectorCenterX) < 360 && node.y > inspectorTopY) {
+            node.vy -= Math.max(2.0, (node.y - inspectorTopY) * 0.25);
+          }
+        });
+      }
+
       const nowTime = Date.now() * 0.0012;
       graphNodes.forEach((node, idx) => {
         if (!node.isPinned) {
@@ -530,16 +558,16 @@
             const relDepth = getRelativeDepth(node.task, selectedId);
             if (relDepth !== null) {
               // Elevate selected node to topY and scale subtree evenly down to bottomY
-              targetYRatio = computeDynamicYRatio(relDepth, maxSubtreeRelDepth, true);
+              targetYRatio = computeDynamicYRatio(relDepth, maxSubtreeRelDepth, true, isInspectorOpen);
             } else {
               // Unfocused background nodes sink slightly (+0.04) to highlight selected subtree
               const depth = getTaskDepth(node.task);
-              targetYRatio = Math.min(0.92, computeDynamicYRatio(depth, maxVisibleDepth, false) + 0.04);
+              targetYRatio = Math.min(0.92, computeDynamicYRatio(depth, maxVisibleDepth, false, isInspectorOpen) + 0.04);
             }
           } else {
             // Normal view with dynamic vertical scaling according to maxVisibleDepth
             const depth = getTaskDepth(node.task);
-            targetYRatio = computeDynamicYRatio(depth, maxVisibleDepth, false);
+            targetYRatio = computeDynamicYRatio(depth, maxVisibleDepth, false, isInspectorOpen);
           }
 
           const targetY = height * targetYRatio;
@@ -593,6 +621,43 @@
           }
         }
       });
+
+      // Draw Upward Link Line & Badge if doubleClickedSubtreeId has a parent
+      if (doubleClickedSubtreeId) {
+        const focusNode = nodeMap.get(doubleClickedSubtreeId);
+        if (focusNode && focusNode.task.parentId) {
+          const parentTask = currentTasks.find((t) => t.id === focusNode.task.parentId);
+          const parentTitle = parentTask ? parentTask.title : '親タスク';
+
+          ctx.save();
+          const topTargetY = Math.max(25, focusNode.y - 70);
+
+          ctx.beginPath();
+          ctx.moveTo(focusNode.x, focusNode.y - 14);
+          ctx.lineTo(focusNode.x, topTargetY);
+          ctx.strokeStyle = '#f59e0b';
+          ctx.lineWidth = 2.5;
+          ctx.setLineDash([5, 5]);
+          ctx.stroke();
+          ctx.setLineDash([]);
+
+          ctx.fillStyle = '#f59e0b';
+          ctx.beginPath();
+          ctx.arc(focusNode.x, topTargetY, 13, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 12px Inter, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('↑', focusNode.x, topTargetY);
+
+          ctx.font = '600 11px Inter, sans-serif';
+          ctx.fillStyle = isLight ? '#18181b' : '#f4f4f5';
+          ctx.fillText(`親: ${parentTitle}`, focusNode.x, topTargetY - 18);
+          ctx.restore();
+        }
+      }
 
       // Draw Nodes
       graphNodes.forEach((node) => {
@@ -701,6 +766,8 @@
     let isMouseDown = false;
     let clickStartX = 0;
     let clickStartY = 0;
+    let lastClickTime = 0;
+    let lastClickNodeId = null;
 
     canvas.onmousedown = (e) => {
       const rect = canvas.getBoundingClientRect();
@@ -728,6 +795,8 @@
 
     canvas.onmouseup = (e) => {
       const dist = Math.hypot(e.clientX - clickStartX, e.clientY - clickStartY);
+      const now = Date.now();
+
       if (draggedGraphNode) {
         draggedGraphNode.isPinned = false;
 
@@ -737,9 +806,23 @@
         if (droppedOnTopStrip && draggedGraphNode.task.parentId) {
           changeTaskParent(draggedGraphNode.task.id, null);
         } else if (dist < 5) {
-          // Click Node: Open Node Inspector
+          // Click Node: Check double click
           const task = draggedGraphNode.task;
+
+          if (lastClickNodeId === task.id && now - lastClickTime < 350) {
+            // DOUBLE CLICK: Subtree Focus Mode!
+            doubleClickedSubtreeId = task.id;
+            lastClickTime = 0;
+            lastClickNodeId = null;
+            openObsidianNodeInspector(task);
+            renderCurrentView();
+            return;
+          }
+
+          lastClickTime = now;
+          lastClickNodeId = task.id;
           openObsidianNodeInspector(task);
+          renderCurrentView();
         } else if (!droppedOnTopStrip) {
           // Dragged Node: Check drop target on another node
           const targetNode = graphNodes.find(
@@ -758,6 +841,7 @@
         // Click on empty canvas background: deselect focus and close inspector
         closeObsidianNodeInspector();
         focusedTaskId = null;
+        doubleClickedSubtreeId = null;
         renderCurrentView();
       }
       isMouseDown = false;
@@ -779,6 +863,9 @@
         graphParentNav.classList.remove('hidden');
         btnGraphGoParent.onclick = (e) => {
           e.stopPropagation();
+          if (doubleClickedSubtreeId) {
+            doubleClickedSubtreeId = parentTask.id;
+          }
           openObsidianNodeInspector(parentTask);
           renderCurrentView();
         };
@@ -857,6 +944,7 @@
       graphParentNav.classList.add('hidden');
     }
     inspectorSelectedTaskId = null;
+    doubleClickedSubtreeId = null;
   }
 
   if (btnInspectorClose) {

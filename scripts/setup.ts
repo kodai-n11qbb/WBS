@@ -29,14 +29,17 @@ async function runWizard() {
   if (modeAns === '3') mode = 'HOST';
 
   let hostAddress = '';
-  let dataDir = './.wbser_data';
+  const defaultDataDir = path.resolve(process.cwd(), 'data');
+  let dataDir = defaultDataDir;
 
   if (mode === 'CLIENT') {
     const hostAns = (await question('? 接続先ホストの端末アドレスを入力してください (例: 192.168.1.50:3000): ')).trim();
     hostAddress = hostAns || 'localhost:3000';
   } else {
-    const dataAns = (await question(`? 共有データディレクトリのパス (state.json / events.jsonl の保存先) [初期値: ${dataDir}]: `)).trim();
-    if (dataAns) dataDir = dataAns;
+    const dataAns = (await question(`? 共有データディレクトリのパス (state.json / events.jsonl の保存先) [初期値: ${defaultDataDir}]: `)).trim();
+    if (dataAns) {
+      dataDir = path.resolve(process.cwd(), dataAns);
+    }
   }
 
   const portAns = (await question('? Web UIのポート番号を入力してください [初期値: 3000]: ')).trim();

@@ -20,17 +20,18 @@ describe('JsonConfigAdapter', () => {
     }
   });
 
-  it('should load default config when config.json does not exist', async () => {
+  it('should load default config when config.json does not exist with absolute path', async () => {
     const adapter = new JsonConfigAdapter(configPath, []);
     const config = await adapter.loadConfig();
 
     expect(config.mode).toBe('P2P');
     expect(config.port).toBe(3000);
     expect(config.dataDir).toContain('data');
+    expect(path.isAbsolute(config.dataDir)).toBe(true);
     expect(config.autoOpen).toBe(true);
   });
 
-  it('should save and reload config from file', async () => {
+  it('should save and reload config with absolute dataDir path', async () => {
     const adapter = new JsonConfigAdapter(configPath, []);
     await adapter.saveConfig({
       mode: 'HOST',
@@ -42,9 +43,10 @@ describe('JsonConfigAdapter', () => {
     expect(reloaded.mode).toBe('HOST');
     expect(reloaded.port).toBe(8080);
     expect(reloaded.dataDir).toContain(path.normalize('custom/data'));
+    expect(path.isAbsolute(reloaded.dataDir)).toBe(true);
   });
 
-  it('should override config with CLI arguments including --data-dir', async () => {
+  it('should override config with CLI arguments including --data-dir resolved to absolute path', async () => {
     const cliArgs = ['--mode', 'CLIENT', '--host', '192.168.1.100:4000', '--port', '9090', '--data-dir', './cli_data', '--no-auto-open'];
     const adapter = new JsonConfigAdapter(configPath, cliArgs);
     const config = await adapter.loadConfig();
@@ -53,14 +55,16 @@ describe('JsonConfigAdapter', () => {
     expect(config.hostAddress).toBe('192.168.1.100:4000');
     expect(config.port).toBe(9090);
     expect(config.dataDir).toContain('cli_data');
+    expect(path.isAbsolute(config.dataDir)).toBe(true);
     expect(config.autoOpen).toBe(false);
   });
 
-  it('should fallback legacy dataPath to dataDir directory', async () => {
+  it('should fallback legacy dataPath to dataDir directory as absolute path', async () => {
     fs.writeFileSync(configPath, JSON.stringify({ mode: 'P2P', port: 3000, dataPath: './legacy/state.json' }));
     const adapter = new JsonConfigAdapter(configPath, []);
     const config = await adapter.loadConfig();
 
     expect(config.dataDir).toContain('legacy');
+    expect(path.isAbsolute(config.dataDir)).toBe(true);
   });
 });

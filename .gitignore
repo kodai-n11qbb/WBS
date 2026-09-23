@@ -9,8 +9,10 @@ bin/
 data/*.jsonl
 data/*.json
 !data/.gitkeep
+.wbser_data/
 config.json
 temp_test_data/
+temp_test_config/
 
 
 # Logs

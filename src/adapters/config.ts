@@ -36,11 +36,11 @@ export class JsonConfigAdapter implements ConfigPort {
   }
 
   public async loadConfig(): Promise<AppConfig> {
-    // Check if legacy ./data exists while ./.wbser_data does not
-    let initialDataDir = './.wbser_data';
+    // Default to terminal-relative absolute path of standard 'data' directory
+    let initialDataDir = path.resolve(process.cwd(), 'data');
     try {
-      if (!fs.existsSync(path.resolve(process.cwd(), './.wbser_data')) && fs.existsSync(path.resolve(process.cwd(), './data'))) {
-        initialDataDir = './data';
+      if (!fs.existsSync(initialDataDir) && fs.existsSync(path.resolve(process.cwd(), './.wbser_data'))) {
+        initialDataDir = path.resolve(process.cwd(), './.wbser_data');
       }
     } catch {}
 
@@ -105,9 +105,15 @@ export class JsonConfigAdapter implements ConfigPort {
 
   public async saveConfig(config: Partial<AppConfig>): Promise<AppConfig> {
     const current = await this.loadConfig();
+    let dataDir = config.dataDir || current.dataDir;
+    if (dataDir && !path.isAbsolute(dataDir)) {
+      dataDir = path.resolve(process.cwd(), dataDir);
+    }
+
     const updated: AppConfig = {
       ...current,
       ...config,
+      dataDir,
     };
 
     const dir = path.dirname(this.configPath);

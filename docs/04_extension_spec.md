@@ -19,18 +19,18 @@ Node.js, Python, Docker, Rust 等が**一切インストールされていない
 - **`@yao-pkg/pkg` パッケージング構造**:
   - バックグラウンド Node.js 実行エンジン ＋ TypeScriptビルド済みJS (`dist/`) ＋ Webフロントエンド静的資産 (`public/`) を1つの独立したネイティブバイナリにパッケージング。
   - **出力ターゲット**:
-    - Windows用: `bin/share-log-win.exe` (Windows 64bit用 `.exe`)
-    - Mac用 (Apple Silicon): `bin/share-log-macos-arm64` (M1/M2/M3 Mac用)
-    - Mac用 (Intel): `bin/share-log-macos-x64` (Intel Mac用)
+    - Windows用: `bin/wbser-win.exe` (Windows 64bit用 `.exe`)
+    - Mac用 (Apple Silicon): `bin/wbser-macos-arm64` (M1/M2/M3 Mac用)
+    - Mac用 (Intel): `bin/wbser-macos-x64` (Intel Mac用)
   - **実行メカニズム**:
     - ダブルクリックするとバイナリ内部の VFS (Virtual File System) から Node.js がメモリ起動。
-    - ローカルWebサーバー (`http://localhost:3000`) を即座に立ち上げ、既定のWebブラウザでアプリケーションUIを自動オープン。
+    - ローカルWebサーバー (`http://localhost:3000`) を即座に立ち上げ、既定のWebブラウザで WBSer UI を自動オープン。
 
 ### (2) Interactive CLI Setup & Configuration Adapter (対話型セットアップ ＆ 設定ファイルアダプター)
 - **対話型スクリプト (`npm run setup`)**:
-  - ターミナルで動作モード（`P2P` / `CLIENT` / `HOST`）やアドレス（端末IP / データ保存ディレクトリ `./data` のパス）に関する対話的質問に回答するだけで `config.json` を自動生成し、そのまま `bin/` へ設定済み単一バイナリを出力。
+  - ターミナルで動作モード（`P2P` / `CLIENT` / `HOST`）やアドレス（端末IP / データ保存ディレクトリ `./.wbser_data` のパス）に関する対話的質問に回答するだけで `config.json` を自動生成し、そのまま `bin/` へ設定済み単一バイナリを出力。
 - **起動時ハイブリッド設定ロジック**:
-  - `config.json` の設定値を自動ロード。CLI 引数（例: `--port 4000`, `--data-dir ./data`）がある場合は引数を優先オーバライド適用。
+  - `config.json` の設定値を自動ロード。CLI 引数（例: `--port 4000`, `--data-dir ./.wbser_data`）がある場合は引数を優先オーバライド適用。
 
 ### (3) Transport Adapter (通信基盤の差し替え)
 インターフェース `PeerDiscoveryPort` および `PeerTransportPort` を実装することで、通信方式を自由に切り替え可能とします。
@@ -42,7 +42,7 @@ Node.js, Python, Docker, Rust 等が**一切インストールされていない
 ### (4) Storage Adapter (永続化基盤の差し替え)
 `ProjectRepositoryPort` を実装することで、利用環境に応じたストレージを選択可能とします。
 
-- **JSON State Snapshot & Event Directory**: `./data` ディレクトリ管理 (`state.json` 状態ファイル ＆ `events.jsonl` イベントログ)
+- **Protected Hidden Directory Storage**: `./.wbser_data` ディレクトリ管理 (`state.json` 状態ファイル ＆ `events.jsonl` イベントログ)
 - **In-Memory Storage**: 単体テスト・デモ用
 - **SQLite / RocksDB**: 大規模なイベントログ・オフラインキャッシュ管理用
 

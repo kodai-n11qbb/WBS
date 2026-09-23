@@ -6,10 +6,10 @@
 
 ## 1. データ同期概念とデータエンティティ
 
-本ツールでは、運用の柔軟性に応じて **3つの動作モード（HOST / CLIENT / P2P）** を選択・切り替え可能とします。
+本ツール **「WBSer」** では、運用の柔軟性に応じて **3つの動作モード（HOST / CLIENT / P2P）** を選択・切り替え可能とします。
 
 - **Event**: 発生したすべての変更アクション（不可変なイベントログデータ）
-- **State**: 現在の最新タスク状態（`data/state.json` にスナップショットとして出力）
+- **State**: 現在の最新タスク状態（`./.wbser_data/state.json` にスナップショットとして出力）
 - **Member / Node**: ネットワーク内の参加者ノード（NodeID, DisplayName, LastSeenAt）
 
 ---
@@ -23,7 +23,7 @@ export interface Task {
   projectId: string;
   parentId?: string | null;      // 親タスクのID（nullの場合はルート/独立浮遊タスク）
   title: string;                 // タスク名 (唯一の必須属性)
-  status: 'TODO' | 'IN_PROGRESS' | 'DONE'; // ステータス
+  status: 'TODO' | 'IN_PROGRESS' | 'DONE'; // ステータス (IN_PROGRESS時はdueDate必須)
   orderIndex: number;            // 表示順序（ステータス変更時も保持）
   dueDate?: number | null;       // 完了予定日 (タイムスタンプ / YYYY-MM-DD)
   isCollapsed?: boolean;         // 端末ローカルUI状態
@@ -32,7 +32,7 @@ export interface Task {
 }
 ```
 
-### (2) ディレクトリ直下 最新状態ファイル (`data/state.json`)
+### (2) 隠しディレクトリ直下 最新状態ファイル (`./.wbser_data/state.json`)
 ```json
 {
   "projectId": "default-project",
@@ -59,70 +59,59 @@ export interface Task {
 
 | モード名 | 端末のアドレス (hostAddress) | データ保存ディレクトリ (dataDir) | 概要 |
 | :--- | :--- | :--- | :--- |
-| **`P2P`** (分散モード) | **不要** (自動発見) | **要指定** (`./data`) | 共有データ保存ディレクトリ (`state.json`, `events.jsonl`) を指定して分散動作 |
+| **`P2P`** (分散モード) | **不要** (自動発見) | **要指定** (`./.wbser_data`) | 共有データ保存ディレクトリ (`state.json`, `events.jsonl`) を指定して分散動作 |
 | **`CLIENT`** (クライアントモード) | **要指定** (`192.168.1.50:3000`) | **不要** (ホスト側が処理) | 指定したホスト端末アドレスへ接続 |
-| **`HOST`** (ホストモード) | **不要** (自身がホスト) | **要指定** (`./data`) | この端末をホスト親機として起動し接続受付 |
+| **`HOST`** (ホストモード) | **不要** (自身がホスト) | **要指定** (`./.wbser_data`) | この端末をホスト親機として起動し接続受付 |
 
 ### (1) `config.json` スキーマ仕様
 ```json
 {
   "mode": "P2P",
-  "dataDir": "./data",
+  "dataDir": "./.wbser_data",
   "hostAddress": "192.168.1.50:3000",
   "port": 3000,
   "nodeName": "node-dev1",
   "autoOpen": true
 }
 ```
-> ※ 下位互換性のため `dataPath` ("./data/state.json") の設定や `--data-path` オプションも自動フォールバック処理されます。
-> ※ アプリ起動時、`events.jsonl` が空または新規ディレクトリであっても既存の `state.json` が存在する場合は、そのタスク状態を自動ハイドレーション（復元）します。
-
-### (2) 対話型セットアップCLI (`npm run setup`)
-- ターミナルから `npm run setup` を実行すると対話形式で質問が表示され、設定された `config.json` の生成と単一バイナリ (`bin/`) のビルドを出力。
+> ※ 下位互換性のため、既存の `./data` ディレクトリが存在する場合は自動フォールバック検出・復元されます。
 
 ---
 
 ## 4. UI ビジュアル ＆ インタラクション仕様
 
-### (1) クリーン・モノトーンデザイン ＆ テーマ切り替え (Linear / Raycast Style)
-- 絵文字や過度なBlob背景、ネオングローを全廃し、Linear / Raycast 風のソリッドなテキスト主体デザインを採用。
-- CSSカスタムプロパティ (`[data-theme="dark"]` / `[data-theme="light"]`) による瞬時のテーマ切替と `localStorage` 永続化。
+### (1) 端末単位 Undo (1つ戻す) ボタン
+- ヘッダーバーに `[ ↺ 1つ戻す (Undo) ]` ボタンを配置。自端末 (`authorNodeId`) の直前操作を取り消し。
 
-### (2) Obsidian Graph View ＆ サブツリー強調 ＆ 文字重なり防止
-- **デフォルトネスト深度「すべて」**: アプリ起動・初期描画時にデフォルトで「すべて (`'all'`)」階層を展開。
-- **初期配置の絡まり防止物理 (Untangled Physical Physics)**: ツリー階層・分岐角度に基づく放射状反発初期配置によりノードの重なり・文字の重なりを解消。
-- **ノード選択とサブツリー強調 (Subtree Focus & Label Protection)**:
-  - ノードクリック時、選択ノードおよびその配下の子孫タスク群（子・孫ノード）のみをクッキリ強調表示し、他要素を半透明化。
-  - テキスト背景にプレート縁取りを施し文字の重なりによる視認性低下を防護。
-- **キャンバス空白部クリックによる初期化 (Empty Canvas Deselect)**:
-  - ノード以外の空白部分をクリックした際、選択フォーカスおよびノードインスペクターを即座に解除し初期表示状態へ復帰。
+### (2) 進行中 (IN_PROGRESS) ステータス切替時の完了予定日強制
+- ステータスを `IN_PROGRESS` に変更する際、`dueDate` 未設定の場合は完了予定日入力モーダルがポップアップし必須入力。
 
-### (3) GanttProject スタイル 日付管理ガントチャート
-- ヘッダー下の副タイトル（ツリー構造の階層縦軸...）を削除したクリーンレイアウト。
-- 縦軸 (Y軸) は樹状ツリー構造に従って親子階層順に配置。
-- 左側グリッドテーブルに `ツリータスク名` | `ステータス` | `完了予定日` を表示。
-- 右側タイムラインに日付単位刻みヘッダー軸と実稼働期間バー (`IN_PROGRESS` Window) および完了予定日マーカー (`gantt-due-marker` 🚩) を描画。
-- **完了予定日マーカー (`🚩`) のドラッグ＆ドロップ直接操作**: タイムライン上のマーカーを掴んで動かし、ドロップした位置の日時で `TASK_DUE_DATE_UPDATED` イベントを発火・即時保存。
-- **最長完了予定日の自動判定・全描画**: 全タスクの中で一番遠い完了予定日 (`dueDate`) を判定し、タイムライン右端内に完全に映し切れるようタイムライン領域を自動スケール。
+### (3) Obsidian Graph View 親表示 ＆ 焦点移動 ＆ 左上親ナビゲーションUI
+- **親要素の視覚的表示**: ノードクリック時、親要素との接続を上方向発光リンクで表示。
+- **最上部焦点移動 ＆ 配下全展開**: クリックしたノードを画面最上部へ移動させ、配下の全子要素を展開表示。
+- **左上固定親ナビゲーションUI (`.graph-parent-nav`)**: 画面左上に `position: absolute` で `← 親要素へ移動: [親タスク名]` ボタンを表示し親ノードへナビゲーション。
+
+### (4) GanttProject スタイル 日付管理ガントチャート ＆ 遅延表示
+- **親完了予定日超過の赤表示・遅延日数表示**: 子タスクの `dueDate` が親タスクの `dueDate` を超過している場合、超過領域を赤色ハイライトし「`+N日遅延`」のバッジを表示。
+- **ヘッダー幅の完全一致 (`gantt-ticks-header` Alignment)**: `gantt-ticks-header` のセル幅を `gantt-bar-cell` と完全に一致させ横ズレを防止。
+
+### (5) 3子要素以上の削除理由ログ入力モーダル
+- 子要素が3つ以上存在するタスク削除時、10文字以上の削除理由入力を求め、`TASK_DELETED` イベントの `reason` に記録。
 
 ---
 
-## 5. イベントログ同期メカニズム (`data/events.jsonl`)
+## 5. イベントログ同期メカニズム (`./.wbser_data/events.jsonl`)
 
 ### (1) イベントの種類 (`EventType`)
 1. `PROJECT_CREATED`: プロジェクト初期化
 2. `TASK_CREATED`: タスク生成 (`dueDate` 含む)
-3. `TASK_STATUS_UPDATED`: ステータス変更
-4. `TASK_TITLE_UPDATED`: タスク名（タイトル）変更
+3. `TASK_STATUS_UPDATED`: ステータス変更 (`IN_PROGRESS` 時 `dueDate` 必須)
+4. `TASK_TITLE_UPDATED`: タスク名変更
 5. `TASK_DUE_DATE_UPDATED`: 完了予定日変更
-6. `TASK_PARENT_CHANGED`: 親タスク変更（階層移動・ルート化）
+6. `TASK_PARENT_CHANGED`: 親タスク変更
 7. `TASK_REORDERED`: 表示順序変更
-8. `TASK_DELETED`: タスク削除
-
-### (2) 同期フロー (LAN P2P Event Reconciliation)
-- 各ノードは起動時に UDP ピア発見を実行し、接続要求 (`SYNC_REQUEST`) を送信。
-- 受信側ノードは自身が保持する `events.jsonl` の最新ハッシュ値を照合し、未所有の差分イベントデータ (`SYNC_RESPONSE`) を返却。
-- 差分イベントを適用後、`data/state.json` のスナップショットを更新。
+8. `TASK_DELETED`: タスク削除 (`reason` 10文字以上ログ記録)
+9. `UNDO_ACTION`: 端末単位直前操作の取り消し
 
 ---
 

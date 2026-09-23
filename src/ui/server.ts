@@ -287,6 +287,7 @@ async function main() {
               title: data.title,
               priority: data.priority,
               status: data.status || 'TODO',
+              dueDate: data.dueDate || null,
             });
             await broadcastStateToUI();
           } catch (err: any) {
@@ -298,13 +299,22 @@ async function main() {
             );
           }
         } else if (data.action === 'UPDATE_STATUS') {
-          await nodeService.updateTaskStatus(
-            activeProjectId,
-            data.taskId,
-            data.status,
-            data.newOrderIndex
-          );
-          await broadcastStateToUI();
+          try {
+            await nodeService.updateTaskStatus(
+              activeProjectId,
+              data.taskId,
+              data.status,
+              data.newOrderIndex
+            );
+            await broadcastStateToUI();
+          } catch (err: any) {
+            ws.send(
+              JSON.stringify({
+                type: 'ERROR',
+                message: err.message || 'ステータス更新エラー',
+              })
+            );
+          }
         } else if (data.action === 'UPDATE_TITLE') {
           try {
             await nodeService.updateTaskTitle(activeProjectId, data.taskId, data.title);
@@ -329,8 +339,29 @@ async function main() {
         } else if (data.action === 'TOGGLE_COLLAPSE') {
           // Tree node collapse/expand is local client UI state and excluded from P2P broadcast
         } else if (data.action === 'DELETE_TASK') {
-          await nodeService.deleteTask(activeProjectId, data.taskId);
-          await broadcastStateToUI();
+          try {
+            await nodeService.deleteTask(activeProjectId, data.taskId, data.reason);
+            await broadcastStateToUI();
+          } catch (err: any) {
+            ws.send(
+              JSON.stringify({
+                type: 'ERROR',
+                message: err.message || 'タスク削除エラー',
+              })
+            );
+          }
+        } else if (data.action === 'UNDO_LAST_ACTION') {
+          try {
+            await nodeService.undoLastAction(activeProjectId);
+            await broadcastStateToUI();
+          } catch (err: any) {
+            ws.send(
+              JSON.stringify({
+                type: 'ERROR',
+                message: err.message || 'Undoエラー',
+              })
+            );
+          }
         }
       } catch (e) {
         console.error('[WS Message Error]', e);
@@ -370,12 +401,12 @@ async function main() {
   server.listen(PORT, async () => {
     await bootstrap();
     const url = `http://localhost:${PORT}`;
-    console.log(`[Share-Log Mode: ${config.mode}] Server running at ${url}`);
+    console.log(`[WBSer Mode: ${config.mode}] Server running at ${url}`);
     if (config.mode === 'CLIENT' && config.hostAddress) {
-      console.log(`[Share-Log CLIENT Mode] Configured Host Address: ${config.hostAddress}`);
+      console.log(`[WBSer CLIENT Mode] Configured Host Address: ${config.hostAddress}`);
     }
     if (config.mode !== 'CLIENT') {
-      console.log(`[Share-Log State Data] Snapshot File: ${SNAPSHOT_FILE}`);
+      console.log(`[WBSer State Data] Snapshot File: ${SNAPSHOT_FILE}`);
     }
 
     if (config.autoOpen && process.env.AUTO_OPEN !== 'false') {

@@ -759,6 +759,36 @@ html[data-theme="light"] .inspector-due-date-input {
   font-size: 0.875rem;
 }
 
+/* Graph Parent Navigation Overlay */
+.graph-parent-nav {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  z-index: 250;
+  padding: 0.35rem 0.65rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-focus);
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  user-select: none;
+}
+
+.btn-parent-nav {
+  background: transparent;
+  border: none;
+  color: var(--status-progress);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.btn-parent-nav:hover {
+  text-decoration: underline;
+}
+
 /* Modals & Toasts */
 .hidden { display: none !important; }
 
@@ -770,8 +800,65 @@ html[data-theme="light"] .inspector-due-date-input {
 
 .modal-card {
   background: var(--bg-card); border: 1px solid var(--border-focus);
-  border-radius: var(--radius-lg); padding: 1.5rem; max-width: 400px; width: 90%;
+  border-radius: var(--radius-lg); padding: 1.5rem; max-width: 420px; width: 90%;
   text-align: center; box-shadow: var(--shadow-main);
+}
+
+.modal-card h3 {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+  color: var(--text-primary);
+}
+
+.modal-card p {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.modal-textarea {
+  width: 100%;
+  margin-top: 0.75rem;
+  background: var(--bg-main);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem;
+  font-size: 0.85rem;
+  font-family: inherit;
+  resize: vertical;
+  outline: none;
+}
+
+.modal-textarea:focus {
+  border-color: var(--border-focus);
+}
+
+.modal-date-input {
+  width: 100%;
+  margin-top: 0.75rem;
+  background: var(--bg-main);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem;
+  font-size: 0.9rem;
+  font-family: inherit;
+  outline: none;
+  color-scheme: dark;
+}
+
+html[data-theme="light"] .modal-date-input {
+  color-scheme: light;
+}
+
+.char-count-display {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  text-align: right;
+  margin-top: 0.25rem;
+  font-family: monospace;
 }
 
 .modal-actions {
@@ -783,8 +870,37 @@ html[data-theme="light"] .inspector-due-date-input {
   font-weight: 600; font-size: 0.82rem; cursor: pointer;
 }
 
+.btn-modal:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .btn-modal.btn-confirm { background: var(--accent-primary); color: var(--accent-inverse); }
 .btn-modal.btn-cancel { background: var(--bg-main); color: var(--text-secondary); border: 1px solid var(--border-color); }
+
+.gantt-overdue-bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, #ef4444, #f87171);
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
+}
+
+.gantt-delay-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  margin-left: 0.35rem;
+  padding: 0.1rem 0.35rem;
+  border-radius: var(--radius-sm);
+  background: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  font-size: 0.68rem;
+  font-weight: 700;
+  font-family: monospace;
+}
 
 .toast {
   position: fixed; bottom: 5.5rem; left: 50%; transform: translateX(-50%);

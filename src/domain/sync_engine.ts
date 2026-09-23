@@ -24,9 +24,16 @@ export class SyncEngine {
   }
 
   public reduceEvents(events: SyncEvent[]): ProjectState {
+    const revertedIds = new Set<string>();
+    for (const event of events) {
+      if (event.type === 'UNDO_ACTION' && event.payload?.revertedEventId) {
+        revertedIds.add(event.payload.revertedEventId);
+      }
+    }
+
     const eventMap = new Map<string, SyncEvent>();
     for (const event of events) {
-      if (!eventMap.has(event.id)) {
+      if (event.type !== 'UNDO_ACTION' && !revertedIds.has(event.id) && !eventMap.has(event.id)) {
         eventMap.set(event.id, event);
       }
     }

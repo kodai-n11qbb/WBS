@@ -1,7 +1,7 @@
 {
-  "name": "share-log",
+  "name": "wbser",
   "version": "1.0.0",
-  "description": "LAN-P2P Local-First Project Tracker",
+  "description": "WBSer - LAN-P2P Local-First Project Tracker",
   "main": "dist/ui/server.js",
   "bin": "dist/bundle.cjs",
   "pkg": {

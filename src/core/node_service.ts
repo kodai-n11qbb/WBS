@@ -138,6 +138,13 @@ export class NodeService {
     status: TaskStatus,
     newOrderIndex?: number
   ): Promise<SyncEvent> {
+    const state = await this.getProjectState(projectId);
+    const existingTask = state.tasks.get(taskId);
+    const validation = this.validator.validateStatusChange(status, existingTask?.dueDate);
+    if (!validation.valid) {
+      throw new Error(`ステータス更新失敗: ${validation.errors.join(' / ')}`);
+    }
+
     const event: SyncEvent = {
       id: crypto.randomUUID(),
       projectId,
@@ -198,7 +205,6 @@ export class NodeService {
     await this.exportSnapshot(projectId);
     return event;
   }
-
 
   public async reorderTask(
     projectId: string,
@@ -269,8 +275,13 @@ export class NodeService {
     return event;
   }
 
-  public async deleteTask(projectId: string, taskId: string): Promise<SyncEvent> {
+  public async deleteTask(projectId: string, taskId: string, reason?: string): Promise<SyncEvent> {
     const state = await this.getProjectState(projectId);
+    const validation = this.validator.validateDeletion(taskId, state.tasks, reason);
+    if (!validation.valid) {
+      throw new Error(`タスク削除失敗: ${validation.errors.join(' / ')}`);
+    }
+
     const toDelete = new Set<string>([taskId]);
     let added = true;
     while (added) {
@@ -292,7 +303,7 @@ export class NodeService {
         timestamp: Date.now(),
         sequence: ++this.sequenceCounter,
         type: 'TASK_DELETED',
-        payload: { taskId: id },
+        payload: { taskId: id, reason: id === taskId ? reason : undefined },
       };
 
       await this.repository.saveEvent(event);
@@ -301,6 +312,37 @@ export class NodeService {
     }
     await this.exportSnapshot(projectId);
     return lastEvent!;
+  }
+
+  public async undoLastAction(projectId: string): Promise<SyncEvent | null> {
+    const allEvents = await this.repository.getAllEvents();
+    const myEvents = allEvents.filter(
+      (e) => e.projectId === projectId && e.authorNodeId === this.nodeId && e.type !== 'UNDO_ACTION' && e.type !== 'PROJECT_CREATED'
+    );
+
+    if (myEvents.length === 0) {
+      return null;
+    }
+
+    const lastEvent = myEvents[myEvents.length - 1];
+    const undoEvent: SyncEvent = {
+      id: crypto.randomUUID(),
+      projectId,
+      authorNodeId: this.nodeId,
+      timestamp: Date.now(),
+      sequence: ++this.sequenceCounter,
+      type: 'UNDO_ACTION',
+      payload: {
+        revertedEventId: lastEvent.id,
+        revertedEventType: lastEvent.type,
+        revertedPayload: lastEvent.payload,
+      },
+    };
+
+    await this.repository.saveEvent(undoEvent);
+    await this.transport.broadcast({ type: 'EVENT_BROADCAST', event: undoEvent });
+    await this.exportSnapshot(projectId);
+    return undoEvent;
   }
 
   public async getProjectState(projectId: string): Promise<ProjectState> {

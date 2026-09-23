@@ -83,5 +83,20 @@ describe('NodeService (with Tree Tasks & Flexible Attributes)', () => {
       'タスクタイトルは空にできません'
     );
   });
+
+  it('should undo last action performed by node using undoLastAction', async () => {
+    const taskEvent = await service.createTask('p1', { title: 'Task to Undo' });
+    const taskId = taskEvent.payload.taskId;
+
+    let state = await service.getProjectState('p1');
+    expect(state.tasks.size).toBe(1);
+
+    const undoEvent = await service.undoLastAction('p1');
+    expect(undoEvent).not.toBeNull();
+    expect(undoEvent?.type).toBe('UNDO_ACTION');
+
+    state = await service.getProjectState('p1');
+    expect(state.tasks.size).toBe(0);
+  });
 });
 

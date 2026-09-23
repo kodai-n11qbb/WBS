@@ -46,4 +46,29 @@ describe('StructuredTaskValidator (with Optional Attributes)', () => {
     expect(result.valid).toBe(false);
     expect(result.errors).toContain('親タスクを自己の配下（子孫タスク）に移動することはできません。');
   });
+
+  it('should enforce dueDate when status is IN_PROGRESS', () => {
+    const resultNoDueDate = validator.validateStatusChange('IN_PROGRESS', null);
+    expect(resultNoDueDate.valid).toBe(false);
+    expect(resultNoDueDate.errors).toContain('進行中（IN_PROGRESS）に設定する場合は完了予定日（dueDate）が必須です。');
+
+    const resultWithDueDate = validator.validateStatusChange('IN_PROGRESS', Date.now());
+    expect(resultWithDueDate.valid).toBe(true);
+  });
+
+  it('should enforce 10+ char deletion reason for tasks with 3+ child subtasks', () => {
+    const tasks = new Map<string, any>([
+      ['parent', { id: 'parent', title: 'Parent', parentId: null }],
+      ['c1', { id: 'c1', title: 'Child 1', parentId: 'parent' }],
+      ['c2', { id: 'c2', title: 'Child 2', parentId: 'parent' }],
+      ['c3', { id: 'c3', title: 'Child 3', parentId: 'parent' }],
+    ]);
+
+    const resultNoReason = validator.validateDeletion('parent', tasks, 'short');
+    expect(resultNoReason.valid).toBe(false);
+    expect(resultNoReason.errors).toContain('3つ以上の子要素を持つタスクを削除する際は、10文字以上の削除理由が必要です。');
+
+    const resultValidReason = validator.validateDeletion('parent', tasks, 'このタスクはプロジェクト変更により不要となりました');
+    expect(resultValidReason.valid).toBe(true);
+  });
 });

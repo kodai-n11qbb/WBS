@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Share-Log | Obsidian Graph Tracker</title>
+  <title>WBSer | Obsidian Graph Tracker</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -15,7 +15,7 @@
   <div class="app-container">
     <header class="app-header minimal-header">
       <div class="header-left">
-        <h1 id="project-title">Share-Log</h1>
+        <h1 id="project-title">WBSer</h1>
         <div class="node-pill">
           <span class="status-dot online"></span>
           <span id="node-id-display">Node: Connecting...</span>
@@ -23,6 +23,11 @@
       </div>
 
       <div class="header-right">
+        <!-- Undo Button -->
+        <button id="btn-undo" class="btn-mode btn-undo" title="自端末の直前操作を取り消す">
+          ↺ 1つ戻す
+        </button>
+
         <!-- View Switcher -->
         <div class="view-switcher-group">
           <button id="btn-view-graph" class="btn-mode active" title="Obsidianノードグラフ (メイン)">
@@ -59,6 +64,33 @@
       </div>
     </div>
 
+    <!-- Deletion Reason Modal Dialog (for tasks with 3+ child subtasks) -->
+    <div id="delete-reason-modal" class="modal-backdrop hidden">
+      <div class="modal-card">
+        <h3>削除理由の入力が必要</h3>
+        <p>このタスクには3つ以上の子要素が含まれています。削除理由を10文字以上で入力してください。</p>
+        <textarea id="delete-reason-input" class="modal-textarea" rows="3" placeholder="削除理由を10文字以上で入力してください..."></textarea>
+        <div class="char-count-display"><span id="delete-reason-count">0</span> / 10文字以上</div>
+        <div class="modal-actions">
+          <button id="btn-delete-reason-cancel" class="btn-modal btn-cancel">キャンセル (Esc)</button>
+          <button id="btn-delete-reason-confirm" class="btn-modal btn-confirm" disabled>削除実行</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Mandatory Due Date Modal for IN_PROGRESS Status -->
+    <div id="in-progress-due-modal" class="modal-backdrop hidden">
+      <div class="modal-card">
+        <h3>完了予定日の入力が必要</h3>
+        <p>ステータスを「進行中」に変更するには、完了予定日の設定が必須です。</p>
+        <input type="date" id="in-progress-date-input" class="modal-date-input" />
+        <div class="modal-actions">
+          <button id="btn-in-progress-cancel" class="btn-modal btn-cancel">キャンセル (Esc)</button>
+          <button id="btn-in-progress-confirm" class="btn-modal btn-confirm">設定して進行中にする (Enter)</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Error Toast Notification -->
     <div id="error-toast" class="toast hidden"></div>
 
@@ -83,6 +115,13 @@
 
       <!-- VIEW 1: Obsidian-like Node Graph Canvas View -->
       <section id="obsidian-graph-view" class="view-section glass-card full-graph-view">
+        <!-- Top-Left Parent Navigation Overlay Panel -->
+        <div id="graph-parent-nav" class="graph-parent-nav glass-card hidden">
+          <button id="btn-graph-go-parent" class="btn-parent-nav" title="親要素へフォーカス移動">
+            ← 親要素へ移動: <span id="parent-nav-title">親タスク名</span>
+          </button>
+        </div>
+
         <!-- Screen Edge Nesting Depth Control & Text Size Control -->
         <div id="depth-filter-control" class="depth-filter-control glass-card">
           <div class="control-group">

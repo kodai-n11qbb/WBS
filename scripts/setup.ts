@@ -15,7 +15,7 @@ async function runWizard() {
   };
 
   console.log('\n==================================================');
-  console.log('  Share-Log Interactive Setup & Config Wizard  ');
+  console.log('    WBSer Interactive Setup & Config Wizard    ');
   console.log('==================================================\n');
 
   console.log('Select Operating Mode:');
@@ -29,7 +29,7 @@ async function runWizard() {
   if (modeAns === '3') mode = 'HOST';
 
   let hostAddress = '';
-  let dataDir = './data';
+  let dataDir = './.wbser_data';
 
   if (mode === 'CLIENT') {
     const hostAns = (await question('? 接続先ホストの端末アドレスを入力してください (例: 192.168.1.50:3000): ')).trim();

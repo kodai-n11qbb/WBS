@@ -19,6 +19,7 @@ export class JsonConfigAdapter implements ConfigPort {
     const candidates = [
       path.join(process.cwd(), 'config.json'),
       path.join(execDir, 'config.json'),
+      '/snapshot/WBSer/config.json',
       '/snapshot/share-log/config.json',
       '/snapshot/config.json',
     ];
@@ -35,9 +36,17 @@ export class JsonConfigAdapter implements ConfigPort {
   }
 
   public async loadConfig(): Promise<AppConfig> {
+    // Check if legacy ./data exists while ./.wbser_data does not
+    let initialDataDir = './.wbser_data';
+    try {
+      if (!fs.existsSync(path.resolve(process.cwd(), './.wbser_data')) && fs.existsSync(path.resolve(process.cwd(), './data'))) {
+        initialDataDir = './data';
+      }
+    } catch {}
+
     const defaultConfig: AppConfig = {
       mode: 'P2P',
-      dataDir: './data',
+      dataDir: initialDataDir,
       port: 3000,
       nodeName: `node-${crypto.randomUUID().slice(0, 6)}`,
       autoOpen: true,

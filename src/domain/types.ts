@@ -32,7 +32,8 @@ export type EventType =
   | 'TASK_REORDERED'
   | 'TASK_PARENT_CHANGED'
   | 'TASK_COLLAPSE_TOGGLED'
-  | 'TASK_DELETED';
+  | 'TASK_DELETED'
+  | 'UNDO_ACTION';
 
 
 export interface SyncEvent {

@@ -172,6 +172,7 @@
   // DOM Elements
   const nodeDisplay = document.getElementById('node-id-display');
   const errorToast = document.getElementById('error-toast');
+  const btnUndo = document.getElementById('btn-undo');
 
   const btnViewGraph = document.getElementById('btn-view-graph');
   const btnViewGantt = document.getElementById('btn-view-gantt');
@@ -182,6 +183,10 @@
 
   const obsidianGraphViewSection = document.getElementById('obsidian-graph-view');
   const canvas = document.getElementById('obsidian-canvas');
+
+  const graphParentNav = document.getElementById('graph-parent-nav');
+  const parentNavTitle = document.getElementById('parent-nav-title');
+  const btnGraphGoParent = document.getElementById('btn-graph-go-parent');
 
   const obsidianInspector = document.getElementById('obsidian-inspector');
   const inspectorStatusBadge = document.getElementById('inspector-status-badge');
@@ -196,6 +201,17 @@
   const confirmModalText = document.getElementById('confirm-modal-text');
   const btnModalCancel = document.getElementById('btn-modal-cancel');
   const btnModalConfirm = document.getElementById('btn-modal-confirm');
+
+  const deleteReasonModal = document.getElementById('delete-reason-modal');
+  const deleteReasonInput = document.getElementById('delete-reason-input');
+  const deleteReasonCount = document.getElementById('delete-reason-count');
+  const btnDeleteReasonCancel = document.getElementById('btn-delete-reason-cancel');
+  const btnDeleteReasonConfirm = document.getElementById('btn-delete-reason-confirm');
+
+  const inProgressDueModal = document.getElementById('in-progress-due-modal');
+  const inProgressDateInput = document.getElementById('in-progress-date-input');
+  const btnInProgressCancel = document.getElementById('btn-in-progress-cancel');
+  const btnInProgressConfirm = document.getElementById('btn-in-progress-confirm');
 
   const ganttViewSection = document.getElementById('gantt-view');
   const ganttContainer = document.getElementById('gantt-container');
@@ -756,6 +772,23 @@
     inspectorSelectedTaskId = task.id;
     focusedTaskId = task.id;
 
+    if (task.parentId && graphParentNav && parentNavTitle && btnGraphGoParent) {
+      const parentTask = currentTasks.find((t) => t.id === task.parentId);
+      if (parentTask) {
+        parentNavTitle.textContent = parentTask.title;
+        graphParentNav.classList.remove('hidden');
+        btnGraphGoParent.onclick = (e) => {
+          e.stopPropagation();
+          openObsidianNodeInspector(parentTask);
+          renderCurrentView();
+        };
+      } else {
+        graphParentNav.classList.add('hidden');
+      }
+    } else if (graphParentNav) {
+      graphParentNav.classList.add('hidden');
+    }
+
     if (inspectorStatusBadge) {
       const statusLabels = { TODO: '未着手', IN_PROGRESS: '進行中', DONE: '完了' };
       inspectorStatusBadge.textContent = statusLabels[task.status] || task.status;
@@ -807,9 +840,8 @@
       btnInspectorDelete.onclick = (e) => {
         e.stopPropagation();
         const latestTask = currentTasks.find((t) => t.id === inspectorSelectedTaskId);
-        if (latestTask && confirm(`タスク「${latestTask.title}」を削除しますか？`)) {
+        if (latestTask) {
           deleteTask(latestTask.id);
-          closeObsidianNodeInspector();
         }
       };
     }
@@ -820,6 +852,9 @@
   function closeObsidianNodeInspector() {
     if (obsidianInspector) {
       obsidianInspector.classList.add('hidden');
+    }
+    if (graphParentNav) {
+      graphParentNav.classList.add('hidden');
     }
     inspectorSelectedTaskId = null;
   }
@@ -943,6 +978,7 @@
     // Render Timeline Ticks (5 Date Markers)
     const ticksHeader = document.createElement('div');
     ticksHeader.className = 'gantt-ticks-header';
+    ticksHeader.style.cssText = 'margin-left: 52%; width: 48%; box-sizing: border-box;';
     const numTicks = 5;
     for (let i = 0; i < numTicks; i++) {
       const tickTime = minTime + (totalSpan * i) / (numTicks - 1);
@@ -961,7 +997,7 @@
         <th style="width: 28%;">ツリータスク名</th>
         <th style="width: 11%;">ステータス</th>
         <th style="width: 13%;">完了予定日</th>
-        <th class="gantt-bar-cell">時系列タイムライン & 予定マーカー (🚩)</th>
+        <th class="gantt-bar-cell" style="width: 48%;">時系列タイムライン & 予定マーカー (🚩)</th>
       </tr>
     `;
     table.appendChild(thead);
@@ -981,6 +1017,23 @@
         dueDateStr = `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
         if (task.status !== 'DONE' && task.dueDate < now) {
           isOverdue = true;
+        }
+      }
+
+      // Check if child task overdue past parent due date
+      let overdueBadgeHtml = '';
+      let overdueBarHtml = '';
+      if (task.parentId && task.dueDate) {
+        const parentTask = currentTasks.find((p) => p.id === task.parentId);
+        if (parentTask && parentTask.dueDate && task.dueDate > parentTask.dueDate) {
+          const delayMs = task.dueDate - parentTask.dueDate;
+          const delayDays = Math.ceil(delayMs / 86400000);
+          overdueBadgeHtml = `<span class="gantt-delay-badge" title="親タスクの完了予定日を${delayDays}日超過">+${delayDays}日遅延</span>`;
+
+          const parentDuePct = Math.max(0, Math.min(100, ((parentTask.dueDate - minTime) / totalSpan) * 100));
+          const childDuePct = Math.max(0, Math.min(100, ((task.dueDate - minTime) / totalSpan) * 100));
+          const overWidthPct = Math.max(1, childDuePct - parentDuePct);
+          overdueBarHtml = `<div class="gantt-overdue-bar" style="left: ${parentDuePct.toFixed(1)}%; width: ${overWidthPct.toFixed(1)}%;" title="親の完了予定日を${delayDays}日超過"></div>`;
         }
       }
 
@@ -1006,7 +1059,7 @@
       // Render Row
       const taskTd = document.createElement('td');
       taskTd.className = 'gantt-task-name';
-      taskTd.innerHTML = `<span class="gantt-tree-indent">${indentStr}</span>${task.title}`;
+      taskTd.innerHTML = `<span class="gantt-tree-indent">${indentStr}</span>${task.title}${overdueBadgeHtml}`;
 
       const statusTd = document.createElement('td');
       const badge = document.createElement('span');
@@ -1036,6 +1089,7 @@
           <div class="gantt-bar-fill" data-status="${task.status}" style="left: ${startPct.toFixed(1)}%; width: ${widthPct.toFixed(1)}%;" title="期間: 約${durationDays}日間 (${statusLabels[task.status]})">
             ${durationDays > 1 ? `${durationDays}日` : ''}
           </div>
+          ${overdueBarHtml}
           ${dueMarkerHtml}
         </div>
       `;
@@ -1218,18 +1272,76 @@
     });
   }
 
+  if (btnUndo) {
+    btnUndo.addEventListener('click', () => {
+      undoLastAction();
+    });
+  }
+
+  function undoLastAction() {
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(
+        JSON.stringify({
+          action: 'UNDO_LAST_ACTION',
+        })
+      );
+    }
+  }
+
   // Socket Emitters
   function updateTaskStatus(taskId, newStatus) {
+    const task = currentTasks.find((t) => t.id === taskId);
+    if (newStatus === 'IN_PROGRESS' && (!task || !task.dueDate)) {
+      promptInProgressDueDate(taskId);
+      return;
+    }
+
     if (socket && socket.readyState === WebSocket.OPEN) {
       socket.send(
         JSON.stringify({
           action: 'UPDATE_STATUS',
           taskId,
           status: newStatus,
-          // Note: preserve existing orderIndex by omitting newOrderIndex
         })
       );
     }
+  }
+
+  function promptInProgressDueDate(taskId) {
+    if (!inProgressDueModal || !inProgressDateInput) return;
+
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    inProgressDateInput.value = `${yyyy}-${mm}-${dd}`;
+
+    inProgressDueModal.classList.remove('hidden');
+
+    btnInProgressCancel.onclick = () => {
+      inProgressDueModal.classList.add('hidden');
+    };
+
+    btnInProgressConfirm.onclick = () => {
+      const val = inProgressDateInput.value;
+      if (!val) {
+        showErrorToast('完了予定日を選択してください');
+        return;
+      }
+      const dueDateTs = new Date(val + 'T23:59:59').getTime();
+      inProgressDueModal.classList.add('hidden');
+
+      updateTaskDueDate(taskId, dueDateTs);
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(
+          JSON.stringify({
+            action: 'UPDATE_STATUS',
+            taskId,
+            status: 'IN_PROGRESS',
+          })
+        );
+      }
+    };
   }
 
   function updateTaskTitle(taskId, newTitle) {
@@ -1269,14 +1381,66 @@
   }
 
   function deleteTask(taskId) {
-    if (socket && socket.readyState === WebSocket.OPEN) {
-      socket.send(
-        JSON.stringify({
-          action: 'DELETE_TASK',
-          taskId,
-        })
-      );
+    const task = currentTasks.find((t) => t.id === taskId);
+    if (!task) return;
+
+    const childCount = currentTasks.filter((t) => t.parentId === taskId).length;
+
+    if (childCount >= 3) {
+      promptDeleteReason(task);
+      return;
     }
+
+    if (confirm(`タスク「${task.title}」を削除しますか？`)) {
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(
+          JSON.stringify({
+            action: 'DELETE_TASK',
+            taskId,
+          })
+        );
+      }
+      closeObsidianNodeInspector();
+    }
+  }
+
+  function promptDeleteReason(task) {
+    if (!deleteReasonModal || !deleteReasonInput) return;
+
+    deleteReasonInput.value = '';
+    deleteReasonCount.textContent = '0';
+    btnDeleteReasonConfirm.disabled = true;
+
+    deleteReasonModal.classList.remove('hidden');
+
+    const updateCount = () => {
+      const len = deleteReasonInput.value.trim().length;
+      deleteReasonCount.textContent = `${len}`;
+      btnDeleteReasonConfirm.disabled = len < 10;
+    };
+
+    deleteReasonInput.oninput = updateCount;
+
+    btnDeleteReasonCancel.onclick = () => {
+      deleteReasonModal.classList.add('hidden');
+    };
+
+    btnDeleteReasonConfirm.onclick = () => {
+      const reason = deleteReasonInput.value.trim();
+      if (reason.length < 10) return;
+
+      deleteReasonModal.classList.add('hidden');
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(
+          JSON.stringify({
+            action: 'DELETE_TASK',
+            taskId: task.id,
+            reason,
+          })
+        );
+      }
+      closeObsidianNodeInspector();
+    };
   }
 
   function sendCreateTask(title, parentId = null) {

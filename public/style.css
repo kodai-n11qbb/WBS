@@ -658,21 +658,47 @@ html[data-theme="light"] .inspector-due-date-input {
 
 .gantt-due-marker {
   position: absolute;
-  top: -3px;
-  bottom: -3px;
-  width: 2px;
+  top: -4px;
+  bottom: -4px;
+  width: 3px;
   background: #f59e0b;
-  box-shadow: 0 0 6px #f59e0b;
+  box-shadow: 0 0 8px #f59e0b;
   z-index: 10;
   pointer-events: auto;
+  cursor: ew-resize;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.gantt-due-marker:hover, .gantt-due-marker.dragging {
+  background: #ef4444;
+  box-shadow: 0 0 12px #ef4444;
+  transform: scaleX(1.5);
 }
 
 .gantt-due-marker::before {
   content: '🚩';
   position: absolute;
-  top: -12px;
+  top: -13px;
   left: -6px;
-  font-size: 10px;
+  font-size: 11px;
+  cursor: ew-resize;
+  user-select: none;
+}
+
+.gantt-drag-tooltip {
+  position: fixed;
+  z-index: 3000;
+  background: #18181b;
+  border: 1px solid #f59e0b;
+  color: #f59e0b;
+  padding: 0.25rem 0.6rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  font-family: monospace;
+  font-weight: 700;
+  box-shadow: var(--shadow-main);
+  pointer-events: none;
+  transform: translate(-50%, -130%);
 }
 
 .gantt-due-pill {

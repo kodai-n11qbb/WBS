@@ -9,7 +9,7 @@
   let currentViewMode = 'OBSIDIAN_GRAPH_VIEW';
 
   // Edge Nest Depth Filter (1, 2, 3... or 'all')
-  let currentMaxDepth = 2;
+  let currentMaxDepth = 'all';
 
   // 1. Theme Manager (Dark / Light Theme Switcher)
   const btnThemeToggle = document.getElementById('btn-theme-toggle');
@@ -795,6 +795,63 @@
           e.stopPropagation();
           setViewMode('OBSIDIAN_GRAPH_VIEW');
           openObsidianNodeInspector(task);
+        };
+      }
+
+      // Allow dragging Gantt completion due date marker (🚩) to update dueDate
+      const dueMarkerEl = barTd.querySelector('.gantt-due-marker');
+      if (dueMarkerEl) {
+        dueMarkerEl.onmousedown = (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+
+          const track = barTd.querySelector('.gantt-bar-track');
+          if (!track) return;
+
+          dueMarkerEl.classList.add('dragging');
+
+          let tooltip = document.querySelector('.gantt-drag-tooltip');
+          if (!tooltip) {
+            tooltip = document.createElement('div');
+            tooltip.className = 'gantt-drag-tooltip';
+            document.body.appendChild(tooltip);
+          }
+
+          let pendingDateTs = task.dueDate;
+
+          const onMouseMove = (moveEvt) => {
+            const rect = track.getBoundingClientRect();
+            const relX = Math.max(0, Math.min(rect.width, moveEvt.clientX - rect.left));
+            const ratio = relX / rect.width;
+            pendingDateTs = minTime + ratio * totalSpan;
+
+            const dateObj = new Date(pendingDateTs);
+            const dateStr = `${dateObj.getFullYear()}/${String(dateObj.getMonth() + 1).padStart(2, '0')}/${String(dateObj.getDate()).padStart(2, '0')}`;
+
+            dueMarkerEl.style.left = `${(ratio * 100).toFixed(1)}%`;
+            tooltip.textContent = `完了予定日: ${dateStr}`;
+            tooltip.style.left = `${moveEvt.clientX}px`;
+            tooltip.style.top = `${moveEvt.clientY}px`;
+            tooltip.style.display = 'block';
+          };
+
+          const onMouseUp = () => {
+            window.removeEventListener('mousemove', onMouseMove);
+            window.removeEventListener('mouseup', onMouseUp);
+            dueMarkerEl.classList.remove('dragging');
+            if (tooltip) {
+              tooltip.remove();
+            }
+
+            if (pendingDateTs) {
+              const d = new Date(pendingDateTs);
+              d.setHours(23, 59, 59, 999);
+              updateTaskDueDate(task.id, d.getTime());
+            }
+          };
+
+          window.addEventListener('mousemove', onMouseMove);
+          window.addEventListener('mouseup', onMouseUp);
         };
       }
 

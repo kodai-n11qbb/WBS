@@ -51,6 +51,22 @@
     return depth;
   }
 
+  function getDescendantIds(startTaskId) {
+    if (!startTaskId) return null;
+    const descendantIds = new Set([startTaskId]);
+    const queue = [startTaskId];
+    while (queue.length > 0) {
+      const parentId = queue.shift();
+      currentTasks.forEach((t) => {
+        if (t.parentId === parentId && !descendantIds.has(t.id)) {
+          descendantIds.add(t.id);
+          queue.push(t.id);
+        }
+      });
+    }
+    return descendantIds;
+  }
+
   // Canvas Animation Frame & Physics State
   let canvasAnimationId = null;
   let graphNodes = [];
@@ -224,6 +240,8 @@
     });
 
     const existingNodeMap = new Map(graphNodes.map((n) => [n.task.id, n]));
+    const rootTasks = visibleTasks.filter((t) => !t.parentId || !visibleTasks.some((p) => p.id === t.parentId));
+    const rootCount = Math.max(1, rootTasks.length);
 
     graphNodes = visibleTasks.map((task, idx) => {
       const existing = existingNodeMap.get(task.id);
@@ -233,18 +251,38 @@
       }
 
       const depth = getTaskDepth(task);
-      const angle = (idx / Math.max(1, visibleTasks.length)) * Math.PI * 2;
-      const radius = Math.min(canvas.width, canvas.height) * 0.3;
-      const centerX = canvas.width / 2;
-      const targetYRatio = depth === 0 ? 0.22 : (depth === 1 ? 0.48 : (depth === 2 ? 0.72 : 0.88));
-      const centerY = canvas.height * targetYRatio;
+      let initX = canvas.width / 2;
+      let initY = canvas.height / 2;
+
+      if (depth === 0) {
+        const rootIdx = rootTasks.findIndex((r) => r.id === task.id);
+        const xRatio = (rootIdx + 1) / (rootCount + 1);
+        initX = canvas.width * xRatio;
+        initY = canvas.height * 0.22;
+      } else {
+        const parentNode = existingNodeMap.get(task.parentId);
+        const siblings = visibleTasks.filter((t) => t.parentId === task.parentId);
+        const siblingIdx = siblings.findIndex((s) => s.id === task.id);
+        const siblingCount = Math.max(1, siblings.length);
+
+        const parentX = parentNode ? parentNode.x : canvas.width / 2;
+        const parentY = parentNode ? parentNode.y : canvas.height * 0.3;
+
+        const spreadAngle = Math.PI * 0.8;
+        const startAngle = Math.PI * 0.5 - spreadAngle / 2;
+        const angle = siblingCount === 1 ? Math.PI * 0.5 : startAngle + (siblingIdx / (siblingCount - 1)) * spreadAngle;
+        const dist = 130 + depth * 20;
+
+        initX = parentX + Math.cos(angle) * dist + (Math.random() - 0.5) * 20;
+        initY = parentY + Math.sin(angle) * 80 + (Math.random() - 0.5) * 20;
+      }
 
       return {
         task,
-        x: centerX + Math.cos(angle) * (radius * 0.5),
-        y: centerY + (Math.random() - 0.5) * 40,
-        vx: (Math.random() - 0.5) * 0.2,
-        vy: (Math.random() - 0.5) * 0.2,
+        x: initX,
+        y: initY,
+        vx: (Math.random() - 0.5) * 0.1,
+        vy: (Math.random() - 0.5) * 0.1,
         isPinned: false,
       };
     });
@@ -310,7 +348,7 @@
         }
       });
 
-      const minRepelDist = 130;
+      const minRepelDist = 160;
       for (let i = 0; i < graphNodes.length; i++) {
         for (let j = i + 1; j < graphNodes.length; j++) {
           const nodeA = graphNodes[i];
@@ -364,19 +402,29 @@
         }
       });
 
+      const selectedId = focusedTaskId || inspectorSelectedTaskId;
+      const activeTreeSet = selectedId ? getDescendantIds(selectedId) : null;
+
       // Draw Edges
       graphNodes.forEach((node) => {
         if (node.task.parentId) {
           const parentNode = nodeMap.get(node.task.parentId);
           if (parentNode) {
+            const isSubtreeEdge = activeTreeSet && activeTreeSet.has(node.task.id) && activeTreeSet.has(parentNode.task.id);
+            const isDimmedEdge = activeTreeSet && !isSubtreeEdge;
+
             ctx.beginPath();
             ctx.moveTo(node.x, node.y);
             ctx.lineTo(parentNode.x, parentNode.y);
-            ctx.strokeStyle = isLight ? 'rgba(0, 0, 0, 0.22)' : 'rgba(255, 255, 255, 0.25)';
-            ctx.lineWidth = 1.5;
-            ctx.setLineDash([4, 4]);
+            ctx.strokeStyle = isSubtreeEdge
+              ? '#f59e0b'
+              : (isLight ? 'rgba(0, 0, 0, 0.22)' : 'rgba(255, 255, 255, 0.25)');
+            ctx.lineWidth = isSubtreeEdge ? 2.5 : 1.5;
+            ctx.globalAlpha = isDimmedEdge ? 0.12 : 1.0;
+            ctx.setLineDash(isSubtreeEdge ? [] : [4, 4]);
             ctx.stroke();
             ctx.setLineDash([]);
+            ctx.globalAlpha = 1.0;
           }
         }
       });
@@ -387,30 +435,34 @@
         if (node.task.status === 'IN_PROGRESS') nodeColor = '#f59e0b';
         if (node.task.status === 'DONE') nodeColor = '#10b981';
 
-        const isFocused = focusedTaskId === node.task.id || inspectorSelectedTaskId === node.task.id;
-        const childCount = currentTasks.filter((t) => t.parentId === node.task.id).length;
+        const isSelectedRoot = selectedId === node.task.id;
+        const isInSubtree = activeTreeSet ? activeTreeSet.has(node.task.id) : true;
+        const isDimmed = activeTreeSet && !isInSubtree;
 
+        const childCount = currentTasks.filter((t) => t.parentId === node.task.id).length;
         const baseRadius = 9;
         const coreRadius = baseRadius + Math.min(childCount * 4, 16);
-        const haloRadius = coreRadius + (isFocused ? 10 : 6);
+        const haloRadius = coreRadius + (isSelectedRoot ? 12 : (isInSubtree && activeTreeSet ? 8 : 5));
+
+        ctx.globalAlpha = isDimmed ? 0.2 : 1.0;
 
         // Halo
         ctx.beginPath();
         ctx.arc(node.x, node.y, haloRadius, 0, Math.PI * 2);
-        ctx.fillStyle = nodeColor;
-        ctx.globalAlpha = isFocused ? 0.35 : 0.15;
+        ctx.fillStyle = isSelectedRoot ? '#f59e0b' : nodeColor;
+        ctx.globalAlpha = isDimmed ? 0.08 : (isSelectedRoot ? 0.45 : 0.18);
         ctx.fill();
 
         // Core Circle
         ctx.beginPath();
         ctx.arc(node.x, node.y, coreRadius, 0, Math.PI * 2);
-        ctx.globalAlpha = 1.0;
+        ctx.globalAlpha = isDimmed ? 0.25 : 1.0;
         ctx.fillStyle = nodeColor;
         ctx.fill();
 
-        if (isFocused) {
-          ctx.strokeStyle = isLight ? '#18181b' : '#ffffff';
-          ctx.lineWidth = 2.5;
+        if (isSelectedRoot || (isInSubtree && activeTreeSet)) {
+          ctx.strokeStyle = isSelectedRoot ? (isLight ? '#18181b' : '#ffffff') : '#f59e0b';
+          ctx.lineWidth = isSelectedRoot ? 2.8 : 1.8;
           ctx.stroke();
         }
 
@@ -423,11 +475,27 @@
           ctx.textBaseline = 'alphabetic';
         }
 
-        // Label
-        ctx.font = isFocused ? 'bold 12px Inter, sans-serif' : '11px Inter, sans-serif';
-        ctx.fillStyle = isLight ? '#18181b' : '#f4f4f5';
+        // Label with background plate to prevent text overlapping
+        ctx.font = isSelectedRoot ? 'bold 12px Inter, sans-serif' : (isInSubtree && activeTreeSet ? '500 11px Inter, sans-serif' : '11px Inter, sans-serif');
+        const textMetrics = ctx.measureText(node.task.title);
+        const textWidth = textMetrics.width;
+        const labelX = node.x;
+        const labelY = node.y + haloRadius + 14;
+
+        // Label Background Plate
+        ctx.fillStyle = isLight ? 'rgba(250, 250, 250, 0.92)' : 'rgba(9, 9, 11, 0.92)';
+        ctx.globalAlpha = isDimmed ? 0.2 : 0.92;
+        ctx.fillRect(labelX - textWidth / 2 - 4, labelY - 11, textWidth + 8, 15);
+
+        ctx.strokeStyle = isSelectedRoot ? 'rgba(245, 158, 11, 0.6)' : (isLight ? 'rgba(0, 0, 0, 0.12)' : 'rgba(255, 255, 255, 0.12)');
+        ctx.lineWidth = 1;
+        ctx.strokeRect(labelX - textWidth / 2 - 4, labelY - 11, textWidth + 8, 15);
+
+        ctx.fillStyle = isDimmed ? (isLight ? '#94a3b8' : '#52525b') : (isLight ? '#18181b' : '#f4f4f5');
+        ctx.globalAlpha = isDimmed ? 0.3 : 1.0;
         ctx.textAlign = 'center';
-        ctx.fillText(node.task.title, node.x, node.y + haloRadius + 14);
+        ctx.fillText(node.task.title, labelX, labelY);
+        ctx.globalAlpha = 1.0;
       });
 
       canvasAnimationId = requestAnimationFrame(animate);
@@ -494,6 +562,11 @@
             }
           }
         }
+      } else if (dist < 5) {
+        // Click on empty canvas background: deselect focus and close inspector
+        closeObsidianNodeInspector();
+        focusedTaskId = null;
+        renderCurrentView();
       }
       isMouseDown = false;
       draggedGraphNode = null;
@@ -535,8 +608,9 @@
       btn.classList.toggle('active', btnStatus === task.status);
       btn.onclick = (e) => {
         e.stopPropagation();
-        if (task.status !== btnStatus) {
-          updateTaskStatus(task.id, btnStatus);
+        const latestTask = currentTasks.find((t) => t.id === inspectorSelectedTaskId);
+        if (latestTask && latestTask.status !== btnStatus) {
+          updateTaskStatus(latestTask.id, btnStatus);
         }
       };
     });
@@ -546,8 +620,9 @@
       btnInspectorElevate.style.opacity = task.parentId ? '1' : '0.4';
       btnInspectorElevate.onclick = (e) => {
         e.stopPropagation();
-        if (task.parentId) {
-          changeTaskParent(task.id, null);
+        const latestTask = currentTasks.find((t) => t.id === inspectorSelectedTaskId);
+        if (latestTask && latestTask.parentId) {
+          changeTaskParent(latestTask.id, null);
         }
       };
     }
@@ -555,8 +630,9 @@
     if (btnInspectorDelete) {
       btnInspectorDelete.onclick = (e) => {
         e.stopPropagation();
-        if (confirm(`タスク「${task.title}」を削除しますか？`)) {
-          deleteTask(task.id);
+        const latestTask = currentTasks.find((t) => t.id === inspectorSelectedTaskId);
+        if (latestTask && confirm(`タスク「${latestTask.title}」を削除しますか？`)) {
+          deleteTask(latestTask.id);
           closeObsidianNodeInspector();
         }
       };

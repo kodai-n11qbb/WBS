@@ -83,13 +83,22 @@
 
       <!-- VIEW 1: Obsidian-like Node Graph Canvas View -->
       <section id="obsidian-graph-view" class="view-section glass-card full-graph-view">
-        <!-- Screen Edge Nesting Depth Control -->
+        <!-- Screen Edge Nesting Depth Control & Text Size Control -->
         <div id="depth-filter-control" class="depth-filter-control glass-card">
-          <span class="depth-label">ネスト表示:</span>
-          <button class="depth-btn" data-depth="1">1階層</button>
-          <button class="depth-btn" data-depth="2">2階層</button>
-          <button class="depth-btn" data-depth="3">3階層</button>
-          <button class="depth-btn active" data-depth="all">すべて</button>
+          <div class="control-group">
+            <span class="depth-label">ネスト表示:</span>
+            <button type="button" class="depth-btn" data-depth="1">1階層</button>
+            <button type="button" class="depth-btn" data-depth="2">2階層</button>
+            <button type="button" class="depth-btn" data-depth="3">3階層</button>
+            <button type="button" class="depth-btn active" data-depth="all">すべて</button>
+          </div>
+          <span class="control-divider"></span>
+          <div class="control-group">
+            <span class="depth-label">文字サイズ:</span>
+            <button type="button" class="fontsize-btn" data-size="small">小</button>
+            <button type="button" class="fontsize-btn active" data-size="medium">中</button>
+            <button type="button" class="fontsize-btn" data-size="large">大</button>
+          </div>
         </div>
 
         <div class="canvas-wrapper">

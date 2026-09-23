@@ -302,20 +302,29 @@ canvas#obsidian-canvas:active {
   cursor: grabbing;
 }
 
-/* Edge Nest Depth Filter */
+/* Edge Nest Depth & Font Size Control Overlay */
 .depth-filter-control {
   position: absolute;
   top: 1rem;
   right: 1rem;
-  z-index: 200;
+  z-index: 250;
   display: flex;
   align-items: center;
-  gap: 0.35rem;
-  padding: 0.35rem 0.65rem;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  padding: 0.4rem 0.75rem;
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   font-size: 0.75rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  user-select: none;
+}
+
+.control-group {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
 }
 
 .depth-label {
@@ -324,25 +333,42 @@ canvas#obsidian-canvas:active {
   margin-right: 0.2rem;
 }
 
-.depth-btn {
+.depth-btn,
+.fontsize-btn {
   background: transparent;
   border: 1px solid transparent;
   color: var(--text-secondary);
-  padding: 0.2rem 0.5rem;
+  padding: 0.25rem 0.55rem;
   border-radius: var(--radius-sm);
   font-size: 0.75rem;
+  line-height: 1.2;
   cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+  position: relative;
+  z-index: 10;
 }
 
-.depth-btn:hover {
+.depth-btn:hover,
+.fontsize-btn:hover {
   color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.08);
 }
 
-.depth-btn.active {
+.depth-btn.active,
+.fontsize-btn.active {
   background: var(--bg-card-hover);
-  border-color: var(--border-color);
+  border-color: var(--border-focus);
   color: var(--text-primary);
   font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.control-divider {
+  width: 1px;
+  height: 16px;
+  background: var(--border-color);
+  margin: 0 0.25rem;
 }
 
 /* Obsidian Node Quick Inspector Popover / Dock */

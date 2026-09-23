@@ -11,6 +11,9 @@
   // Edge Nest Depth Filter (1, 2, 3... or 'all')
   let currentMaxDepth = 'all';
 
+  // Graph Text Size Filter ('small' | 'medium' | 'large')
+  let currentFontSizeMode = 'medium';
+
   // 1. Theme Manager (Dark / Light Theme Switcher)
   const btnThemeToggle = document.getElementById('btn-theme-toggle');
   const themeToggleIcon = document.getElementById('theme-toggle-icon');
@@ -65,6 +68,100 @@
       });
     }
     return descendantIds;
+  }
+
+  function getRelativeDepth(task, selectedTaskId) {
+    if (!task || !selectedTaskId) return null;
+    let relDepth = 0;
+    let currId = task.id;
+    const visited = new Set();
+    while (currId) {
+      if (currId === selectedTaskId) return relDepth;
+      if (visited.has(currId)) break;
+      visited.add(currId);
+      const currTask = currentTasks.find((t) => t.id === currId);
+      if (!currTask || !currTask.parentId) break;
+      currId = currTask.parentId;
+      relDepth++;
+    }
+    return null;
+  }
+
+  // Dynamic Y Ratio calculation automatically adjusting to the max visible nest depth
+  function computeDynamicYRatio(depth, maxTreeDepth, isSelectedTree = false) {
+    const topY = 0.18;
+    const bottomY = isSelectedTree ? 0.82 : 0.85;
+
+    if (maxTreeDepth <= 0) {
+      return 0.45; // Center single-level tasks vertically
+    }
+
+    const ratio = Math.min(1, Math.max(0, depth / maxTreeDepth));
+    return topY + ratio * (bottomY - topY);
+  }
+
+  // Sugiyama Layered Tree Layout Helper (Calculates non-overlapping X columns for subtrees)
+  function computeSugiyamaTreeXPositions(visibleTasks, width) {
+    const parentToChildren = new Map();
+    visibleTasks.forEach((t) => {
+      const pId = t.parentId || '__ROOT__';
+      if (!parentToChildren.has(pId)) parentToChildren.set(pId, []);
+      parentToChildren.get(pId).push(t);
+    });
+
+    const rootTasks = visibleTasks.filter(
+      (t) => !t.parentId || !visibleTasks.some((p) => p.id === t.parentId)
+    );
+
+    const leafCountMap = new Map();
+    function countLeaves(taskId) {
+      const children = parentToChildren.get(taskId) || [];
+      if (children.length === 0) {
+        leafCountMap.set(taskId, 1);
+        return 1;
+      }
+      let sum = 0;
+      children.forEach((child) => {
+        sum += countLeaves(child.id);
+      });
+      leafCountMap.set(taskId, Math.max(1, sum));
+      return sum;
+    }
+
+    let totalLeaves = 0;
+    rootTasks.forEach((root) => {
+      totalLeaves += countLeaves(root.id);
+    });
+    totalLeaves = Math.max(1, totalLeaves);
+
+    const xPosMap = new Map();
+    const padX = Math.min(100, width * 0.1);
+    const usableWidth = Math.max(300, width - 2 * padX);
+    let currentLeafIndex = 0;
+
+    function assignX(taskId) {
+      const children = parentToChildren.get(taskId) || [];
+      if (children.length === 0) {
+        const leafCenterRatio = (currentLeafIndex + 0.5) / totalLeaves;
+        const x = padX + leafCenterRatio * usableWidth;
+        xPosMap.set(taskId, x);
+        currentLeafIndex += 1;
+        return x;
+      }
+
+      const childXs = children.map((c) => assignX(c.id));
+      const minChildX = Math.min(...childXs);
+      const maxChildX = Math.max(...childXs);
+      const parentX = (minChildX + maxChildX) / 2;
+      xPosMap.set(taskId, parentX);
+      return parentX;
+    }
+
+    rootTasks.forEach((root) => {
+      assignX(root.id);
+    });
+
+    return xPosMap;
   }
 
   // Canvas Animation Frame & Physics State
@@ -175,17 +272,40 @@
     btnViewGantt.addEventListener('click', () => setViewMode('GANTT_VIEW'));
   }
 
-  // Depth Filter Controls Setup
-  const depthButtons = document.querySelectorAll('.depth-btn');
-  depthButtons.forEach((btn) => {
-    btn.addEventListener('click', () => {
-      depthButtons.forEach((b) => b.classList.remove('active'));
-      btn.classList.add('active');
-      const val = btn.dataset.depth;
-      currentMaxDepth = val === 'all' ? 'all' : parseInt(val, 10);
-      renderCurrentView();
+  // Graph Overlay Control Panel (Depth Filter + Font Size Filter)
+  const depthFilterControl = document.getElementById('depth-filter-control');
+  if (depthFilterControl) {
+    depthFilterControl.addEventListener('click', (e) => {
+      const depthBtn = e.target.closest('.depth-btn');
+      if (depthBtn) {
+        document.querySelectorAll('.depth-btn').forEach((b) => b.classList.remove('active'));
+        depthBtn.classList.add('active');
+        const val = depthBtn.dataset.depth;
+        currentMaxDepth = val === 'all' ? 'all' : parseInt(val, 10);
+        renderCurrentView();
+        return;
+      }
+
+      const fontBtn = e.target.closest('.fontsize-btn');
+      if (fontBtn) {
+        document.querySelectorAll('.fontsize-btn').forEach((b) => b.classList.remove('active'));
+        fontBtn.classList.add('active');
+        currentFontSizeMode = fontBtn.dataset.size || 'medium';
+        renderCurrentView();
+        return;
+      }
     });
-  });
+  }
+
+  function getGraphFontSize(isSelectedRoot) {
+    if (currentFontSizeMode === 'small') {
+      return isSelectedRoot ? 10 : 9;
+    }
+    if (currentFontSizeMode === 'large') {
+      return isSelectedRoot ? 18 : 15;
+    }
+    return isSelectedRoot ? 14 : 12;
+  }
 
   function setViewMode(mode) {
     currentViewMode = mode;
@@ -228,20 +348,26 @@
 
     const wrapper = canvas.parentElement;
     const rect = wrapper ? wrapper.getBoundingClientRect() : { width: 0, height: 0 };
-    const width = rect.width || wrapper.clientWidth || 1200;
-    const height = rect.height || wrapper.clientHeight || 600;
+    const cssWidth = Math.max(rect.width || wrapper.clientWidth || 1200, 300);
+    const cssHeight = Math.max(rect.height || wrapper.clientHeight || 600, 300);
 
-    canvas.width = Math.max(width, 300);
-    canvas.height = Math.max(height, 300);
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.round(cssWidth * dpr);
+    canvas.height = Math.round(cssHeight * dpr);
+    canvas.style.width = `${cssWidth}px`;
+    canvas.style.height = `${cssHeight}px`;
+
+    const width = cssWidth;
+    const height = cssHeight;
 
     const visibleTasks = currentTasks.filter((task) => {
       if (currentMaxDepth === 'all') return true;
       return getTaskDepth(task) < currentMaxDepth;
     });
 
+    const maxVisibleDepth = visibleTasks.reduce((max, t) => Math.max(max, getTaskDepth(t)), 0);
     const existingNodeMap = new Map(graphNodes.map((n) => [n.task.id, n]));
-    const rootTasks = visibleTasks.filter((t) => !t.parentId || !visibleTasks.some((p) => p.id === t.parentId));
-    const rootCount = Math.max(1, rootTasks.length);
+    const sugiyamaXMap = computeSugiyamaTreeXPositions(visibleTasks, width);
 
     graphNodes = visibleTasks.map((task, idx) => {
       const existing = existingNodeMap.get(task.id);
@@ -251,38 +377,15 @@
       }
 
       const depth = getTaskDepth(task);
-      let initX = canvas.width / 2;
-      let initY = canvas.height / 2;
-
-      if (depth === 0) {
-        const rootIdx = rootTasks.findIndex((r) => r.id === task.id);
-        const xRatio = (rootIdx + 1) / (rootCount + 1);
-        initX = canvas.width * xRatio;
-        initY = canvas.height * 0.22;
-      } else {
-        const parentNode = existingNodeMap.get(task.parentId);
-        const siblings = visibleTasks.filter((t) => t.parentId === task.parentId);
-        const siblingIdx = siblings.findIndex((s) => s.id === task.id);
-        const siblingCount = Math.max(1, siblings.length);
-
-        const parentX = parentNode ? parentNode.x : canvas.width / 2;
-        const parentY = parentNode ? parentNode.y : canvas.height * 0.3;
-
-        const spreadAngle = Math.PI * 0.8;
-        const startAngle = Math.PI * 0.5 - spreadAngle / 2;
-        const angle = siblingCount === 1 ? Math.PI * 0.5 : startAngle + (siblingIdx / (siblingCount - 1)) * spreadAngle;
-        const dist = 130 + depth * 20;
-
-        initX = parentX + Math.cos(angle) * dist + (Math.random() - 0.5) * 20;
-        initY = parentY + Math.sin(angle) * 80 + (Math.random() - 0.5) * 20;
-      }
+      const initX = sugiyamaXMap.get(task.id) || width / 2;
+      const initY = height * computeDynamicYRatio(depth, maxVisibleDepth, false);
 
       return {
         task,
         x: initX,
         y: initY,
-        vx: (Math.random() - 0.5) * 0.1,
-        vy: (Math.random() - 0.5) * 0.1,
+        vx: 0,
+        vy: 0,
         isPinned: false,
       };
     });
@@ -290,7 +393,9 @@
     const nodeMap = new Map(graphNodes.map((n) => [n.task.id, n]));
 
     function animate() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.save();
+      ctx.scale(dpr, dpr);
+      ctx.clearRect(0, 0, width, height);
 
       const isLight = document.documentElement.getAttribute('data-theme') === 'light';
 
@@ -298,11 +403,11 @@
       ctx.strokeStyle = isLight ? 'rgba(0, 0, 0, 0.04)' : 'rgba(255, 255, 255, 0.04)';
       ctx.lineWidth = 1;
       const gridSize = 40;
-      for (let x = 0; x < canvas.width; x += gridSize) {
-        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+      for (let x = 0; x < width; x += gridSize) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke();
       }
-      for (let y = 0; y < canvas.height; y += gridSize) {
-        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+      for (let y = 0; y < height; y += gridSize) {
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke();
       }
 
       // Draw top in-canvas dropzone strip for drag-to-root
@@ -311,44 +416,30 @@
         ctx.strokeStyle = draggedGraphNode.y <= 60 ? '#10b981' : (isLight ? '#cbd5e1' : '#3f3f46');
         ctx.lineWidth = 2;
         ctx.setLineDash([6, 6]);
-        ctx.fillRect(20, 10, canvas.width - 40, 50);
-        ctx.strokeRect(20, 10, canvas.width - 40, 50);
+        ctx.fillRect(20, 10, width - 40, 50);
+        ctx.strokeRect(20, 10, width - 40, 50);
         ctx.setLineDash([]);
 
         ctx.font = 'bold 13px Inter, sans-serif';
         ctx.fillStyle = draggedGraphNode.y <= 60 ? '#10b981' : (isLight ? '#64748b' : '#a1a1aa');
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText('[ ここにドロップでルート要素 (親なし) に昇格 ]', canvas.width / 2, 35);
+        ctx.fillText('[ ここにドロップでルート要素 (親なし) に昇格 ]', width / 2, 35);
       }
 
-      // Physics calculation
-      graphNodes.forEach((node) => {
-        if (node.task.parentId) {
-          const parentNode = nodeMap.get(node.task.parentId);
-          if (parentNode) {
-            const dx = node.x - parentNode.x;
-            const dy = node.y - parentNode.y;
-            const dist = Math.hypot(dx, dy) || 1;
-            const restLength = 130;
-            const stiffness = 0.04;
-            const force = (dist - restLength) * stiffness;
-            const fx = (dx / dist) * force;
-            const fy = (dy / dist) * force;
+      // Sugiyama Layered Layout Alignment Force (Pulls nodes to dedicated non-crossing columns)
+      const sugiyamaXMap = computeSugiyamaTreeXPositions(visibleTasks, width);
 
-            if (!node.isPinned) {
-              node.vx -= fx * 0.4;
-              node.vy -= fy * 0.4;
-            }
-            if (!parentNode.isPinned) {
-              parentNode.vx += fx * 0.4;
-              parentNode.vy += fy * 0.4;
-            }
+      graphNodes.forEach((node) => {
+        if (!node.isPinned) {
+          const targetX = sugiyamaXMap.get(node.task.id);
+          if (targetX !== undefined) {
+            node.vx += (targetX - node.x) * 0.045;
           }
         }
       });
 
-      const minRepelDist = 160;
+      const minRepelDist = 120;
       for (let i = 0; i < graphNodes.length; i++) {
         for (let j = i + 1; j < graphNodes.length; j++) {
           const nodeA = graphNodes[i];
@@ -359,8 +450,9 @@
           const dy = nodeB.y - nodeA.y;
           const dist = Math.hypot(dx, dy) || 1;
 
+          // 1. Gentle Center Circle Repulsion
           if (dist < minRepelDist) {
-            const force = ((minRepelDist - dist) / minRepelDist) * 1.5;
+            const force = ((minRepelDist - dist) / minRepelDist) * 0.6;
             const fx = (dx / dist) * force;
             const fy = (dy / dist) * force;
 
@@ -369,41 +461,98 @@
             nodeB.vx += fx;
             nodeB.vy += fy;
           }
+
+          // 2. Soft Text Label Overlap Prevention (Gentle non-shaking force)
+          ctx.font = `11px Inter, sans-serif`;
+          const textWA = ctx.measureText(nodeA.task.title).width;
+          const textWB = ctx.measureText(nodeB.task.title).width;
+
+          const reqLabelWidth = (textWA + textWB) / 2 + 20;
+          const reqLabelHeight = 50;
+
+          const absDx = Math.abs(dx);
+          const absDy = Math.abs(dy);
+
+          if (absDx < reqLabelWidth && absDy < reqLabelHeight) {
+            const overlapX = (reqLabelWidth - absDx) / reqLabelWidth;
+            const overlapY = (reqLabelHeight - absDy) / reqLabelHeight;
+            const repelStrength = Math.min(overlapX, overlapY) * 0.35;
+
+            const signX = dx >= 0 ? 1 : -1;
+            const signY = dy >= 0 ? 1 : -1;
+
+            nodeA.vx -= signX * overlapX * repelStrength;
+            nodeA.vy -= signY * overlapY * repelStrength;
+            nodeB.vx += signX * overlapX * repelStrength;
+            nodeB.vy += signY * overlapY * repelStrength;
+          }
         }
+      }
+
+      const selectedId = focusedTaskId || inspectorSelectedTaskId;
+      const activeTreeSet = selectedId ? getDescendantIds(selectedId) : null;
+      const maxVisibleDepth = visibleTasks.reduce((max, t) => Math.max(max, getTaskDepth(t)), 0);
+
+      let maxSubtreeRelDepth = 0;
+      if (selectedId && activeTreeSet) {
+        visibleTasks.forEach((t) => {
+          if (activeTreeSet.has(t.id)) {
+            const rDepth = getRelativeDepth(t, selectedId);
+            if (rDepth !== null) {
+              maxSubtreeRelDepth = Math.max(maxSubtreeRelDepth, rDepth);
+            }
+          }
+        });
       }
 
       const nowTime = Date.now() * 0.0012;
       graphNodes.forEach((node, idx) => {
         if (!node.isPinned) {
-          const depth = getTaskDepth(node.task);
-          const targetYRatio = depth === 0 ? 0.22 : (depth === 1 ? 0.48 : (depth === 2 ? 0.72 : 0.88));
-          const targetY = canvas.height * targetYRatio;
+          let targetYRatio;
 
-          const hierarchicalGravityY = (targetY - node.y) * 0.015;
+          if (selectedId && activeTreeSet) {
+            const relDepth = getRelativeDepth(node.task, selectedId);
+            if (relDepth !== null) {
+              // Elevate selected node to topY and scale subtree evenly down to bottomY
+              targetYRatio = computeDynamicYRatio(relDepth, maxSubtreeRelDepth, true);
+            } else {
+              // Unfocused background nodes sink slightly (+0.04) to highlight selected subtree
+              const depth = getTaskDepth(node.task);
+              targetYRatio = Math.min(0.92, computeDynamicYRatio(depth, maxVisibleDepth, false) + 0.04);
+            }
+          } else {
+            // Normal view with dynamic vertical scaling according to maxVisibleDepth
+            const depth = getTaskDepth(node.task);
+            targetYRatio = computeDynamicYRatio(depth, maxVisibleDepth, false);
+          }
+
+          const targetY = height * targetYRatio;
+          const hierarchicalGravityY = (targetY - node.y) * 0.04;
           node.vy += hierarchicalGravityY;
 
-          const driftX = Math.cos(nowTime * 0.8 + idx * 1.5) * 0.06;
-          const driftY = Math.sin(nowTime * 0.7 + idx * 2.1) * 0.06;
+          // Zero floating drift for active tree nodes to keep focused tree completely steady
+          const isNodeActive = activeTreeSet && activeTreeSet.has(node.task.id);
+          const driftMult = isNodeActive ? 0.005 : 0.03;
+          const driftX = Math.cos(nowTime * 0.8 + idx * 1.5) * driftMult;
+          const driftY = Math.sin(nowTime * 0.7 + idx * 2.1) * driftMult;
 
           node.vx += driftX;
           node.vy += driftY;
 
-          node.vx *= 0.94;
-          node.vy *= 0.94;
+          // Strong velocity damping (0.78) prevents oscillation & wobble
+          node.vx *= 0.78;
+          node.vy *= 0.78;
 
           node.x += node.vx;
           node.y += node.vy;
 
           const pad = 60;
           if (node.x < pad) { node.x = pad; node.vx *= -0.5; }
-          if (node.x > canvas.width - pad) { node.x = canvas.width - pad; node.vx *= -0.5; }
+          if (node.x > width - pad) { node.x = width - pad; node.vx *= -0.5; }
           if (node.y < pad) { node.y = pad; node.vy *= -0.5; }
-          if (node.y > canvas.height - pad) { node.y = canvas.height - pad; node.vy *= -0.5; }
+          if (node.y > height - pad) { node.y = height - pad; node.vy *= -0.5; }
         }
       });
-
-      const selectedId = focusedTaskId || inspectorSelectedTaskId;
-      const activeTreeSet = selectedId ? getDescendantIds(selectedId) : null;
 
       // Draw Edges
       graphNodes.forEach((node) => {
@@ -475,29 +624,56 @@
           ctx.textBaseline = 'alphabetic';
         }
 
-        // Label with background plate to prevent text overlapping
-        ctx.font = isSelectedRoot ? 'bold 12px Inter, sans-serif' : (isInSubtree && activeTreeSet ? '500 11px Inter, sans-serif' : '11px Inter, sans-serif');
+        // Label with background plate scaled to current font size selection
+        const fontSize = getGraphFontSize(isSelectedRoot);
+        const fontWeight = isSelectedRoot ? 'bold' : (isInSubtree && activeTreeSet ? '500' : '400');
+        ctx.font = `${fontWeight} ${fontSize}px Inter, sans-serif`;
+
         const textMetrics = ctx.measureText(node.task.title);
         const textWidth = textMetrics.width;
+        const plateHeight = fontSize + 4;
         const labelX = node.x;
-        const labelY = node.y + haloRadius + 14;
+        // Text Label Steady Alignment Physics Update
+        const targetLX = node.x;
+        const targetLY = node.y + haloRadius + fontSize + 3;
 
-        // Label Background Plate
+        if (node.labelX === undefined) node.labelX = targetLX;
+        if (node.labelY === undefined) node.labelY = targetLY;
+        if (node.labelVx === undefined) node.labelVx = 0;
+        if (node.labelVy === undefined) node.labelVy = 0;
+
+        const springK = 0.55;
+        const springDamp = 0.45;
+
+        const ax = (targetLX - node.labelX) * springK;
+        const ay = (targetLY - node.labelY) * springK;
+
+        node.labelVx = (node.labelVx + ax) * springDamp;
+        node.labelVy = (node.labelVy + ay) * springDamp;
+
+        node.labelX += node.labelVx;
+        node.labelY += node.labelVy;
+
+        const lx = node.labelX;
+        const ly = node.labelY;
+
+        // Label Background Plate rendered at physical label coordinates (lx, ly)
         ctx.fillStyle = isLight ? 'rgba(250, 250, 250, 0.92)' : 'rgba(9, 9, 11, 0.92)';
         ctx.globalAlpha = isDimmed ? 0.2 : 0.92;
-        ctx.fillRect(labelX - textWidth / 2 - 4, labelY - 11, textWidth + 8, 15);
+        ctx.fillRect(lx - textWidth / 2 - 4, ly - fontSize, textWidth + 8, plateHeight);
 
         ctx.strokeStyle = isSelectedRoot ? 'rgba(245, 158, 11, 0.6)' : (isLight ? 'rgba(0, 0, 0, 0.12)' : 'rgba(255, 255, 255, 0.12)');
         ctx.lineWidth = 1;
-        ctx.strokeRect(labelX - textWidth / 2 - 4, labelY - 11, textWidth + 8, 15);
+        ctx.strokeRect(lx - textWidth / 2 - 4, ly - fontSize, textWidth + 8, plateHeight);
 
         ctx.fillStyle = isDimmed ? (isLight ? '#94a3b8' : '#52525b') : (isLight ? '#18181b' : '#f4f4f5');
         ctx.globalAlpha = isDimmed ? 0.3 : 1.0;
         ctx.textAlign = 'center';
-        ctx.fillText(node.task.title, labelX, labelY);
+        ctx.fillText(node.task.title, lx, ly - 2);
         ctx.globalAlpha = 1.0;
       });
 
+      ctx.restore();
       canvasAnimationId = requestAnimationFrame(animate);
     }
 

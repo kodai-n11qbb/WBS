@@ -20,8 +20,8 @@
 +-------------------+---------------------------------------+-----------------------------+
 | (Interfaces)      | (Interfaces)                          | (Interfaces)
 +-------------------v-------------+         +---------------+-----------------------------+
-|       P2P Transport Layer       |         | Hidden Directory State & Event Storage Layer|
-|    (Discovery, Socket, Mesh)    |         | (.wbser_data/state.json, .wbser_data/events)|
+|       P2P Transport Layer       |         | Data Storage & File Watcher Storage Layer   |
+|    (Discovery, Socket, Mesh)    |         | (data/state.json, events.jsonl, FileWatcher)|
 +---------------------------------+         +---------------------------------------------+
 ```
 
@@ -64,6 +64,14 @@
   - 複数端末・複数プロセス間での共有フォルダ絶対パス参照対応。
   - 単一バイナリ (pkg) 内の固定初期データ (VFS `/snapshot/`) と動的永続化ログの相互解離。
   - 既存 `./.wbser_data` ディレクトリの自動フォールバック対応。
+
+### (6) External File System Watcher Port (外部ファイル改変監視ポート)
+- **役割**: データ保存ディレクトリ (`data/` / `--data-dir`) 内の `events.jsonl` および `state.json` の外部プロセスや同期ツールによる変更・追記イベントを監視し、アプリケーション層へ通知するポート。
+- **機能**:
+  - `fs.watch` を使用したファイル追記・改変・再作成イベントのリアルタイム検知。
+  - OSやファイルシステムのマルチ発火・一時ファイルロックを解決するデバウンス (100〜300ms) 制御。
+  - 外部変更検知時の `onEventsFileAppended(newEvents)` / `onStateFileReplaced(newState)` 通知発火。
+  - 差分イベントの取り込みと `NodeService` でのステート再計算 ＆ WebSocketブロードキャスト連携。
 
 ---
 

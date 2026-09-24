@@ -46,6 +46,20 @@ Node.js, Python, Docker, Rust 等が**一切インストールされていない
 - **In-Memory Storage**: 単体テスト・デモ用
 - **SQLite / RocksDB**: 大規模なイベントログ・オフラインキャッシュ管理用
 
+### (5) File System Watcher Adapter (外部変更監視アダプターの拡張)
+`FileWatcherPort` インターフェースを実装することで、動作環境やドライブ特性に合わせたファイル改変検知ロジックを選択・切り替え可能とします。
+
+- **`FsEventsWatcherAdapter` (標準OSイベント監視)**:
+  - Node.js の `fs.watch` / OS Native FS Events (inotify / FSEvents / ReadDirectoryChangesW) を利用した高速かつ軽量な変更検知アダプター。
+- **`PollingFileWatcherAdapter` (フォールバック周期チェック)**:
+  - ネットワークドライブ (SMB / NFS / Shared Drive) や Docker 共有バインドマウント等、OSの Native FS Event 通知が発行されない環境向けの一定周期（例: 2000ms 毎）タイムスタンプ ＆ ファイルサイズ比較チェックアダプター。
+- **`config.json` 設定拡張**:
+  ```json
+  {
+    "watchMode": "auto" // "auto" (標準FS監視, 失敗時自動フォールバック) | "fs" | "polling" | "off"
+  }
+  ```
+
 ---
 
 ## 3. 相対パスによる保守ルール

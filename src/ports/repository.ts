@@ -20,4 +20,10 @@ export interface EventRepositoryPort {
    * Get events with timestamp > sinceTimestamp for delta syncing.
    */
   getEventsSince(sinceTimestamp: number): Promise<SyncEvent[]>;
+
+  /**
+   * Reload events from disk in case of external file modification.
+   * Returns count of newly appended / updated events.
+   */
+  reloadFromDisk?(): Promise<number>;
 }

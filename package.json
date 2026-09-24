@@ -24,7 +24,7 @@
     "build:exe": "npm run build && npx -y esbuild src/ui/server.ts --bundle --platform=node --format=cjs --outfile=dist/bundle.cjs && npx -y pkg .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "dev": "AUTO_OPEN=false tsx src/ui/server.ts"
+    "dev": "npx -y cross-env AUTO_OPEN=false tsx src/ui/server.ts"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",

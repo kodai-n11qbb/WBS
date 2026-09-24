@@ -117,4 +117,16 @@ export interface Task {
 
 ---
 
+## 6. 外部データファイル改変検知・再同期メカニズム (External Data File Hot Reload)
+
+外部プロセスや共有ドライブ同期（Dropbox/NAS/Git等）によってデータ保存ディレクトリ (`data/`) 配下の `events.jsonl` または `state.json` が直接変更・追記・置換された場合、以下の手順で自動再同期が実行されます。
+
+1. **ファイル変更検知 (File Change Event Detection)**: `FileWatcherPort` が `events.jsonl` または `state.json` のファイル更新イベントを自動検知（デバウンス 100~300ms 適用）。
+2. **イベント差分読込 ＆ 重複排除 (Delta Read & Deduplication)**: `events.jsonl` から未取得の行（イベント）を抽出読み込みし、各イベントの `id` プロパティをキーにメモリ内イベントマップと照合して重複イベントを自動スキップ。
+3. **ドメイン状態自動更新 (Domain State Reconciliation)**: `NodeService` が新規イベントをドメインモデルに適用し、最新の `state.json` スナップショットをアトミックに生成・書き出し。
+4. **UIホットリロード配信 (Real-Time UI Broadcast)**: WebSocket サーバー経由で接続中のすべてのブラウザ画面へ `STATE_UPDATED` メッセージを即座にブロードキャスト配信。フロントエンドの Obsidian グラフビューおよびガントチャートがリロード不要で即座に自動最新表示化。
+
+---
+
 [次へ: 拡張性およびプラグイン設計](./04_extension_spec.md)
+

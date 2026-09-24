@@ -84,4 +84,42 @@ describe('JsonlFileRepository', () => {
     expect(reloadedEvents).toHaveLength(2);
     expect(reloadedEvents[1].id).toBe('e2');
   });
+
+  it('should dynamically reload events from disk when file is externally modified', async () => {
+    const repo = new JsonlFileRepository(filePath);
+    await repo.init();
+
+    await repo.saveEvent({
+      id: 'e1',
+      projectId: 'p1',
+      authorNodeId: 'node-1',
+      timestamp: 1000,
+      sequence: 1,
+      type: 'PROJECT_CREATED',
+      payload: { name: 'Test Project' },
+    });
+
+    expect(await repo.getAllEvents()).toHaveLength(1);
+
+    // Simulate external process appending a new event line to the jsonl file directly
+    const externalEvent: SyncEvent = {
+      id: 'e_external_1',
+      projectId: 'p1',
+      authorNodeId: 'external-node',
+      timestamp: 2000,
+      sequence: 2,
+      type: 'TASK_CREATED',
+      payload: { taskId: 't_ext', title: 'External Task', status: 'TODO', orderIndex: 1 },
+    };
+
+    fs.appendFileSync(filePath, JSON.stringify(externalEvent) + '\n', 'utf-8');
+
+    // Call reloadFromDisk
+    const newCount = await repo.reloadFromDisk();
+    expect(newCount).toBe(1);
+
+    const updatedEvents = await repo.getAllEvents();
+    expect(updatedEvents).toHaveLength(2);
+    expect(updatedEvents.some((e) => e.id === 'e_external_1')).toBe(true);
+  });
 });

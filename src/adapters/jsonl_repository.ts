@@ -75,4 +75,48 @@ export class JsonlFileRepository implements EventRepositoryPort {
     await this.init();
     return Array.from(this.events.values()).filter((e) => e.timestamp > sinceTimestamp);
   }
+
+  public async reloadFromDisk(): Promise<number> {
+    await this.init();
+    if (!fs.existsSync(this.filePath)) {
+      this.events.clear();
+      return 0;
+    }
+
+    const fileContent = fs.readFileSync(this.filePath, 'utf-8');
+    const lines = fileContent.split('\n');
+    const diskEvents: SyncEvent[] = [];
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed) {
+        try {
+          const event: SyncEvent = JSON.parse(trimmed);
+          if (event && event.id) {
+            diskEvents.push(event);
+          }
+        } catch (e) {
+          // Ignore malformed lines
+        }
+      }
+    }
+
+    // Handle truncation/reset vs append
+    if (diskEvents.length < this.events.size) {
+      this.events.clear();
+      for (const e of diskEvents) {
+        this.events.set(e.id, e);
+      }
+      return diskEvents.length;
+    }
+
+    let newCount = 0;
+    for (const e of diskEvents) {
+      if (!this.events.has(e.id)) {
+        this.events.set(e.id, e);
+        newCount++;
+      }
+    }
+    return newCount;
+  }
 }

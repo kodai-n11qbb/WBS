@@ -12,6 +12,7 @@ import { SyncEngine } from '../domain/sync_engine.js';
 import { StructuredTaskValidator } from '../domain/task_validator.js';
 import { crypto } from '../core/crypto_util.js';
 import { JsonConfigAdapter } from '../adapters/config.js';
+import { FsFileWatcherAdapter } from '../adapters/fs_file_watcher.js';
 
 const getFilename = () => {
   if (typeof __filename !== 'undefined') return __filename;
@@ -67,6 +68,7 @@ async function main() {
   const browserLauncher = new SystemBrowserLauncher();
   const syncEngine = new SyncEngine();
   const validator = new StructuredTaskValidator();
+  const fileWatcher = new FsFileWatcherAdapter(150);
 
   const nodeService = new NodeService({
     nodeId: NODE_ID,
@@ -82,6 +84,17 @@ async function main() {
   async function bootstrap() {
     await repository.init();
     await nodeService.start();
+
+    // Start watching DATA_DIR for external modifications
+    fileWatcher.startWatching(DATA_DIR, async (changedPath) => {
+      if (repository.reloadFromDisk) {
+        const newEventsCount = await repository.reloadFromDisk();
+        if (newEventsCount > 0) {
+          console.log(`[FileWatcher] Detected external modification at ${changedPath}. Reloaded ${newEventsCount} events.`);
+          await broadcastStateToUI();
+        }
+      }
+    });
 
     const state = await nodeService.getProjectState(activeProjectId);
     const allEvents = await nodeService.getAllEvents();

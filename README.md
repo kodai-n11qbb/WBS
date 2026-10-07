@@ -1,5 +1,7 @@
 # WBSer - Local-First P2P Project Tracker
 
+<img src="./WBS.gif"/>
+
 **WBSer** は、ローカルファースト思考で設計された、分散 P2P / ホスト / クライアント対応のプロジェクト進行管理システムです。
 
 前面に配置された **Obsidian型物理ノードグラフ** と、**GanttProjectスタイル ガントチャート** の2主要ビューを備え、プロジェクトの全体構造と進行状況を直感的に把握できます。

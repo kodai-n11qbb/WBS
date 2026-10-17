@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=zones_v2">
 </head>
 
 <body>
@@ -115,28 +115,38 @@
 
       <!-- VIEW 1: Obsidian-like Node Graph Canvas View -->
       <section id="obsidian-graph-view" class="view-section glass-card full-graph-view">
-        <!-- Top-Left Parent Navigation Overlay Panel -->
-        <div id="graph-parent-nav" class="graph-parent-nav glass-card hidden">
-          <button id="btn-graph-go-parent" class="btn-parent-nav" title="親要素へフォーカス移動">
-            ← 親要素へ移動: <span id="parent-nav-title">親タスク名</span>
-          </button>
-        </div>
-
-        <!-- Screen Edge Nesting Depth Control & Text Size Control -->
-        <div id="depth-filter-control" class="depth-filter-control glass-card">
-          <div class="control-group">
-            <span class="depth-label">ネスト表示:</span>
-            <button type="button" class="depth-btn" data-depth="1">1階層</button>
-            <button type="button" class="depth-btn" data-depth="2">2階層</button>
-            <button type="button" class="depth-btn" data-depth="3">3階層</button>
-            <button type="button" class="depth-btn active" data-depth="all">すべて</button>
+        <!-- Top Toolbar Bar (Parent Nav & Filter Controls separated from Canvas) -->
+        <div class="graph-top-toolbar">
+          <div id="graph-parent-nav" class="graph-parent-nav hidden">
+            <button id="btn-graph-go-parent" class="btn-parent-nav" title="親要素へフォーカス移動">
+              ← 親要素へ移動: <span id="parent-nav-title">親タスク名</span>
+            </button>
           </div>
-          <span class="control-divider"></span>
-          <div class="control-group">
-            <span class="depth-label">文字サイズ:</span>
-            <button type="button" class="fontsize-btn" data-size="small">小</button>
-            <button type="button" class="fontsize-btn active" data-size="medium">中</button>
-            <button type="button" class="fontsize-btn" data-size="large">大</button>
+          <div class="toolbar-spacer"></div>
+          <!-- Screen Edge Nesting Depth Control, Days Range Control & Text Size Control -->
+          <div id="depth-filter-control" class="depth-filter-control glass-card">
+            <div class="control-group">
+              <span class="depth-label" id="depth-filter-label">ネスト表示:</span>
+              <button type="button" class="depth-btn" data-depth="1">1階層</button>
+              <button type="button" class="depth-btn" data-depth="2">2階層</button>
+              <button type="button" class="depth-btn" data-depth="3">3階層</button>
+              <button type="button" class="depth-btn active" data-depth="all">すべて</button>
+            </div>
+            <span class="control-divider" id="days-filter-divider"></span>
+            <div class="control-group" id="days-filter-group">
+              <span class="depth-label">表示日数:</span>
+              <button type="button" class="days-btn" data-days="7">7日</button>
+              <button type="button" class="days-btn active" data-days="14">14日</button>
+              <button type="button" class="days-btn" data-days="30">30日</button>
+              <button type="button" class="days-btn" data-days="60">60日</button>
+            </div>
+            <span class="control-divider"></span>
+            <div class="control-group">
+              <span class="depth-label">文字サイズ:</span>
+              <button type="button" class="fontsize-btn" data-size="small">小</button>
+              <button type="button" class="fontsize-btn active" data-size="medium">中</button>
+              <button type="button" class="fontsize-btn" data-size="large">大</button>
+            </div>
           </div>
         </div>
 
@@ -190,7 +200,7 @@
     </main>
   </div>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=zones_v2"></script>
 </body>
 
 </html>

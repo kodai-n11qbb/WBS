@@ -272,12 +272,15 @@
   const canvas = document.getElementById('obsidian-canvas');
 
   const obsidianInspector = document.getElementById('obsidian-inspector');
+  const inspectorBreadcrumb = document.getElementById('inspector-breadcrumb');
   const inspectorStatusBadge = document.getElementById('inspector-status-badge');
   const inspectorTitleInput = document.getElementById('inspector-title-input');
   const inspectorDueDateInput = document.getElementById('inspector-due-date-input');
   const btnInspectorClose = document.getElementById('btn-inspector-close');
   const btnInspectorElevate = document.getElementById('btn-inspector-elevate');
   const btnInspectorDelete = document.getElementById('btn-inspector-delete');
+
+  let hoveredNodeId = null;
 
   const confirmModal = document.getElementById('confirm-parent-modal');
   const confirmModalTitle = document.getElementById('confirm-modal-title');
@@ -936,7 +939,7 @@
           // 2. Strict vertical clearance for nodes in the same date column
           if (isTimelineMode && activeTreeSet && activeTreeSet.has(nodeA.task.id) && activeTreeSet.has(nodeB.task.id)) {
             if (Math.abs(dx) < 24) {
-              const minDistY = 56;
+              const minDistY = 66;
               const curDistY = Math.abs(dy);
               if (curDistY < minDistY) {
                 const pushY = ((minDistY - curDistY) / minDistY) * 1.5;
@@ -1010,10 +1013,11 @@
               const dObj = new Date(node.task.dueDate);
               dObj.setHours(0, 0, 0, 0);
               const diffDays = Math.round((dObj.getTime() - today.getTime()) / 86400000);
-              if (diffDays < 0) {
+              const colX = metrics.timelineStartX + canvasPanOffsetX + (diffDays + 0.5) * metrics.dayWidth;
+              if (colX < metrics.timelineStartX) {
                 const pIdx = Math.max(0, pastList.indexOf(node.task.id));
                 targetY = 110 + pIdx * 54;
-              } else if (diffDays >= currentDaysRange) {
+              } else if (colX > metrics.timelineEndX) {
                 const fIdx = Math.max(0, futureList.indexOf(node.task.id));
                 targetY = 110 + fIdx * 54;
               } else {
@@ -1021,7 +1025,7 @@
                 const totalInDate = list.length;
                 const maxRel = Math.max(1, maxSubtreeRelDepth);
                 const availH = (isInspectorOpen ? (height - 180) : (height - 85)) - 110;
-                const stepY = Math.min(85, Math.max(54, availH / Math.max(maxRel, totalInDate - 1)));
+                const stepY = Math.min(95, Math.max(68, availH / Math.max(maxRel, totalInDate - 1)));
 
                 if (totalInDate === 1) {
                   targetY = 110 + relDepth * stepY;
@@ -1032,7 +1036,7 @@
                     return (t ? (getRelativeDepth(t, selectedId) ?? 0) : 0) === relDepth;
                   });
                   const siblingOffsetIdx = sameDepthTasks.indexOf(node.task.id);
-                  targetY = 110 + relDepth * stepY + siblingOffsetIdx * 54;
+                  targetY = 110 + relDepth * stepY + siblingOffsetIdx * 68;
                 }
               }
             } else {
@@ -1089,8 +1093,17 @@
             const isSubtreeEdge = activeTreeSet && activeTreeSet.has(node.task.id) && activeTreeSet.has(parentNode.task.id);
             const isDimmedEdge = activeTreeSet && !isSubtreeEdge;
 
+            // Check if this edge belongs to the active lineage (hovered or focused node)
+            const activeLineageId = hoveredNodeId || focusedTaskId;
+            const isLineageEdge = Boolean(
+              activeLineageId &&
+              (node.task.id === activeLineageId || parentNode.task.id === activeLineageId)
+            );
+
             const dx = parentNode.x - node.x;
             const dy = parentNode.y - node.y;
+
+            ctx.save();
 
             if (isTimelineMode && isSubtreeEdge) {
               // Smooth Bézier curve for timeline connections
@@ -1099,42 +1112,117 @@
               const isParentOutside = parentNode.x < metrics.timelineStartX || parentNode.x > metrics.timelineEndX;
               const isCrossZone = isNodeOutside || isParentOutside;
 
-              ctx.beginPath();
-              ctx.moveTo(node.x, node.y);
               const cp1x = node.x + dx * 0.45;
               const cp1y = node.y;
               const cp2x = parentNode.x - dx * 0.45;
               const cp2y = parentNode.y;
-              ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, parentNode.x, parentNode.y);
 
-              if (isCrossZone) {
-                // Refined, elegant dashed connecting curve with gentle warm opacity
-                ctx.strokeStyle = isLight ? 'rgba(217, 119, 6, 0.42)' : 'rgba(245, 158, 11, 0.45)';
-                ctx.lineWidth = 1.6;
-                ctx.setLineDash([5, 4]);
-              } else {
-                // Internal timeline link: solid amber curve
-                ctx.strokeStyle = '#f59e0b';
-                ctx.lineWidth = 2.2;
-                ctx.setLineDash([]);
-              }
-              ctx.stroke();
-              ctx.setLineDash([]);
-            } else {
-              // Standard graph edge
               ctx.beginPath();
               ctx.moveTo(node.x, node.y);
-              ctx.lineTo(parentNode.x, parentNode.y);
-              ctx.strokeStyle = isSubtreeEdge
+              ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, parentNode.x, parentNode.y);
+
+              let edgeColor = '#f59e0b';
+              let edgeWidth = 2.2;
+
+              if (isCrossZone) {
+                edgeColor = isLight ? 'rgba(217, 119, 6, 0.45)' : 'rgba(245, 158, 11, 0.48)';
+                edgeWidth = 1.6;
+                ctx.setLineDash([5, 4]);
+              } else {
+                ctx.setLineDash([]);
+              }
+
+              if (isLineageEdge) {
+                edgeColor = '#f59e0b';
+                edgeWidth = 3.2;
+                ctx.shadowColor = '#f59e0b';
+                ctx.shadowBlur = 10;
+              } else if (activeLineageId) {
+                ctx.globalAlpha = 0.25;
+              }
+
+              ctx.strokeStyle = edgeColor;
+              ctx.lineWidth = edgeWidth;
+              ctx.stroke();
+              ctx.setLineDash([]);
+
+              // Directional arrow on Bézier curve pointing Parent -> Child
+              // Sample at t = 0.62 along Parent(t=0) -> Child(t=1)
+              const t = 0.62;
+              const u = 1 - t;
+              const q0x = parentNode.x, q0y = parentNode.y;
+              const q1x = cp2x, q1y = cp2y;
+              const q2x = cp1x, q2y = cp1y;
+              const q3x = node.x, q3y = node.y;
+
+              const ax = u*u*u*q0x + 3*u*u*t*q1x + 3*u*t*t*q2x + t*t*t*q3x;
+              const ay = u*u*u*q0y + 3*u*u*t*q1y + 3*u*t*t*q2y + t*t*t*q3y;
+
+              const dtx = 3*u*u*(q1x - q0x) + 6*u*t*(q2x - q1x) + 3*t*t*(q3x - q2x);
+              const dty = 3*u*u*(q1y - q0y) + 6*u*t*(q2y - q1y) + 3*t*t*(q3y - q2y);
+              const dlen = Math.hypot(dtx, dty) || 1;
+              const tux = dtx / dlen;
+              const tuy = dty / dlen;
+              const tnx = -tuy;
+              const tny = tux;
+
+              ctx.beginPath();
+              ctx.moveTo(ax + tux * 4, ay + tuy * 4);
+              ctx.lineTo(ax - tux * 6 + tnx * 3.5, ay - tuy * 6 + tny * 3.5);
+              ctx.lineTo(ax - tux * 6 - tnx * 3.5, ay - tuy * 6 - tny * 3.5);
+              ctx.closePath();
+              ctx.fillStyle = edgeColor;
+              ctx.fill();
+
+            } else {
+              // Standard graph edge (Parent -> Child)
+              ctx.beginPath();
+              ctx.moveTo(parentNode.x, parentNode.y);
+              ctx.lineTo(node.x, node.y);
+
+              let edgeColor = isSubtreeEdge
                 ? '#f59e0b'
                 : (isLight ? 'rgba(0, 0, 0, 0.22)' : 'rgba(255, 255, 255, 0.25)');
-              ctx.lineWidth = isSubtreeEdge ? 2.5 : 1.5;
-              ctx.globalAlpha = isDimmedEdge ? 0.12 : 1.0;
+              let edgeWidth = isSubtreeEdge ? 2.5 : 1.5;
+
+              if (isLineageEdge) {
+                edgeColor = '#f59e0b';
+                edgeWidth = 3.2;
+                ctx.shadowColor = '#f59e0b';
+                ctx.shadowBlur = 10;
+              } else if (activeLineageId) {
+                ctx.globalAlpha = 0.2;
+              } else if (isDimmedEdge) {
+                ctx.globalAlpha = 0.12;
+              }
+
+              ctx.strokeStyle = edgeColor;
+              ctx.lineWidth = edgeWidth;
               ctx.setLineDash(isSubtreeEdge ? [] : [4, 4]);
               ctx.stroke();
               ctx.setLineDash([]);
-              ctx.globalAlpha = 1.0;
+
+              // Directional arrow on straight edge pointing Parent -> Child
+              const dist = Math.hypot(node.x - parentNode.x, node.y - parentNode.y) || 1;
+              if (dist > 35) {
+                const sux = (node.x - parentNode.x) / dist;
+                const suy = (node.y - parentNode.y) / dist;
+                const snx = -suy;
+                const sny = sux;
+                const sax = parentNode.x + (node.x - parentNode.x) * 0.6;
+                const say = parentNode.y + (node.y - parentNode.y) * 0.6;
+
+                ctx.beginPath();
+                ctx.moveTo(sax + sux * 4, say + suy * 4);
+                ctx.lineTo(sax - sux * 6 + snx * 3.5, say - suy * 6 + sny * 3.5);
+                ctx.lineTo(sax - sux * 6 - snx * 3.5, say - suy * 6 - sny * 3.5);
+                ctx.closePath();
+                ctx.fillStyle = edgeColor;
+                ctx.fill();
+              }
             }
+
+            ctx.restore();
           }
         }
       });
@@ -1229,9 +1317,11 @@
         ctx.font = `${fontWeight} ${fontSize}px Inter, sans-serif`;
 
         let labelText = node.task.title;
+        let timelineZone = 'none'; // 'unscheduled', 'past', 'timeline', 'future'
         if (isTimelineMode && isInSubtree) {
           if (!node.task.dueDate) {
             labelText = `[未設定] ${node.task.title}`;
+            timelineZone = 'unscheduled';
           } else {
             const d = new Date(node.task.dueDate);
             d.setHours(0, 0, 0, 0);
@@ -1241,10 +1331,13 @@
             const dayNum = d.getDate();
             if (colX < metrics.timelineStartX) {
               labelText = `[${m}/${dayNum} 過去] ${node.task.title}`;
+              timelineZone = 'past';
             } else if (colX > metrics.timelineEndX) {
               labelText = `[${m}/${dayNum} 未来] ${node.task.title}`;
+              timelineZone = 'future';
             } else {
               labelText = `[${m}/${dayNum}] ${node.task.title}`;
+              timelineZone = 'timeline';
             }
           }
         }
@@ -1252,11 +1345,22 @@
         const textMetrics = ctx.measureText(labelText);
         const textWidth = textMetrics.width;
         const plateHeight = fontSize + 4;
-        const isTimelineLabel = isTimelineMode && isInSubtree;
 
-        // Text Label Steady Alignment Physics Update
-        const targetLX = isTimelineLabel ? (node.x + haloRadius + 8) : node.x;
-        const targetLY = isTimelineLabel ? node.y : (node.y + haloRadius + fontSize + 3);
+        // Label position:
+        // - future (Zone 4 right edge): left of node circle
+        // - past (Zone 2) / unscheduled (Zone 1 left edge): right of node circle
+        // - timeline (Zone 3 visible range) or normal mode: bottom of node circle
+        let targetLX, targetLY;
+        if (timelineZone === 'future') {
+          targetLX = node.x - haloRadius - 8;
+          targetLY = node.y;
+        } else if (timelineZone === 'past' || timelineZone === 'unscheduled') {
+          targetLX = node.x + haloRadius + 8;
+          targetLY = node.y;
+        } else {
+          targetLX = node.x;
+          targetLY = node.y + haloRadius + fontSize + 3;
+        }
 
         if (node.labelX === undefined) node.labelX = targetLX;
         if (node.labelY === undefined) node.labelY = targetLY;
@@ -1284,7 +1388,22 @@
         ctx.strokeStyle = isSelectedRoot ? 'rgba(245, 158, 11, 0.6)' : (isLight ? 'rgba(0, 0, 0, 0.12)' : 'rgba(255, 255, 255, 0.12)');
         ctx.lineWidth = 1;
 
-        if (isTimelineLabel) {
+        if (timelineZone === 'future') {
+          ctx.beginPath();
+          if (ctx.roundRect) {
+            ctx.roundRect(lx - textWidth - 4, ly - plateHeight / 2, textWidth + 8, plateHeight, 4);
+          } else {
+            ctx.rect(lx - textWidth - 4, ly - plateHeight / 2, textWidth + 8, plateHeight);
+          }
+          ctx.fill();
+          ctx.stroke();
+
+          ctx.fillStyle = isDimmed ? (isLight ? '#94a3b8' : '#52525b') : (isLight ? '#18181b' : '#f4f4f5');
+          ctx.globalAlpha = isDimmed ? 0.3 : 1.0;
+          ctx.textAlign = 'right';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(labelText, lx, ly);
+        } else if (timelineZone === 'past' || timelineZone === 'unscheduled') {
           ctx.beginPath();
           if (ctx.roundRect) {
             ctx.roundRect(lx - 4, ly - plateHeight / 2, textWidth + 8, plateHeight, 4);
@@ -1418,10 +1537,13 @@
     };
 
     canvas.onmousemove = (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+
       if (isMouseDown && draggedGraphNode) {
-        const rect = canvas.getBoundingClientRect();
-        draggedGraphNode.x = e.clientX - rect.left;
-        draggedGraphNode.y = e.clientY - rect.top;
+        draggedGraphNode.x = mouseX;
+        draggedGraphNode.y = mouseY;
       } else if (isPanningCanvas) {
         const deltaX = e.clientX - panStartX;
         if (Math.abs(e.clientX - clickStartX) > 4) {
@@ -1429,7 +1551,16 @@
         }
         canvasPanOffsetX += deltaX;
         panStartX = e.clientX;
+      } else {
+        const hit = graphNodes.find((n) => Math.hypot(n.x - mouseX, n.y - mouseY) <= 28);
+        hoveredNodeId = hit ? hit.task.id : null;
+        canvas.style.cursor = hit ? 'pointer' : 'default';
       }
+    };
+
+    canvas.onmouseleave = () => {
+      hoveredNodeId = null;
+      canvas.style.cursor = 'default';
     };
 
     canvas.onmouseup = (e) => {
@@ -1561,6 +1692,61 @@
 
     inspectorSelectedTaskId = task.id;
     focusedTaskId = task.id;
+
+    if (inspectorBreadcrumb) {
+      inspectorBreadcrumb.innerHTML = '';
+      const breadcrumbLabel = document.createElement('span');
+      breadcrumbLabel.className = 'breadcrumb-label';
+      breadcrumbLabel.textContent = '階層:';
+      inspectorBreadcrumb.appendChild(breadcrumbLabel);
+
+      const ancestors = [];
+      let cur = task;
+      const visited = new Set();
+      while (cur && cur.parentId && !visited.has(cur.parentId)) {
+        visited.add(cur.id);
+        const parent = currentTasks.find((t) => t.id === cur.parentId);
+        if (parent) {
+          ancestors.unshift(parent);
+          cur = parent;
+        } else {
+          break;
+        }
+      }
+
+      if (ancestors.length === 0) {
+        const rootItem = document.createElement('span');
+        rootItem.className = 'breadcrumb-current';
+        rootItem.textContent = 'ルート (親なし)';
+        inspectorBreadcrumb.appendChild(rootItem);
+      } else {
+        ancestors.forEach((anc) => {
+          const ancSpan = document.createElement('span');
+          ancSpan.className = 'breadcrumb-item clickable';
+          ancSpan.textContent = anc.title;
+          ancSpan.title = `親タスク「${anc.title}」へ移動`;
+          ancSpan.onclick = (e) => {
+            e.stopPropagation();
+            if (doubleClickedSubtreeId) {
+              doubleClickedSubtreeId = anc.id;
+            }
+            openObsidianNodeInspector(anc);
+            renderCurrentView();
+          };
+          inspectorBreadcrumb.appendChild(ancSpan);
+
+          const sep = document.createElement('span');
+          sep.className = 'breadcrumb-separator';
+          sep.textContent = '>';
+          inspectorBreadcrumb.appendChild(sep);
+        });
+
+        const curItem = document.createElement('span');
+        curItem.className = 'breadcrumb-current';
+        curItem.textContent = task.title;
+        inspectorBreadcrumb.appendChild(curItem);
+      }
+    }
 
     if (inspectorStatusBadge) {
       const statusLabels = { TODO: '未着手', IN_PROGRESS: '進行中', DONE: '完了' };

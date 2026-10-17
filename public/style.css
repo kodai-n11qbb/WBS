@@ -425,6 +425,53 @@ canvas#obsidian-canvas:active {
   flex-wrap: nowrap;
 }
 
+.inspector-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  background: var(--bg-hover);
+  padding: 0.25rem 0.6rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.breadcrumb-label {
+  font-weight: 600;
+  color: var(--text-secondary);
+  opacity: 0.75;
+}
+
+.breadcrumb-item.clickable {
+  color: var(--color-primary);
+  cursor: pointer;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  transition: color 0.15s ease;
+}
+
+.breadcrumb-item.clickable:hover {
+  filter: brightness(1.25);
+}
+
+.breadcrumb-separator {
+  color: var(--text-secondary);
+  opacity: 0.5;
+  font-size: 0.7rem;
+}
+
+.breadcrumb-current {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
 .inspector-badge {
   font-size: 0.7rem;
   font-weight: 700;

@@ -66,6 +66,7 @@ WBSer は、開発方針 [`DEV_POLICY.md`](./DEV_POLICY.md) および [`CODING_R
 - **主要機能**:
   - Sugiyama Untangled Tree Layout（末端数に基づくX座標非交差計算）
   - Dynamic Y Ratio Scaling（階層深さに応じた自動縦スケール）
+  - Subtree Horizontal Wide Spread（フォーカス時のサブツリー横幅自動ワイド展開）
   - Subtree Focus Isolation（ダブルクリックによる部分ツリー絞り込み）
   - Inspector Shielding（パネル周辺の反発・視覚遮蔽）
 

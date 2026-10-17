@@ -236,12 +236,14 @@
     tasksByDepth.forEach((tasksAtDepth) => {
       if (tasksAtDepth.length <= 1) return;
       tasksAtDepth.sort((a, b) => (xPosMap.get(a.id) || 0) - (xPosMap.get(b.id) || 0));
-      const minSpacing = 135;
       for (let i = 1; i < tasksAtDepth.length; i++) {
         const prevTask = tasksAtDepth[i - 1];
         const curTask = tasksAtDepth[i];
         const prevX = xPosMap.get(prevTask.id) || 0;
         const curX = xPosMap.get(curTask.id) || 0;
+        const prevW = (prevTask.title || '').length * 11 + 36;
+        const curW = (curTask.title || '').length * 11 + 36;
+        const minSpacing = Math.max(145, (prevW + curW) / 2 + 30);
         if (curX - prevX < minSpacing) {
           xPosMap.set(curTask.id, prevX + minSpacing);
         }
@@ -262,19 +264,12 @@
   const errorToast = document.getElementById('error-toast');
   const btnUndo = document.getElementById('btn-undo');
 
-  const btnViewGraph = document.getElementById('btn-view-graph');
-  const btnViewGantt = document.getElementById('btn-view-gantt');
-
   const quickForm = document.getElementById('quick-task-form');
   const quickInputTitle = document.getElementById('quick-title-input');
   const selectQuickParent = document.getElementById('select-quick-parent');
 
   const obsidianGraphViewSection = document.getElementById('obsidian-graph-view');
   const canvas = document.getElementById('obsidian-canvas');
-
-  const graphParentNav = document.getElementById('graph-parent-nav');
-  const parentNavTitle = document.getElementById('parent-nav-title');
-  const btnGraphGoParent = document.getElementById('btn-graph-go-parent');
 
   const obsidianInspector = document.getElementById('obsidian-inspector');
   const inspectorStatusBadge = document.getElementById('inspector-status-badge');
@@ -300,10 +295,6 @@
   const inProgressDateInput = document.getElementById('in-progress-date-input');
   const btnInProgressCancel = document.getElementById('btn-in-progress-cancel');
   const btnInProgressConfirm = document.getElementById('btn-in-progress-confirm');
-
-  const ganttViewSection = document.getElementById('gantt-view');
-  const ganttContainer = document.getElementById('gantt-container');
-  const ganttStatsBadge = document.getElementById('gantt-stats-badge');
 
   // WebSocket Setup
   function initWebSocket() {
@@ -378,14 +369,6 @@
     }
   }
 
-  // 2-Mode View Buttons Setup
-  if (btnViewGraph) {
-    btnViewGraph.addEventListener('click', () => setViewMode('OBSIDIAN_GRAPH_VIEW'));
-  }
-  if (btnViewGantt) {
-    btnViewGantt.addEventListener('click', () => setViewMode('GANTT_VIEW'));
-  }
-
   // Helper to sync overlay control panel states (Relative Nest & Days Filter)
   function updateFilterControlsState() {
     const selectedId = doubleClickedSubtreeId || focusedTaskId || inspectorSelectedTaskId;
@@ -401,7 +384,7 @@
     const daysFilterDivider = document.getElementById('days-filter-divider');
 
     if (depthFilterLabel) {
-      depthFilterLabel.textContent = selectedId ? '相対ネスト:' : 'ネスト表示:';
+      depthFilterLabel.textContent = selectedId ? '相対ネスト:' : 'ネスト:';
     }
     if (daysFilterGroup) {
       daysFilterGroup.classList.toggle('disabled-fade', !selectedId);
@@ -457,35 +440,12 @@
     return isSelectedRoot ? 14 : 12;
   }
 
-  function setViewMode(mode) {
-    currentViewMode = mode;
-
-    if (btnViewGraph) btnViewGraph.classList.toggle('active', mode === 'OBSIDIAN_GRAPH_VIEW');
-    if (btnViewGantt) btnViewGantt.classList.toggle('active', mode === 'GANTT_VIEW');
-
-    if (obsidianGraphViewSection) obsidianGraphViewSection.classList.toggle('hidden', mode !== 'OBSIDIAN_GRAPH_VIEW');
-    if (ganttViewSection) ganttViewSection.classList.toggle('hidden', mode !== 'GANTT_VIEW');
-
-    if (mode !== 'OBSIDIAN_GRAPH_VIEW' && obsidianInspector) {
-      obsidianInspector.classList.add('hidden');
-    }
-
-    requestAnimationFrame(() => {
-      renderCurrentView();
-    });
-  }
-
   function renderCurrentView() {
     if (canvasAnimationId) {
       cancelAnimationFrame(canvasAnimationId);
       canvasAnimationId = null;
     }
-
-    if (currentViewMode === 'OBSIDIAN_GRAPH_VIEW') {
-      startObsidianGraphRenderer();
-    } else if (currentViewMode === 'GANTT_VIEW') {
-      renderGanttView();
-    }
+    startObsidianGraphRenderer();
   }
 
   // --------------------------------------------------------------------------
@@ -725,10 +685,35 @@
   // --------------------------------------------------------------------------
   // VIEW 1: Obsidian Canvas View & Node Click Quick Inspector
   // --------------------------------------------------------------------------
+  let canvasResizeObserver = null;
+  function setupCanvasResizeObserver() {
+    if (canvasResizeObserver) return;
+    const wrapper = canvas ? canvas.parentElement : null;
+    if (!wrapper) return;
+    if (window.ResizeObserver) {
+      canvasResizeObserver = new ResizeObserver(() => {
+        if (canvasAnimationId) {
+          cancelAnimationFrame(canvasAnimationId);
+          canvasAnimationId = null;
+        }
+        startObsidianGraphRenderer();
+      });
+      canvasResizeObserver.observe(wrapper);
+    }
+    window.addEventListener('resize', () => {
+      if (canvasAnimationId) {
+        cancelAnimationFrame(canvasAnimationId);
+        canvasAnimationId = null;
+      }
+      startObsidianGraphRenderer();
+    });
+  }
+
   function startObsidianGraphRenderer() {
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+    setupCanvasResizeObserver();
 
     const wrapper = canvas.parentElement;
     const rect = wrapper ? wrapper.getBoundingClientRect() : { width: 0, height: 0 };
@@ -751,17 +736,14 @@
 
     if (selectedId) {
       const activeSubtreeSet = getDescendantIds(selectedId);
-      if (doubleClickedSubtreeId && activeSubtreeSet) {
+      if (activeSubtreeSet) {
         visibleTasks = visibleTasks.filter((t) => activeSubtreeSet.has(t.id));
       }
       if (currentMaxDepth !== 'all') {
         const maxRelDepth = typeof currentMaxDepth === 'number' ? currentMaxDepth : parseInt(currentMaxDepth, 10);
         visibleTasks = visibleTasks.filter((t) => {
-          if (activeSubtreeSet && activeSubtreeSet.has(t.id)) {
-            const rDepth = getRelativeDepth(t, selectedId);
-            return rDepth !== null && rDepth <= maxRelDepth;
-          }
-          return !doubleClickedSubtreeId;
+          const rDepth = getRelativeDepth(t, selectedId);
+          return rDepth !== null && rDepth <= maxRelDepth;
         });
       }
     } else {
@@ -864,9 +846,10 @@
               const d = new Date(t.dueDate);
               d.setHours(0, 0, 0, 0);
               const diffDays = Math.round((d.getTime() - today.getTime()) / 86400000);
-              if (diffDays < 0) {
+              const colX = metrics.timelineStartX + canvasPanOffsetX + (diffDays + 0.5) * metrics.dayWidth;
+              if (colX < metrics.timelineStartX) {
                 pastList.push(t.id);
-              } else if (diffDays >= currentDaysRange) {
+              } else if (colX > metrics.timelineEndX) {
                 futureList.push(t.id);
               } else {
                 const key = d.getTime();
@@ -904,13 +887,13 @@
               const dObj = new Date(node.task.dueDate);
               dObj.setHours(0, 0, 0, 0);
               const diffDays = Math.round((dObj.getTime() - today.getTime()) / 86400000);
-              if (diffDays < 0) {
+              const colX = metrics.timelineStartX + canvasPanOffsetX + (diffDays + 0.5) * metrics.dayWidth;
+              if (colX < metrics.timelineStartX) {
                 targetX = metrics.zone2Center;
-              } else if (diffDays >= currentDaysRange) {
+              } else if (colX > metrics.timelineEndX) {
                 targetX = metrics.zone4Center;
               } else {
-                // Exact same X coordinate for tasks on the same date!
-                targetX = metrics.timelineStartX + canvasPanOffsetX + (diffDays + 0.5) * metrics.dayWidth;
+                targetX = colX;
               }
             } else {
               targetX = metrics.zone1Center;
@@ -1253,11 +1236,12 @@
             const d = new Date(node.task.dueDate);
             d.setHours(0, 0, 0, 0);
             const diffDays = Math.round((d.getTime() - today.getTime()) / 86400000);
+            const colX = metrics.timelineStartX + canvasPanOffsetX + (diffDays + 0.5) * metrics.dayWidth;
             const m = d.getMonth() + 1;
             const dayNum = d.getDate();
-            if (diffDays < 0) {
+            if (colX < metrics.timelineStartX) {
               labelText = `[${m}/${dayNum} 過去] ${node.task.title}`;
-            } else if (diffDays >= currentDaysRange) {
+            } else if (colX > metrics.timelineEndX) {
               labelText = `[${m}/${dayNum} 未来] ${node.task.title}`;
             } else {
               labelText = `[${m}/${dayNum}] ${node.task.title}`;
@@ -1268,10 +1252,11 @@
         const textMetrics = ctx.measureText(labelText);
         const textWidth = textMetrics.width;
         const plateHeight = fontSize + 4;
-        const labelX = node.x;
+        const isTimelineLabel = isTimelineMode && isInSubtree;
+
         // Text Label Steady Alignment Physics Update
-        const targetLX = node.x;
-        const targetLY = node.y + haloRadius + fontSize + 3;
+        const targetLX = isTimelineLabel ? (node.x + haloRadius + 8) : node.x;
+        const targetLY = isTimelineLabel ? node.y : (node.y + haloRadius + fontSize + 3);
 
         if (node.labelX === undefined) node.labelX = targetLX;
         if (node.labelY === undefined) node.labelY = targetLY;
@@ -1294,18 +1279,42 @@
         const ly = node.labelY;
 
         // Label Background Plate rendered at physical label coordinates (lx, ly)
-        ctx.fillStyle = isLight ? 'rgba(250, 250, 250, 0.92)' : 'rgba(9, 9, 11, 0.92)';
-        ctx.globalAlpha = isDimmed ? 0.2 : 0.92;
-        ctx.fillRect(lx - textWidth / 2 - 4, ly - fontSize, textWidth + 8, plateHeight);
-
+        ctx.fillStyle = isLight ? 'rgba(250, 250, 250, 0.94)' : 'rgba(9, 9, 11, 0.94)';
+        ctx.globalAlpha = isDimmed ? 0.2 : 0.94;
         ctx.strokeStyle = isSelectedRoot ? 'rgba(245, 158, 11, 0.6)' : (isLight ? 'rgba(0, 0, 0, 0.12)' : 'rgba(255, 255, 255, 0.12)');
         ctx.lineWidth = 1;
-        ctx.strokeRect(lx - textWidth / 2 - 4, ly - fontSize, textWidth + 8, plateHeight);
 
-        ctx.fillStyle = isDimmed ? (isLight ? '#94a3b8' : '#52525b') : (isLight ? '#18181b' : '#f4f4f5');
-        ctx.globalAlpha = isDimmed ? 0.3 : 1.0;
-        ctx.textAlign = 'center';
-        ctx.fillText(labelText, lx, ly - 2);
+        if (isTimelineLabel) {
+          ctx.beginPath();
+          if (ctx.roundRect) {
+            ctx.roundRect(lx - 4, ly - plateHeight / 2, textWidth + 8, plateHeight, 4);
+          } else {
+            ctx.rect(lx - 4, ly - plateHeight / 2, textWidth + 8, plateHeight);
+          }
+          ctx.fill();
+          ctx.stroke();
+
+          ctx.fillStyle = isDimmed ? (isLight ? '#94a3b8' : '#52525b') : (isLight ? '#18181b' : '#f4f4f5');
+          ctx.globalAlpha = isDimmed ? 0.3 : 1.0;
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(labelText, lx, ly);
+        } else {
+          ctx.beginPath();
+          if (ctx.roundRect) {
+            ctx.roundRect(lx - textWidth / 2 - 4, ly - fontSize, textWidth + 8, plateHeight, 4);
+          } else {
+            ctx.rect(lx - textWidth / 2 - 4, ly - fontSize, textWidth + 8, plateHeight);
+          }
+          ctx.fill();
+          ctx.stroke();
+
+          ctx.fillStyle = isDimmed ? (isLight ? '#94a3b8' : '#52525b') : (isLight ? '#18181b' : '#f4f4f5');
+          ctx.globalAlpha = isDimmed ? 0.3 : 1.0;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'alphabetic';
+          ctx.fillText(labelText, lx, ly - 2);
+        }
         ctx.globalAlpha = 1.0;
       });
 
@@ -1553,26 +1562,6 @@
     inspectorSelectedTaskId = task.id;
     focusedTaskId = task.id;
 
-    if (task.parentId && graphParentNav && parentNavTitle && btnGraphGoParent) {
-      const parentTask = currentTasks.find((t) => t.id === task.parentId);
-      if (parentTask) {
-        parentNavTitle.textContent = parentTask.title;
-        graphParentNav.classList.remove('hidden');
-        btnGraphGoParent.onclick = (e) => {
-          e.stopPropagation();
-          if (doubleClickedSubtreeId) {
-            doubleClickedSubtreeId = parentTask.id;
-          }
-          openObsidianNodeInspector(parentTask);
-          renderCurrentView();
-        };
-      } else {
-        graphParentNav.classList.add('hidden');
-      }
-    } else if (graphParentNav) {
-      graphParentNav.classList.add('hidden');
-    }
-
     if (inspectorStatusBadge) {
       const statusLabels = { TODO: '未着手', IN_PROGRESS: '進行中', DONE: '完了' };
       inspectorStatusBadge.textContent = statusLabels[task.status] || task.status;
@@ -1636,9 +1625,6 @@
   function closeObsidianNodeInspector() {
     if (obsidianInspector) {
       obsidianInspector.classList.add('hidden');
-    }
-    if (graphParentNav) {
-      graphParentNav.classList.add('hidden');
     }
     inspectorSelectedTaskId = null;
     focusedTaskId = null;
@@ -1725,274 +1711,6 @@
         closeObsidianNodeInspector();
       }
     }
-  }
-
-  // --------------------------------------------------------------------------
-  // VIEW 2: Gantt Chart Timeline View (Tree Structure + Due Dates + Duration)
-  // --------------------------------------------------------------------------
-  function renderGanttView() {
-    if (!ganttContainer) return;
-    ganttContainer.innerHTML = '';
-
-    if (ganttStatsBadge) {
-      ganttStatsBadge.textContent = `全タスク: ${currentTasks.length}件 / イベント数: ${currentEvents.length}件`;
-    }
-
-    if (currentTasks.length === 0) {
-      const notice = document.createElement('div');
-      notice.className = 'gantt-empty-notice';
-      notice.textContent = 'タスクがありません。下部の入力バーから新しいタスクを作成してください。';
-      ganttContainer.appendChild(notice);
-      return;
-    }
-
-    // Build Tree-Ordered Task Array (Depth First Order)
-    const treeOrderedTasks = [];
-    function collectTreeTasks(parentId = null, level = 0) {
-      const children = currentTasks.filter((t) => (parentId ? t.parentId === parentId : (!t.parentId || !currentTasks.some((p) => p.id === t.parentId))))
-        .sort((a, b) => a.orderIndex - b.orderIndex);
-
-      children.forEach((child) => {
-        treeOrderedTasks.push({ task: child, level });
-        collectTreeTasks(child.id, level + 1);
-      });
-    }
-    collectTreeTasks(null, 0);
-
-    // Compute Timeline Bounds (Start to Target Due Date / Finish / Current Time)
-    const now = Date.now();
-    let minTime = Infinity;
-    let maxTime = -Infinity;
-
-    treeOrderedTasks.forEach(({ task }) => {
-      const created = task.createdAt || now;
-      if (created < minTime) minTime = created;
-      if (task.updatedAt && task.updatedAt > maxTime) maxTime = task.updatedAt;
-      if (task.dueDate && task.dueDate > maxTime) maxTime = task.dueDate;
-    });
-
-    // Ensure timeline bounds fit the furthest completion due date with padding
-    const maxDueDate = Math.max(...currentTasks.map((t) => t.dueDate || 0), 0);
-    if (maxDueDate > 0) {
-      maxTime = Math.max(maxTime, maxDueDate + 86400000 * 2);
-    }
-
-    if (minTime === Infinity) minTime = now - 86400000 * 7;
-    // Default at least 30-day timeline span
-    const thirtyDaysMs = 86400000 * 30;
-    if (maxTime < minTime + thirtyDaysMs) {
-      maxTime = minTime + thirtyDaysMs;
-    }
-
-    const totalSpan = maxTime - minTime;
-
-    // Render Timeline Ticks (5 Date Markers)
-    const ticksHeader = document.createElement('div');
-    ticksHeader.className = 'gantt-ticks-header';
-    ticksHeader.style.cssText = 'margin-left: 52%; width: 48%; box-sizing: border-box;';
-    const numTicks = 5;
-    for (let i = 0; i < numTicks; i++) {
-      const tickTime = minTime + (totalSpan * i) / (numTicks - 1);
-      const d = new Date(tickTime);
-      const span = document.createElement('span');
-      span.textContent = `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
-      ticksHeader.appendChild(span);
-    }
-
-    const table = document.createElement('table');
-    table.className = 'gantt-table';
-
-    const thead = document.createElement('thead');
-    thead.innerHTML = `
-      <tr>
-        <th style="width: 28%;">ツリータスク名</th>
-        <th style="width: 11%;">ステータス</th>
-        <th style="width: 13%;">完了予定日</th>
-        <th class="gantt-bar-cell" style="width: 48%;">時系列タイムライン & 予定マーカー (🚩)</th>
-      </tr>
-    `;
-    table.appendChild(thead);
-
-    const tbody = document.createElement('tbody');
-
-    treeOrderedTasks.forEach(({ task, level }) => {
-      const tr = document.createElement('tr');
-      const indentStr = level > 0 ? '│  '.repeat(level - 1) + '├─ ' : '';
-      const statusLabels = { TODO: '未着手', IN_PROGRESS: '進行中', DONE: '完了' };
-
-      // Format Due Date
-      let dueDateStr = '-';
-      let isOverdue = false;
-      if (task.dueDate) {
-        const d = new Date(task.dueDate);
-        dueDateStr = `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
-        if (task.status !== 'DONE' && task.dueDate < now) {
-          isOverdue = true;
-        }
-      }
-
-      // Check if child task overdue past parent due date
-      let overdueBadgeHtml = '';
-      let overdueBarHtml = '';
-      if (task.parentId && task.dueDate) {
-        const parentTask = currentTasks.find((p) => p.id === task.parentId);
-        if (parentTask && parentTask.dueDate && task.dueDate > parentTask.dueDate) {
-          const delayMs = task.dueDate - parentTask.dueDate;
-          const delayDays = Math.ceil(delayMs / 86400000);
-          overdueBadgeHtml = `<span class="gantt-delay-badge" title="親タスクの完了予定日を${delayDays}日超過">+${delayDays}日遅延</span>`;
-
-          const parentDuePct = Math.max(0, Math.min(100, ((parentTask.dueDate - minTime) / totalSpan) * 100));
-          const childDuePct = Math.max(0, Math.min(100, ((task.dueDate - minTime) / totalSpan) * 100));
-          const overWidthPct = Math.max(1, childDuePct - parentDuePct);
-          overdueBarHtml = `<div class="gantt-overdue-bar" style="left: ${parentDuePct.toFixed(1)}%; width: ${overWidthPct.toFixed(1)}%;" title="親の完了予定日を${delayDays}日超過"></div>`;
-        }
-      }
-
-      // Bar timing calculation
-      const startTime = task.createdAt || minTime;
-      const endTime = task.status === 'DONE' ? (task.updatedAt || now) : Math.max(now, task.dueDate || now);
-
-      let startPct = Math.max(0, Math.min(100, ((startTime - minTime) / totalSpan) * 100));
-      let endPct = Math.max(startPct + 2, Math.min(100, ((endTime - minTime) / totalSpan) * 100));
-      let widthPct = Math.max(2, endPct - startPct);
-
-      // Duration in days calculation
-      const durationMs = Math.max(86400000, endTime - startTime);
-      const durationDays = Math.ceil(durationMs / 86400000);
-
-      // Target Due Date Marker Position
-      let dueMarkerHtml = '';
-      if (task.dueDate) {
-        const duePct = Math.max(0, Math.min(100, ((task.dueDate - minTime) / totalSpan) * 100));
-        dueMarkerHtml = `<div class="gantt-due-marker" style="left: ${duePct.toFixed(1)}%;" title="完了予定日: ${dueDateStr}"></div>`;
-      }
-
-      // Render Row
-      const taskTd = document.createElement('td');
-      taskTd.className = 'gantt-task-name';
-      taskTd.innerHTML = `<span class="gantt-tree-indent">${indentStr}</span>${task.title}${overdueBadgeHtml}`;
-
-      const statusTd = document.createElement('td');
-      const badge = document.createElement('span');
-      badge.className = 'inspector-badge';
-      badge.dataset.status = task.status;
-      badge.textContent = statusLabels[task.status] || task.status;
-      badge.title = 'クリックでステータス変更';
-      badge.onclick = (e) => {
-        e.stopPropagation();
-        const nextStatusMap = { TODO: 'IN_PROGRESS', IN_PROGRESS: 'DONE', DONE: 'TODO' };
-        updateTaskStatus(task.id, nextStatusMap[task.status] || 'TODO');
-      };
-      statusTd.appendChild(badge);
-
-      const dueTd = document.createElement('td');
-      if (task.dueDate) {
-        dueTd.innerHTML = `<span class="gantt-due-pill ${isOverdue ? 'overdue' : ''}">${isOverdue ? '⚠️ ' : ''}${dueDateStr}</span>`;
-      } else {
-        dueTd.style.cssText = 'color: var(--text-muted); font-size: 0.75rem;';
-        dueTd.textContent = '-';
-      }
-
-      const barTd = document.createElement('td');
-      barTd.className = 'gantt-bar-cell';
-      barTd.innerHTML = `
-        <div class="gantt-bar-track">
-          <div class="gantt-bar-fill" data-status="${task.status}" style="left: ${startPct.toFixed(1)}%; width: ${widthPct.toFixed(1)}%;" title="期間: 約${durationDays}日間 (${statusLabels[task.status]})">
-            ${durationDays > 1 ? `${durationDays}日` : ''}
-          </div>
-          ${overdueBarHtml}
-          ${dueMarkerHtml}
-        </div>
-      `;
-
-      // Allow clicking bar to open inspector
-      const barFill = barTd.querySelector('.gantt-bar-fill');
-      if (barFill) {
-        barFill.onclick = (e) => {
-          e.stopPropagation();
-          setViewMode('OBSIDIAN_GRAPH_VIEW');
-          openObsidianNodeInspector(task);
-        };
-      }
-
-      // Allow dragging Gantt completion due date marker (🚩) to update dueDate
-      const dueMarkerEl = barTd.querySelector('.gantt-due-marker');
-      if (dueMarkerEl) {
-        dueMarkerEl.onmousedown = (e) => {
-          e.stopPropagation();
-          e.preventDefault();
-
-          const track = barTd.querySelector('.gantt-bar-track');
-          if (!track) return;
-
-          dueMarkerEl.classList.add('dragging');
-
-          let tooltip = document.querySelector('.gantt-drag-tooltip');
-          if (!tooltip) {
-            tooltip = document.createElement('div');
-            tooltip.className = 'gantt-drag-tooltip';
-            document.body.appendChild(tooltip);
-          }
-
-          let pendingDateTs = task.dueDate;
-
-          const onMouseMove = (moveEvt) => {
-            const rect = track.getBoundingClientRect();
-            const relX = Math.max(0, Math.min(rect.width, moveEvt.clientX - rect.left));
-            const ratio = relX / rect.width;
-            pendingDateTs = minTime + ratio * totalSpan;
-
-            const dateObj = new Date(pendingDateTs);
-            const dateStr = `${dateObj.getFullYear()}/${String(dateObj.getMonth() + 1).padStart(2, '0')}/${String(dateObj.getDate()).padStart(2, '0')}`;
-
-            dueMarkerEl.style.left = `${(ratio * 100).toFixed(1)}%`;
-            tooltip.textContent = `完了予定日: ${dateStr}`;
-            tooltip.style.left = `${moveEvt.clientX}px`;
-            tooltip.style.top = `${moveEvt.clientY}px`;
-            tooltip.style.display = 'block';
-          };
-
-          const onMouseUp = () => {
-            window.removeEventListener('mousemove', onMouseMove);
-            window.removeEventListener('mouseup', onMouseUp);
-            dueMarkerEl.classList.remove('dragging');
-            if (tooltip) {
-              tooltip.remove();
-            }
-
-            if (pendingDateTs && pendingDateTs !== task.dueDate) {
-              const d = new Date(pendingDateTs);
-              d.setHours(23, 59, 59, 999);
-              const m = d.getMonth() + 1;
-              const day = d.getDate();
-              const dayStr = ['日', '月', '火', '水', '木', '金', '土'][d.getDay()];
-              promptDateChangeConfirmation(task, d.getTime(), `${m}/${day}(${dayStr})`, () => {
-                renderGanttView();
-              });
-            } else {
-              renderGanttView();
-            }
-          };
-
-          window.addEventListener('mousemove', onMouseMove);
-          window.addEventListener('mouseup', onMouseUp);
-        };
-      }
-
-      tr.appendChild(taskTd);
-      tr.appendChild(statusTd);
-      tr.appendChild(dueTd);
-      tr.appendChild(barTd);
-      tbody.appendChild(tr);
-    });
-
-    table.appendChild(tbody);
-
-    const ganttWrapper = document.createElement('div');
-    ganttWrapper.appendChild(ticksHeader);
-    ganttWrapper.appendChild(table);
-
-    ganttContainer.appendChild(ganttWrapper);
   }
 
   // --------------------------------------------------------------------------

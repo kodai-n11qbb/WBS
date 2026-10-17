@@ -13,38 +13,6 @@
 
 <body>
   <div class="app-container">
-    <header class="app-header minimal-header">
-      <div class="header-left">
-        <h1 id="project-title">WBSer</h1>
-        <div class="node-pill">
-          <span class="status-dot online"></span>
-          <span id="node-id-display">Node: Connecting...</span>
-        </div>
-      </div>
-
-      <div class="header-right">
-        <!-- Undo Button -->
-        <button id="btn-undo" class="btn-mode btn-undo" title="自端末の直前操作を取り消す">
-          ↺ 1つ戻す
-        </button>
-
-        <!-- View Switcher -->
-        <div class="view-switcher-group">
-          <button id="btn-view-graph" class="btn-mode active" title="Obsidianノードグラフ (メイン)">
-            グラフ
-          </button>
-          <button id="btn-view-gantt" class="btn-mode" title="ガントチャート表示 (時系列ログ)">
-            ガント
-          </button>
-        </div>
-
-        <!-- Theme Toggle Button -->
-        <button id="btn-theme-toggle" class="btn-icon-theme" title="ダーク/ライトモード切り替え">
-          <span id="theme-toggle-icon">テーマ</span>
-        </button>
-      </div>
-    </header>
-
     <!-- Global Drag-to-Root Dropzone Header -->
     <div id="root-dropzone" class="root-dropzone hidden">
       <div class="root-dropzone-content">
@@ -95,7 +63,87 @@
     <div id="error-toast" class="toast hidden"></div>
 
     <main class="main-content">
-      <!-- Task Input Bar -->
+      <!-- VIEW 1: Obsidian-like Node Graph Canvas View (Full 100vh Workspace) -->
+      <section id="obsidian-graph-view" class="view-section full-graph-view">
+        <!-- Unified Top Toolbar Bar (Brand, Node status, Undo, Controls, Theme) -->
+        <div class="graph-top-toolbar">
+          <div class="toolbar-brand-group">
+            <h1 id="project-title" class="brand-title">WBSer</h1>
+            <div id="node-pill" class="node-pill" title="端末P2P接続状況">
+              <span class="status-dot online"></span>
+              <span id="node-id-display">Node: Connecting...</span>
+            </div>
+            <button id="btn-undo" class="btn-undo" title="自端末の直前操作を取り消す">
+              ↺ 戻す
+            </button>
+          </div>
+
+          <div class="toolbar-spacer"></div>
+
+          <!-- Screen Edge Nesting Depth Control, Days Range Control & Text Size Control -->
+          <div id="depth-filter-control" class="depth-filter-control glass-card">
+            <div class="control-group">
+              <span class="depth-label" id="depth-filter-label">ネスト:</span>
+              <button type="button" class="depth-btn" data-depth="1">1階層</button>
+              <button type="button" class="depth-btn" data-depth="2">2階層</button>
+              <button type="button" class="depth-btn" data-depth="3">3階層</button>
+              <button type="button" class="depth-btn active" data-depth="all">すべて</button>
+            </div>
+            <span class="control-divider" id="days-filter-divider"></span>
+            <div class="control-group" id="days-filter-group">
+              <span class="depth-label">表示日数:</span>
+              <button type="button" class="days-btn" data-days="7">7日</button>
+              <button type="button" class="days-btn active" data-days="14">14日</button>
+              <button type="button" class="days-btn" data-days="30">30日</button>
+              <button type="button" class="days-btn" data-days="60">60日</button>
+            </div>
+            <span class="control-divider"></span>
+            <div class="control-group">
+              <span class="depth-label">文字:</span>
+              <button type="button" class="fontsize-btn" data-size="small">小</button>
+              <button type="button" class="fontsize-btn active" data-size="medium">中</button>
+              <button type="button" class="fontsize-btn" data-size="large">大</button>
+            </div>
+          </div>
+
+          <!-- Theme Switcher Button -->
+          <button id="btn-theme-toggle" class="btn-icon-theme" title="ダーク/ライトモード切り替え">
+            <span id="theme-toggle-icon">🌙</span>
+          </button>
+        </div>
+
+        <div class="canvas-wrapper">
+          <canvas id="obsidian-canvas" width="1200" height="700"></canvas>
+        </div>
+      </section>
+
+      <!-- Node Click Quick Inspector Dock (Docked directly above input section) -->
+      <div id="obsidian-inspector" class="obsidian-inspector-dock glass-card hidden">
+        <div class="inspector-header">
+          <span class="inspector-badge" id="inspector-status-badge">TODO</span>
+          <input type="text" id="inspector-title-input" class="inspector-title-input" placeholder="タスクタイトル..." />
+          <div class="inspector-due-date-group">
+            <label for="inspector-due-date-input" class="due-date-label">完了予定日:</label>
+            <input type="date" id="inspector-due-date-input" class="inspector-due-date-input" title="完了予定日を設定" />
+          </div>
+          <div class="status-btn-group">
+            <button class="btn-status-toggle" data-status="TODO">未着手</button>
+            <button class="btn-status-toggle" data-status="IN_PROGRESS">進行中</button>
+            <button class="btn-status-toggle" data-status="DONE">完了</button>
+          </div>
+          <div class="action-btn-group">
+            <button id="btn-inspector-elevate" class="btn-inspector-action btn-elevate" title="親タスクから切り離してルート要素化">
+              ルート化
+            </button>
+            <button id="btn-inspector-delete" class="btn-inspector-action btn-delete" title="タスクを削除">
+              削除
+            </button>
+          </div>
+          <button id="btn-inspector-close" class="btn-inspector-close" title="閉じる">✕</button>
+        </div>
+      </div>
+
+      <!-- Task Input Bar (Docked at the bottom) -->
       <section class="task-input-section" id="input-section">
         <form id="quick-task-form" class="chatgpt-prompt-bar">
           <div class="prompt-pill-select">
@@ -112,95 +160,10 @@
           </button>
         </form>
       </section>
-
-      <!-- VIEW 1: Obsidian-like Node Graph Canvas View -->
-      <section id="obsidian-graph-view" class="view-section glass-card full-graph-view">
-        <!-- Top Toolbar Bar (Parent Nav & Filter Controls separated from Canvas) -->
-        <div class="graph-top-toolbar">
-          <div id="graph-parent-nav" class="graph-parent-nav hidden">
-            <button id="btn-graph-go-parent" class="btn-parent-nav" title="親要素へフォーカス移動">
-              ← 親要素へ移動: <span id="parent-nav-title">親タスク名</span>
-            </button>
-          </div>
-          <div class="toolbar-spacer"></div>
-          <!-- Screen Edge Nesting Depth Control, Days Range Control & Text Size Control -->
-          <div id="depth-filter-control" class="depth-filter-control glass-card">
-            <div class="control-group">
-              <span class="depth-label" id="depth-filter-label">ネスト表示:</span>
-              <button type="button" class="depth-btn" data-depth="1">1階層</button>
-              <button type="button" class="depth-btn" data-depth="2">2階層</button>
-              <button type="button" class="depth-btn" data-depth="3">3階層</button>
-              <button type="button" class="depth-btn active" data-depth="all">すべて</button>
-            </div>
-            <span class="control-divider" id="days-filter-divider"></span>
-            <div class="control-group" id="days-filter-group">
-              <span class="depth-label">表示日数:</span>
-              <button type="button" class="days-btn" data-days="7">7日</button>
-              <button type="button" class="days-btn active" data-days="14">14日</button>
-              <button type="button" class="days-btn" data-days="30">30日</button>
-              <button type="button" class="days-btn" data-days="60">60日</button>
-            </div>
-            <span class="control-divider"></span>
-            <div class="control-group">
-              <span class="depth-label">文字サイズ:</span>
-              <button type="button" class="fontsize-btn" data-size="small">小</button>
-              <button type="button" class="fontsize-btn active" data-size="medium">中</button>
-              <button type="button" class="fontsize-btn" data-size="large">大</button>
-            </div>
-          </div>
-        </div>
-
-        <div class="canvas-wrapper">
-          <canvas id="obsidian-canvas" width="1200" height="650"></canvas>
-        </div>
-
-        <!-- Node Click Quick Inspector Toolbar / Dock -->
-        <div id="obsidian-inspector" class="obsidian-inspector glass-card hidden">
-          <div class="inspector-header">
-            <span class="inspector-badge" id="inspector-status-badge">TODO</span>
-            <input type="text" id="inspector-title-input" class="inspector-title-input" placeholder="タスクタイトル..." />
-            <div class="inspector-due-date-group">
-              <label for="inspector-due-date-input" class="due-date-label">完了予定日:</label>
-              <input type="date" id="inspector-due-date-input" class="inspector-due-date-input" title="完了予定日を設定" />
-            </div>
-            <button id="btn-inspector-close" class="btn-inspector-close" title="閉じる">✕</button>
-          </div>
-          <div class="inspector-actions">
-            <div class="status-btn-group">
-              <button class="btn-status-toggle" data-status="TODO">未着手</button>
-              <button class="btn-status-toggle" data-status="IN_PROGRESS">進行中</button>
-              <button class="btn-status-toggle" data-status="DONE">完了</button>
-            </div>
-            <div class="action-btn-group">
-              <button id="btn-inspector-elevate" class="btn-inspector-action btn-elevate" title="親タスクから切り離してルート要素化">
-                ルート化
-              </button>
-              <button id="btn-inspector-delete" class="btn-inspector-action btn-delete" title="タスクを削除">
-                削除
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- VIEW 2: GanttProject Style Gantt Chart Timeline View -->
-      <section id="gantt-view" class="view-section glass-card gantt-chart-section hidden">
-        <div class="gantt-header">
-          <div class="gantt-title-group">
-            <h2>ガントチャート (進行中稼働ログ ＆ 完了予定日)</h2>
-          </div>
-          <div class="gantt-stats" id="gantt-stats-badge">
-            ログイベント数: 0件
-          </div>
-        </div>
-        <div id="gantt-container" class="gantt-container">
-          <div class="gantt-empty-notice">イベントログを読み込み中...</div>
-        </div>
-      </section>
     </main>
   </div>
 
-  <script src="app.js?v=zones_v2"></script>
+  <script src="app.js?v=zones_v3"></script>
 </body>
 
 </html>

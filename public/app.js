@@ -102,13 +102,68 @@
   }
 
   // Sugiyama Layered Tree Layout Helper (Calculates non-overlapping X columns for subtrees)
-  function computeSugiyamaTreeXPositions(visibleTasks, width) {
+  function computeSugiyamaTreeXPositions(visibleTasks, width, focusedRootId = null) {
     const parentToChildren = new Map();
     visibleTasks.forEach((t) => {
       const pId = t.parentId || '__ROOT__';
       if (!parentToChildren.has(pId)) parentToChildren.set(pId, []);
       parentToChildren.get(pId).push(t);
     });
+
+    const xPosMap = new Map();
+
+    // 1. If focusedRootId is specified and present in visible tasks, compute wide spread layout for its subtree
+    if (focusedRootId && visibleTasks.some((t) => t.id === focusedRootId)) {
+      const activeDescendants = getDescendantIds(focusedRootId);
+
+      function countSubtreeLeaves(taskId) {
+        const children = (parentToChildren.get(taskId) || []).filter((c) => activeDescendants.has(c.id));
+        if (children.length === 0) return 1;
+        let sum = 0;
+        children.forEach((c) => {
+          sum += countSubtreeLeaves(c.id);
+        });
+        return Math.max(1, sum);
+      }
+
+      const totalSubtreeLeaves = countSubtreeLeaves(focusedRootId);
+      const padX = Math.min(80, width * 0.08);
+      const usableWidth = Math.max(300, width - 2 * padX);
+      let currentLeafIdx = 0;
+
+      function assignSubtreeX(taskId) {
+        const children = (parentToChildren.get(taskId) || []).filter((c) => activeDescendants.has(c.id));
+        if (children.length === 0) {
+          const ratio = (currentLeafIdx + 0.5) / totalSubtreeLeaves;
+          const x = padX + ratio * usableWidth;
+          xPosMap.set(taskId, x);
+          currentLeafIdx += 1;
+          return x;
+        }
+
+        const childXs = children.map((c) => assignSubtreeX(c.id));
+        const minX = Math.min(...childXs);
+        const maxX = Math.max(...childXs);
+        // Root of the focused subtree stays horizontally centered at width / 2
+        const parentX = taskId === focusedRootId ? width / 2 : (minX + maxX) / 2;
+        xPosMap.set(taskId, parentX);
+        return parentX;
+      }
+
+      assignSubtreeX(focusedRootId);
+
+      // Compute standard positions for non-active background nodes
+      const nonActiveTasks = visibleTasks.filter((t) => !activeDescendants.has(t.id));
+      if (nonActiveTasks.length > 0) {
+        const globalXMap = computeSugiyamaTreeXPositions(nonActiveTasks, width, null);
+        nonActiveTasks.forEach((t) => {
+          if (!xPosMap.has(t.id) && globalXMap.has(t.id)) {
+            xPosMap.set(t.id, globalXMap.get(t.id));
+          }
+        });
+      }
+      return xPosMap;
+    }
 
     const rootTasks = visibleTasks.filter(
       (t) => !t.parentId || !visibleTasks.some((p) => p.id === t.parentId)
@@ -135,7 +190,6 @@
     });
     totalLeaves = Math.max(1, totalLeaves);
 
-    const xPosMap = new Map();
     const padX = Math.min(100, width * 0.1);
     const usableWidth = Math.max(300, width - 2 * padX);
     let currentLeafIndex = 0;
@@ -399,7 +453,8 @@
 
     const maxVisibleDepth = visibleTasks.reduce((max, t) => Math.max(max, getTaskDepth(t)), 0);
     const existingNodeMap = new Map(graphNodes.map((n) => [n.task.id, n]));
-    const sugiyamaXMap = computeSugiyamaTreeXPositions(visibleTasks, width);
+    const activeInitialSelectedId = doubleClickedSubtreeId || focusedTaskId || inspectorSelectedTaskId;
+    const sugiyamaXMap = computeSugiyamaTreeXPositions(visibleTasks, width, activeInitialSelectedId);
 
     graphNodes = visibleTasks.map((task, idx) => {
       const existing = existingNodeMap.get(task.id);
@@ -459,14 +514,21 @@
         ctx.fillText('[ ここにドロップでルート要素 (親なし) に昇格 ]', width / 2, 35);
       }
 
-      // Sugiyama Layered Layout Alignment Force (Pulls nodes to dedicated non-crossing columns)
-      const sugiyamaXMap = computeSugiyamaTreeXPositions(visibleTasks, width);
+      const isInspectorOpen = obsidianInspector && !obsidianInspector.classList.contains('hidden');
+      const selectedId = doubleClickedSubtreeId || focusedTaskId || inspectorSelectedTaskId;
+      const activeTreeSet = selectedId ? getDescendantIds(selectedId) : null;
+      const maxVisibleDepth = visibleTasks.reduce((max, t) => Math.max(max, getTaskDepth(t)), 0);
+
+      // Sugiyama Layered Layout Alignment Force (Pulls nodes to dedicated non-crossing columns & wide horizontal spread for focused subtree)
+      const sugiyamaXMap = computeSugiyamaTreeXPositions(visibleTasks, width, selectedId);
 
       graphNodes.forEach((node) => {
         if (!node.isPinned) {
           const targetX = sugiyamaXMap.get(node.task.id);
           if (targetX !== undefined) {
-            node.vx += (targetX - node.x) * 0.045;
+            const isSubtreeNode = activeTreeSet && activeTreeSet.has(node.task.id);
+            const springK = isSubtreeNode ? 0.055 : 0.035;
+            node.vx += (targetX - node.x) * springK;
           }
         }
       });
@@ -520,11 +582,6 @@
           }
         }
       }
-
-      const isInspectorOpen = obsidianInspector && !obsidianInspector.classList.contains('hidden');
-      const selectedId = doubleClickedSubtreeId || focusedTaskId || inspectorSelectedTaskId;
-      const activeTreeSet = selectedId ? getDescendantIds(selectedId) : null;
-      const maxVisibleDepth = visibleTasks.reduce((max, t) => Math.max(max, getTaskDepth(t)), 0);
 
       let maxSubtreeRelDepth = 0;
       if (selectedId && activeTreeSet) {

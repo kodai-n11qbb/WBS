@@ -56,10 +56,12 @@ npm run build:exe
 
 ## 📚 仕様ドキュメント
 
-詳細なアーキテクチャ、データモデル、同期仕様、拡張設計については [`docs/`](./docs/index.md) をご参照ください。
+詳細なアーキテクチャ、データモデル、同期仕様、UI設計等については [`docs/`](./docs/index.md) をご参照ください。
 
-1. [01. 概念とユースケース](./docs/01_concept.md)
-2. [02. システムアーキテクチャ抽象](./docs/02_architecture.md)
-3. [03. データモデルと同期仕様](./docs/03_data_sync.md)
-4. [04. 拡張性およびプラグイン設計](./docs/04_extension_spec.md)
-5. [開発ポリシー](./DEV_POLICY_v1.0518.md)
+- [ドキュメントインデックス (docs/index.md)](./docs/index.md)
+- [01. 概念とユースケース (concept.md)](./docs/concept.md)
+- [02. システムアーキテクチャ (system-architecture.md)](./docs/system-architecture.md)
+- [03. データモデル (data-model.md)](./docs/data-model.md)
+- [04. UIレイアウト設計 (ui-layout.md)](./docs/ui-layout.md)
+- [05. 開発方針 (DEV_POLICY.md)](./docs/DEV_POLICY.md)
+

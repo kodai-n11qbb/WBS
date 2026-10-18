@@ -1,8 +1,8 @@
 {
   "projectId": "default-project",
   "projectName": "リアルタイム・コラボレーション機能",
-  "updatedAt": 1792334660692,
-  "totalTasks": 19,
+  "updatedAt": 1792343929437,
+  "totalTasks": 21,
   "tasks": [
     {
       "id": "d95b8abf-8638-4a17-ad6f-48721cf5bdca",
@@ -13,7 +13,7 @@
       "priority": "HIGH",
       "orderIndex": 1100,
       "isCollapsed": false,
-      "updatedAt": 1792285365919,
+      "updatedAt": 1792283102763,
       "dueDate": 1793977199999,
       "authorNodeId": "node-181c2b"
     },
@@ -65,7 +65,7 @@
       "priority": "HIGH",
       "orderIndex": 1600,
       "isCollapsed": false,
-      "updatedAt": 1792334660691,
+      "updatedAt": 1792283102763,
       "dueDate": 1792940399999,
       "authorNodeId": "node-181c2b"
     },
@@ -248,6 +248,32 @@
       "orderIndex": 4200,
       "isCollapsed": false,
       "updatedAt": 1792283102763,
+      "dueDate": null,
+      "authorNodeId": "node-181c2b"
+    },
+    {
+      "id": "a8e541cb-35ae-4f9c-91ff-267431f1391c",
+      "projectId": "default-project",
+      "parentId": null,
+      "title": "なになにする",
+      "status": "TODO",
+      "priority": "MEDIUM",
+      "orderIndex": 1792343926371,
+      "isCollapsed": false,
+      "updatedAt": 1792343926371,
+      "dueDate": null,
+      "authorNodeId": "node-181c2b"
+    },
+    {
+      "id": "dedc9711-03f5-4231-9a07-0491fa74c12d",
+      "projectId": "default-project",
+      "parentId": null,
+      "title": "ABC",
+      "status": "TODO",
+      "priority": "MEDIUM",
+      "orderIndex": 1792343929436,
+      "isCollapsed": false,
+      "updatedAt": 1792343929436,
       "dueDate": null,
       "authorNodeId": "node-181c2b"
     }

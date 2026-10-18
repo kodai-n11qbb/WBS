@@ -302,6 +302,100 @@ async function runDeepVerification() {
   await page.waitForTimeout(800);
 
   // -------------------------------------------------------------
+  // Test G: 日付モードでのホイールスクロール（過去・未来）表示整合性検証
+  // -------------------------------------------------------------
+  console.log('\n--- [テストG: 日付モードでのホイールスクロール動作検証] ---');
+  // 再度ルートツリーを選択してタイムライン表示へ
+  const testRootNode = auditInitial.nodes.find((n) => !n.parentId);
+  await page.evaluate((id) => window.__wbserDebug.clickNode(id), testRootNode.id);
+  await page.waitForTimeout(1000);
+
+  // キャンバス中心へマウスを移動
+  await page.mouse.move(640, 400);
+
+  // 未来方向へホイールスクロール
+  console.log('  未来方向へホイールスクロール (deltaY = 400)...');
+  await page.mouse.wheel(0, 400);
+  await page.waitForTimeout(1000);
+
+  const scrollFutureAudit = await page.evaluate(() => {
+    const dbg = window.__wbserDebug;
+    const nodes = dbg.getGraphNodes();
+    const metrics = dbg.getCanvasMetrics();
+    // ゾーンごとのノード数を集計
+    const zone2Nodes = nodes.filter((n) => n.dueDate && n.x < metrics.timelineStartX);
+    const zone4Nodes = nodes.filter((n) => n.dueDate && n.x > metrics.timelineEndX);
+    const timelineNodes = nodes.filter((n) => n.dueDate && n.x >= metrics.timelineStartX && n.x <= metrics.timelineEndX);
+    
+    // Y座標の重複（重なり不具合）を検査: 同一Zone内の同一X座標でY座標差が10px未満のペア
+    let duplicateYCount = 0;
+    for (let i = 0; i < zone2Nodes.length; i++) {
+      for (let j = i + 1; j < zone2Nodes.length; j++) {
+        if (Math.abs(zone2Nodes[i].y - zone2Nodes[j].y) < 10) duplicateYCount++;
+      }
+    }
+    for (let i = 0; i < zone4Nodes.length; i++) {
+      for (let j = i + 1; j < zone4Nodes.length; j++) {
+        if (Math.abs(zone4Nodes[i].y - zone4Nodes[j].y) < 10) duplicateYCount++;
+      }
+    }
+
+    return {
+      panOffset: dbg.getPanOffset ? dbg.getPanOffset() : null,
+      zone2Count: zone2Nodes.length,
+      zone4Count: zone4Nodes.length,
+      timelineCount: timelineNodes.length,
+      duplicateYCount,
+    };
+  });
+
+  await page.screenshot({ path: path.join(AUDIT_DIR, '05_scroll_future.png') });
+  console.log(`  スクロール後: 過去ゾーン ${scrollFutureAudit.zone2Count}件, 未来ゾーン ${scrollFutureAudit.zone4Count}件, タイムライン ${scrollFutureAudit.timelineCount}件, 重複Y ${scrollFutureAudit.duplicateYCount}件`);
+
+  // 過去方向へ大きくホイールスクロール
+  console.log('  過去方向へ逆スクロール (deltaY = -800)...');
+  await page.mouse.wheel(0, -800);
+  await page.waitForTimeout(1000);
+
+  const scrollPastAudit = await page.evaluate(() => {
+    const dbg = window.__wbserDebug;
+    const nodes = dbg.getGraphNodes();
+    const metrics = dbg.getCanvasMetrics();
+    const zone2Nodes = nodes.filter((n) => n.dueDate && n.x < metrics.timelineStartX);
+    const zone4Nodes = nodes.filter((n) => n.dueDate && n.x > metrics.timelineEndX);
+    const timelineNodes = nodes.filter((n) => n.dueDate && n.x >= metrics.timelineStartX && n.x <= metrics.timelineEndX);
+
+    let duplicateYCount = 0;
+    for (let i = 0; i < zone2Nodes.length; i++) {
+      for (let j = i + 1; j < zone2Nodes.length; j++) {
+        if (Math.abs(zone2Nodes[i].y - zone2Nodes[j].y) < 10) duplicateYCount++;
+      }
+    }
+    for (let i = 0; i < zone4Nodes.length; i++) {
+      for (let j = i + 1; j < zone4Nodes.length; j++) {
+        if (Math.abs(zone4Nodes[i].y - zone4Nodes[j].y) < 10) duplicateYCount++;
+      }
+    }
+
+    return {
+      zone2Count: zone2Nodes.length,
+      zone4Count: zone4Nodes.length,
+      timelineCount: timelineNodes.length,
+      duplicateYCount,
+    };
+  });
+
+  await page.screenshot({ path: path.join(AUDIT_DIR, '06_scroll_past.png') });
+  console.log(`  過去スクロール後: 過去ゾーン ${scrollPastAudit.zone2Count}件, 未来ゾーン ${scrollPastAudit.zone4Count}件, タイムライン ${scrollPastAudit.timelineCount}件, 重複Y ${scrollPastAudit.duplicateYCount}件`);
+
+  const scrollPassed = scrollFutureAudit.duplicateYCount === 0 && scrollPastAudit.duplicateYCount === 0;
+  testResults.push({
+    test: '日付モードでのホイールスクロール動作・過去未来ゾーン整合性',
+    passed: scrollPassed,
+    details: `未来スクロール時重複Y: ${scrollFutureAudit.duplicateYCount}, 過去スクロール時重複Y: ${scrollPastAudit.duplicateYCount}`,
+  });
+
+  // -------------------------------------------------------------
   // Summary
   // -------------------------------------------------------------
   console.log('\n========================================================');

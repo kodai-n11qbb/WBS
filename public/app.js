@@ -976,6 +976,8 @@
     today.setHours(0, 0, 0, 0);
     let settledFrames = 0;
     let idleTicks = 0;
+    let lastPanOffsetX = canvasPanOffsetX;
+    let lastWheelTime = 0;
 
     function updateLayoutState() {
       selectedId = doubleClickedSubtreeId || focusedTaskId || inspectorSelectedTaskId;
@@ -1115,8 +1117,9 @@
         ctx.fillText('[ ここにドロップでルート要素 (親なし) に昇格 ]', width / 2, 35);
       }
 
-      if (layoutDirty || isPanningCanvas || draggedGraphNode) {
+      if (layoutDirty || isPanningCanvas || draggedGraphNode || canvasPanOffsetX !== lastPanOffsetX) {
         updateLayoutState();
+        lastPanOffsetX = canvasPanOffsetX;
       }
 
       const isInspectorOpen = obsidianInspector && !obsidianInspector.classList.contains('hidden');
@@ -1836,7 +1839,12 @@
         if (lv > maxVelocity) maxVelocity = lv;
       });
 
-      const isInteracting = Boolean(draggedGraphNode || isPanningCanvas || isMouseDown);
+      const isInteracting = Boolean(
+        draggedGraphNode ||
+        isPanningCanvas ||
+        isMouseDown ||
+        (Date.now() - lastWheelTime < 350)
+      );
       if (isInteracting) {
         idleTicks = 0;
         settledFrames = 0;
@@ -2170,8 +2178,18 @@
       const selectedId = doubleClickedSubtreeId || focusedTaskId || inspectorSelectedTaskId;
       if (selectedId) {
         e.preventDefault();
-        const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+        let delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+        if (e.deltaMode === 1) {
+          delta *= 24;
+        } else if (e.deltaMode === 2) {
+          delta *= 400;
+        }
         canvasPanOffsetX -= delta * 0.7;
+        lastWheelTime = Date.now();
+        layoutDirty = true;
+        if (canvas.__wakeAnimation) {
+          canvas.__wakeAnimation();
+        }
       }
     };
   }
@@ -2740,12 +2758,17 @@
         ? obsidianInspector.getBoundingClientRect()
         : null;
       const inputRect = quickForm ? quickForm.getBoundingClientRect() : null;
+      const cssWidth = canvas ? canvas.width / (window.devicePixelRatio || 1) : 0;
+      const cssHeight = canvas ? canvas.height / (window.devicePixelRatio || 1) : 0;
+      const tMetrics = getTimelineLayoutMetrics(cssWidth);
       return {
-        width: canvas ? canvas.width / (window.devicePixelRatio || 1) : 0,
-        height: canvas ? canvas.height / (window.devicePixelRatio || 1) : 0,
+        width: cssWidth,
+        height: cssHeight,
         rect: { top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right },
         effectiveTop: 42,
-        effectiveBottom: inspectorRect ? inspectorRect.top : (inputRect ? inputRect.top : window.innerHeight)
+        effectiveBottom: inspectorRect ? inspectorRect.top : (inputRect ? inputRect.top : window.innerHeight),
+        ...tMetrics,
+        canvasPanOffsetX,
       };
     },
     clickNode: (taskId) => {

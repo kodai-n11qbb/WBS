@@ -8,6 +8,8 @@ bin/
 # Local data & storage files
 data/*.jsonl
 data/*.json
+!data/state.json
+!data/events.jsonl
 !data/.gitkeep
 .wbser_data/
 config.json

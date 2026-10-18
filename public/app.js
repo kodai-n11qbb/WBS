@@ -2274,6 +2274,56 @@
     quickInputTitle.value = '';
   });
 
+  // Expose test/debug helper for Playwright layout verification
+  window.__wbserDebug = {
+    getGraphNodes: () => graphNodes.map((n) => ({
+      id: n.task.id,
+      title: n.task.title,
+      parentId: n.task.parentId,
+      dueDate: n.task.dueDate,
+      status: n.task.status,
+      x: Math.round(n.x * 10) / 10,
+      y: Math.round(n.y * 10) / 10,
+      vx: Math.round(n.vx * 100) / 100,
+      vy: Math.round(n.vy * 100) / 100,
+      labelX: n.labelX ? Math.round(n.labelX * 10) / 10 : Math.round(n.x * 10) / 10,
+      labelY: n.labelY ? Math.round(n.labelY * 10) / 10 : Math.round(n.y * 10) / 10
+    })),
+    getSelectedTaskId: () => doubleClickedSubtreeId || focusedTaskId || inspectorSelectedTaskId,
+    getCanvasMetrics: () => {
+      const rect = canvas ? canvas.getBoundingClientRect() : { width: 0, height: 0, top: 0, bottom: 0, left: 0, right: 0 };
+      const inspectorRect = obsidianInspector && !obsidianInspector.classList.contains('hidden')
+        ? obsidianInspector.getBoundingClientRect()
+        : null;
+      const inputRect = quickForm ? quickForm.getBoundingClientRect() : null;
+      return {
+        width: canvas ? canvas.width / (window.devicePixelRatio || 1) : 0,
+        height: canvas ? canvas.height / (window.devicePixelRatio || 1) : 0,
+        rect: { top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right },
+        effectiveTop: 42,
+        effectiveBottom: inspectorRect ? inspectorRect.top : (inputRect ? inputRect.top : window.innerHeight)
+      };
+    },
+    clickNode: (taskId) => {
+      const node = graphNodes.find((n) => n.task.id === taskId);
+      if (node) {
+        openObsidianNodeInspector(node.task);
+        renderCurrentView();
+        return true;
+      }
+      return false;
+    },
+    hoverNode: (taskId) => {
+      hoveredNodeId = taskId;
+      renderCurrentView();
+      return true;
+    },
+    clearSelection: () => {
+      closeObsidianNodeInspector();
+      return true;
+    }
+  };
+
   initTheme();
   setupKeyboardNavigation();
   initWebSocket();

@@ -106,7 +106,7 @@
 
 | # | 書類名 | 重要度 | ステータス | 依存 | 備考 |
 |---|--------|--------|-----------|------|------|
-| 7.1 | test-strategy.md | ★★★★☆ | `未作成` | 3.1 | Vitest によるユニットテストおよび統合テスト方針 |
+| 7.1 | [test-strategy.md](./test-strategy.md) | ★★★★☆ | `草案` | 3.1 | Vitest 単体テスト方針 ＆ Playwright 描画破綻・重なり自動検知仕様 |
 | 7.2 | unit-test-plan.md | ★★★★☆ | `未作成` | 7.1 | Validator, SyncEngine, StatusAggregator テスト計画 |
 | 7.3 | integration-test-plan.md | ★★★★☆ | `未作成` | 7.1 | WebSocket / JSONL 永続化テスト計画 |
 | 7.4 | e2e-test-plan.md | ★★★☆☆ | `不要` | 7.1 | 軽量運用の範囲外 |

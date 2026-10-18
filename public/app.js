@@ -24,6 +24,34 @@
   // Graph Text Size Filter ('small' | 'medium' | 'large')
   let currentFontSizeMode = 'medium';
 
+  // Zone Label Visibility (Past & Future)
+  let showPastLabels = true;
+  let showFutureLabels = true;
+  let hoveredEyeZone = null; // 'past' | 'future' | null
+
+  try {
+    const savedPast = localStorage.getItem('wbser_show_past_labels');
+    if (savedPast !== null) showPastLabels = savedPast === 'true';
+    const savedFuture = localStorage.getItem('wbser_show_future_labels');
+    if (savedFuture !== null) showFutureLabels = savedFuture === 'true';
+  } catch (e) {}
+
+  function togglePastLabels() {
+    showPastLabels = !showPastLabels;
+    try {
+      localStorage.setItem('wbser_show_past_labels', String(showPastLabels));
+    } catch (e) {}
+    renderCurrentView();
+  }
+
+  function toggleFutureLabels() {
+    showFutureLabels = !showFutureLabels;
+    try {
+      localStorage.setItem('wbser_show_future_labels', String(showFutureLabels));
+    } catch (e) {}
+    renderCurrentView();
+  }
+
   // 1. Theme Manager (Dark / Light Theme Switcher)
   const btnThemeToggle = document.getElementById('btn-theme-toggle');
   const themeToggleIcon = document.getElementById('theme-toggle-icon');
@@ -483,6 +511,48 @@
     };
   }
 
+  function drawEyeIcon(ctx, cx, cy, isVisible, isHovered, isLight) {
+    ctx.save();
+    ctx.strokeStyle = isHovered
+      ? (isLight ? '#0f172a' : '#f8fafc')
+      : isVisible
+      ? (isLight ? '#475569' : '#cbd5e1')
+      : (isLight ? '#94a3b8' : '#71717a');
+    ctx.lineWidth = 1.35;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    // Outer eye contour
+    ctx.beginPath();
+    ctx.moveTo(cx - 6.5, cy);
+    ctx.quadraticCurveTo(cx, cy - 4.5, cx + 6.5, cy);
+    ctx.quadraticCurveTo(cx, cy + 4.5, cx - 6.5, cy);
+    ctx.stroke();
+
+    if (isVisible) {
+      // Pupil circle
+      ctx.beginPath();
+      ctx.arc(cx, cy, 2.0, 0, Math.PI * 2);
+      ctx.fillStyle = ctx.strokeStyle;
+      ctx.fill();
+    } else {
+      // Small center dot
+      ctx.beginPath();
+      ctx.arc(cx, cy, 1.4, 0, Math.PI * 2);
+      ctx.fillStyle = isLight ? '#94a3b8' : '#71717a';
+      ctx.fill();
+
+      // Clean diagonal strike-through slash
+      ctx.beginPath();
+      ctx.moveTo(cx - 5.5, cy + 4.5);
+      ctx.lineTo(cx + 5.5, cy - 4.5);
+      ctx.strokeStyle = isLight ? '#dc2626' : '#f87171';
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   function drawCanvasDateAxis(ctx, width, height, isLight) {
     const metrics = getTimelineLayoutMetrics(width);
     const originX = metrics.timelineStartX + canvasPanOffsetX;
@@ -535,7 +605,34 @@
 
     ctx.fillStyle = isLight ? '#475569' : '#a1a1aa';
     ctx.font = 'bold 11px Inter, sans-serif';
-    ctx.fillText('◀ 過去', metrics.zone2Center, 35);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('◀ 過去', metrics.zone2Start + 35, 35);
+
+    // Zone 2 Eye Icon Button
+    const z2BtnX = metrics.zone2End - 26;
+    const z2BtnY = 24;
+    const z2BtnW = 20;
+    const z2BtnH = 22;
+    const isPastEyeHovered = hoveredEyeZone === 'past';
+
+    ctx.fillStyle = isPastEyeHovered
+      ? (isLight ? 'rgba(0, 0, 0, 0.08)' : 'rgba(255, 255, 255, 0.16)')
+      : (isLight ? 'rgba(0, 0, 0, 0.04)' : 'rgba(255, 255, 255, 0.06)');
+    ctx.strokeStyle = isPastEyeHovered
+      ? (isLight ? 'rgba(0, 0, 0, 0.25)' : 'rgba(255, 255, 255, 0.35)')
+      : (isLight ? 'rgba(0, 0, 0, 0.12)' : 'rgba(255, 255, 255, 0.14)');
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    if (ctx.roundRect) {
+      ctx.roundRect(z2BtnX, z2BtnY, z2BtnW, z2BtnH, 4);
+    } else {
+      ctx.rect(z2BtnX, z2BtnY, z2BtnW, z2BtnH);
+    }
+    ctx.fill();
+    ctx.stroke();
+
+    drawEyeIcon(ctx, z2BtnX + z2BtnW / 2, z2BtnY + z2BtnH / 2, showPastLabels, isPastEyeHovered, isLight);
 
 
     // Vertical dividing line 2 (between Zone 2 & Timeline)
@@ -656,8 +753,35 @@
     ctx.stroke();
 
     ctx.fillStyle = isLight ? '#4338ca' : '#a5b4fc';
-    ctx.font = 'bold 10.5px Inter, sans-serif';
-    ctx.fillText('未来 ▶ (期間外)', metrics.zone4Center, 35);
+    ctx.font = 'bold 11px Inter, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('未来 ▶', metrics.zone4Start + 36, 35);
+
+    // Zone 4 Eye Icon Button
+    const z4BtnX = metrics.zone4End - 26;
+    const z4BtnY = 24;
+    const z4BtnW = 20;
+    const z4BtnH = 22;
+    const isFutureEyeHovered = hoveredEyeZone === 'future';
+
+    ctx.fillStyle = isFutureEyeHovered
+      ? (isLight ? 'rgba(67, 56, 202, 0.16)' : 'rgba(165, 180, 252, 0.22)')
+      : (isLight ? 'rgba(67, 56, 202, 0.08)' : 'rgba(165, 180, 252, 0.09)');
+    ctx.strokeStyle = isFutureEyeHovered
+      ? (isLight ? 'rgba(67, 56, 202, 0.4)' : 'rgba(165, 180, 252, 0.4)')
+      : (isLight ? 'rgba(67, 56, 202, 0.2)' : 'rgba(165, 180, 252, 0.2)');
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    if (ctx.roundRect) {
+      ctx.roundRect(z4BtnX, z4BtnY, z4BtnW, z4BtnH, 4);
+    } else {
+      ctx.rect(z4BtnX, z4BtnY, z4BtnW, z4BtnH);
+    }
+    ctx.fill();
+    ctx.stroke();
+
+    drawEyeIcon(ctx, z4BtnX + z4BtnW / 2, z4BtnY + z4BtnH / 2, showFutureLabels, isFutureEyeHovered, isLight);
     ctx.setLineDash([]);
 
     // "今日へ戻る" Indicator Button if canvas is panned away
@@ -1383,67 +1507,73 @@
         const lx = node.labelX;
         const ly = node.labelY;
 
-        // Label Background Plate rendered at physical label coordinates (lx, ly)
-        ctx.save();
-        if (isHovered) {
-          ctx.shadowColor = isLight ? 'rgba(0, 0, 0, 0.28)' : 'rgba(0, 0, 0, 0.7)';
-          ctx.shadowBlur = 12;
-          ctx.shadowOffsetY = 2;
+        const isLabelHidden =
+          (timelineZone === 'past' && !showPastLabels && !isHovered) ||
+          (timelineZone === 'future' && !showFutureLabels && !isHovered);
+
+        if (!isLabelHidden) {
+          // Label Background Plate rendered at physical label coordinates (lx, ly)
+          ctx.save();
+          if (isHovered) {
+            ctx.shadowColor = isLight ? 'rgba(0, 0, 0, 0.28)' : 'rgba(0, 0, 0, 0.7)';
+            ctx.shadowBlur = 12;
+            ctx.shadowOffsetY = 2;
+          }
+
+          ctx.fillStyle = isLight ? 'rgba(250, 250, 250, 0.96)' : 'rgba(9, 9, 11, 0.96)';
+          ctx.globalAlpha = isDimmed ? 0.2 : (isHovered ? 1.0 : 0.94);
+          ctx.strokeStyle = isHovered ? '#f59e0b' : (isSelectedRoot ? 'rgba(245, 158, 11, 0.6)' : (isLight ? 'rgba(0, 0, 0, 0.12)' : 'rgba(255, 255, 255, 0.12)'));
+          ctx.lineWidth = isHovered ? 1.8 : 1;
+
+          if (timelineZone === 'future') {
+            ctx.beginPath();
+            if (ctx.roundRect) {
+              ctx.roundRect(lx - textWidth - 4, ly - plateHeight / 2, textWidth + 8, plateHeight, 4);
+            } else {
+              ctx.rect(lx - textWidth - 4, ly - plateHeight / 2, textWidth + 8, plateHeight);
+            }
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = isDimmed ? (isLight ? '#94a3b8' : '#52525b') : (isLight ? '#18181b' : '#f4f4f5');
+            ctx.globalAlpha = isDimmed ? 0.3 : 1.0;
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(labelText, lx, ly);
+          } else if (timelineZone === 'past' || timelineZone === 'unscheduled') {
+            ctx.beginPath();
+            if (ctx.roundRect) {
+              ctx.roundRect(lx - 4, ly - plateHeight / 2, textWidth + 8, plateHeight, 4);
+            } else {
+              ctx.rect(lx - 4, ly - plateHeight / 2, textWidth + 8, plateHeight);
+            }
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = isDimmed ? (isLight ? '#94a3b8' : '#52525b') : (isLight ? '#18181b' : '#f4f4f5');
+            ctx.globalAlpha = isDimmed ? 0.3 : 1.0;
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(labelText, lx, ly);
+          } else {
+            ctx.beginPath();
+            if (ctx.roundRect) {
+              ctx.roundRect(lx - textWidth / 2 - 4, ly - fontSize, textWidth + 8, plateHeight, 4);
+            } else {
+              ctx.rect(lx - textWidth / 2 - 4, ly - fontSize, textWidth + 8, plateHeight);
+            }
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = isDimmed ? (isLight ? '#94a3b8' : '#52525b') : (isLight ? '#18181b' : '#f4f4f5');
+            ctx.globalAlpha = isDimmed ? 0.3 : 1.0;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'alphabetic';
+            ctx.fillText(labelText, lx, ly - 2);
+          }
+          ctx.restore();
+          ctx.globalAlpha = 1.0;
         }
-
-        ctx.fillStyle = isLight ? 'rgba(250, 250, 250, 0.96)' : 'rgba(9, 9, 11, 0.96)';
-        ctx.globalAlpha = isDimmed ? 0.2 : (isHovered ? 1.0 : 0.94);
-        ctx.strokeStyle = isHovered ? '#f59e0b' : (isSelectedRoot ? 'rgba(245, 158, 11, 0.6)' : (isLight ? 'rgba(0, 0, 0, 0.12)' : 'rgba(255, 255, 255, 0.12)'));
-        ctx.lineWidth = isHovered ? 1.8 : 1;
-
-        if (timelineZone === 'future') {
-          ctx.beginPath();
-          if (ctx.roundRect) {
-            ctx.roundRect(lx - textWidth - 4, ly - plateHeight / 2, textWidth + 8, plateHeight, 4);
-          } else {
-            ctx.rect(lx - textWidth - 4, ly - plateHeight / 2, textWidth + 8, plateHeight);
-          }
-          ctx.fill();
-          ctx.stroke();
-
-          ctx.fillStyle = isDimmed ? (isLight ? '#94a3b8' : '#52525b') : (isLight ? '#18181b' : '#f4f4f5');
-          ctx.globalAlpha = isDimmed ? 0.3 : 1.0;
-          ctx.textAlign = 'right';
-          ctx.textBaseline = 'middle';
-          ctx.fillText(labelText, lx, ly);
-        } else if (timelineZone === 'past' || timelineZone === 'unscheduled') {
-          ctx.beginPath();
-          if (ctx.roundRect) {
-            ctx.roundRect(lx - 4, ly - plateHeight / 2, textWidth + 8, plateHeight, 4);
-          } else {
-            ctx.rect(lx - 4, ly - plateHeight / 2, textWidth + 8, plateHeight);
-          }
-          ctx.fill();
-          ctx.stroke();
-
-          ctx.fillStyle = isDimmed ? (isLight ? '#94a3b8' : '#52525b') : (isLight ? '#18181b' : '#f4f4f5');
-          ctx.globalAlpha = isDimmed ? 0.3 : 1.0;
-          ctx.textAlign = 'left';
-          ctx.textBaseline = 'middle';
-          ctx.fillText(labelText, lx, ly);
-        } else {
-          ctx.beginPath();
-          if (ctx.roundRect) {
-            ctx.roundRect(lx - textWidth / 2 - 4, ly - fontSize, textWidth + 8, plateHeight, 4);
-          } else {
-            ctx.rect(lx - textWidth / 2 - 4, ly - fontSize, textWidth + 8, plateHeight);
-          }
-          ctx.fill();
-          ctx.stroke();
-
-          ctx.fillStyle = isDimmed ? (isLight ? '#94a3b8' : '#52525b') : (isLight ? '#18181b' : '#f4f4f5');
-          ctx.globalAlpha = isDimmed ? 0.3 : 1.0;
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'alphabetic';
-          ctx.fillText(labelText, lx, ly - 2);
-        }
-        ctx.restore();
-        ctx.globalAlpha = 1.0;
       });
 
       // Draw live date-drop tooltip when dragging node in timeline mode
@@ -1506,6 +1636,49 @@
         ctx.restore();
       }
 
+      // Draw tooltip when hovering over eye buttons in timeline mode
+      if (hoveredEyeZone && isTimelineMode && !draggedGraphNode) {
+        const isPast = hoveredEyeZone === 'past';
+        const isShown = isPast ? showPastLabels : showFutureLabels;
+        const tooltipText = isPast
+          ? (isShown ? '👁 過去ラベル表示中（クリックで非表示）' : '👁‍🗨 過去ラベル非表示中（クリックで表示）')
+          : (isShown ? '👁 未来ラベル表示中（クリックで非表示）' : '👁‍🗨 未来ラベル非表示中（クリックで表示）');
+        const tooltipBg = isLight ? '#1e293b' : '#09090b';
+        const tooltipFg = isLight ? '#f8fafc' : '#f4f4f5';
+
+        ctx.save();
+        ctx.font = 'bold 11px Inter, sans-serif';
+        const tw = ctx.measureText(tooltipText).width;
+        const th = 24;
+        const pillW = tw + 18;
+        const tipX = isPast ? metrics.zone2Center : metrics.zone4Center;
+        const tipY = 70;
+
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.25)';
+        ctx.shadowBlur = 8;
+        ctx.shadowOffsetY = 2;
+
+        ctx.fillStyle = tooltipBg;
+        ctx.beginPath();
+        if (ctx.roundRect) {
+          ctx.roundRect(tipX - pillW / 2, tipY - th / 2, pillW, th, 6);
+        } else {
+          ctx.rect(tipX - pillW / 2, tipY - th / 2, pillW, th);
+        }
+        ctx.fill();
+
+        ctx.strokeStyle = isLight ? 'rgba(255, 255, 255, 0.15)' : 'rgba(255, 255, 255, 0.2)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        ctx.shadowBlur = 0;
+        ctx.shadowOffsetY = 0;
+        ctx.fillStyle = tooltipFg;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(tooltipText, tipX, tipY);
+        ctx.restore();
+      }
 
       ctx.restore();
       canvasAnimationId = requestAnimationFrame(animate);
@@ -1529,6 +1702,20 @@
 
       clickStartX = e.clientX;
       clickStartY = e.clientY;
+
+      const selectedId = doubleClickedSubtreeId || focusedTaskId || inspectorSelectedTaskId;
+      const activeTreeSet = selectedId ? getDescendantIds(selectedId) : null;
+      const isTimelineMode = Boolean(selectedId && activeTreeSet);
+      const cssWidth = canvas.width / (window.devicePixelRatio || 1);
+      const metrics = getTimelineLayoutMetrics(cssWidth);
+
+      if (isTimelineMode) {
+        const isInPastEye = mouseX >= metrics.zone2End - 28 && mouseX <= metrics.zone2End - 6 && mouseY >= 22 && mouseY <= 48;
+        const isInFutureEye = mouseX >= metrics.zone4End - 28 && mouseX <= metrics.zone4End - 6 && mouseY >= 22 && mouseY <= 48;
+        if (isInPastEye || isInFutureEye) {
+          return;
+        }
+      }
 
       // Prioritize the hovered/proximity frontmost node if mouse is within interaction range
       let hitNode = null;
@@ -1554,7 +1741,6 @@
         draggedGraphNode = hitNode;
         hitNode.isPinned = true;
       } else {
-        const selectedId = doubleClickedSubtreeId || focusedTaskId || inspectorSelectedTaskId;
         if (selectedId) {
           isPanningCanvas = true;
           panStartX = e.clientX;
@@ -1567,6 +1753,37 @@
       const rect = canvas.getBoundingClientRect();
       const mouseX = e.clientX - rect.left;
       const mouseY = e.clientY - rect.top;
+
+      const selectedId = doubleClickedSubtreeId || focusedTaskId || inspectorSelectedTaskId;
+      const activeTreeSet = selectedId ? getDescendantIds(selectedId) : null;
+      const isTimelineMode = Boolean(selectedId && activeTreeSet);
+      const cssWidth = canvas.width / (window.devicePixelRatio || 1);
+      const metrics = getTimelineLayoutMetrics(cssWidth);
+
+      if (isTimelineMode && !isMouseDown) {
+        const isInPastEye = mouseX >= metrics.zone2End - 28 && mouseX <= metrics.zone2End - 6 && mouseY >= 22 && mouseY <= 48;
+        const isInFutureEye = mouseX >= metrics.zone4End - 28 && mouseX <= metrics.zone4End - 6 && mouseY >= 22 && mouseY <= 48;
+        if (isInPastEye) {
+          if (hoveredEyeZone !== 'past') {
+            hoveredEyeZone = 'past';
+            renderCurrentView();
+          }
+          hoveredNodeId = null;
+          canvas.style.cursor = 'pointer';
+          return;
+        } else if (isInFutureEye) {
+          if (hoveredEyeZone !== 'future') {
+            hoveredEyeZone = 'future';
+            renderCurrentView();
+          }
+          hoveredNodeId = null;
+          canvas.style.cursor = 'pointer';
+          return;
+        } else if (hoveredEyeZone !== null) {
+          hoveredEyeZone = null;
+          renderCurrentView();
+        }
+      }
 
       if (isMouseDown && draggedGraphNode) {
         draggedGraphNode.x = mouseX;
@@ -1582,11 +1799,27 @@
         // Find closest node considering both node circle center and label plate coordinates
         let closestNode = null;
         let minEffectiveDist = Infinity;
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
 
         for (const n of graphNodes) {
           const distCenter = Math.hypot(n.x - mouseX, n.y - mouseY);
           let distLabel = Infinity;
-          if (n.labelX !== undefined && n.labelY !== undefined) {
+          let nodeLabelVisible = true;
+          if (isTimelineMode && activeTreeSet && activeTreeSet.has(n.task.id)) {
+            if (n.task.dueDate) {
+              const d = new Date(n.task.dueDate);
+              d.setHours(0, 0, 0, 0);
+              const diffDays = Math.round((d.getTime() - today.getTime()) / 86400000);
+              const colX = metrics.timelineStartX + canvasPanOffsetX + (diffDays + 0.5) * metrics.dayWidth;
+              if (colX < metrics.timelineStartX && !showPastLabels) {
+                nodeLabelVisible = false;
+              } else if (colX > metrics.timelineEndX && !showFutureLabels) {
+                nodeLabelVisible = false;
+              }
+            }
+          }
+          if (nodeLabelVisible && n.labelX !== undefined && n.labelY !== undefined) {
             distLabel = Math.hypot(n.labelX - mouseX, n.labelY - mouseY);
           }
           const effectiveDist = Math.min(distCenter, distLabel);
@@ -1609,6 +1842,10 @@
 
     canvas.onmouseleave = () => {
       hoveredNodeId = null;
+      if (hoveredEyeZone !== null) {
+        hoveredEyeZone = null;
+        renderCurrentView();
+      }
       canvas.style.cursor = 'default';
     };
 
@@ -1626,13 +1863,27 @@
         }
       }
 
-      // Check click on "↺ 今日へ戻る" button in timeline mode
+      // Check click on eye toggle buttons in timeline mode
       const selectedId = doubleClickedSubtreeId || focusedTaskId || inspectorSelectedTaskId;
       const activeTreeSet = selectedId ? getDescendantIds(selectedId) : null;
       const isTimelineMode = Boolean(selectedId && activeTreeSet);
       const cssWidth = canvas.width / (window.devicePixelRatio || 1);
       const metrics = getTimelineLayoutMetrics(cssWidth);
 
+      if (dist < 6 && isTimelineMode) {
+        const isInPastEye = mouseX >= metrics.zone2End - 28 && mouseX <= metrics.zone2End - 6 && mouseY >= 22 && mouseY <= 48;
+        const isInFutureEye = mouseX >= metrics.zone4End - 28 && mouseX <= metrics.zone4End - 6 && mouseY >= 22 && mouseY <= 48;
+        if (isInPastEye) {
+          togglePastLabels();
+          return;
+        }
+        if (isInFutureEye) {
+          toggleFutureLabels();
+          return;
+        }
+      }
+
+      // Check click on "↺ 今日へ戻る" button in timeline mode
       if (selectedId && Math.abs(canvasPanOffsetX) > 20) {
         if (mouseX >= metrics.timelineStartX + 10 && mouseX <= metrics.timelineStartX + 95 && mouseY >= 60 && mouseY <= 82) {
           canvasPanOffsetX = 0;
@@ -2290,6 +2541,9 @@
       labelY: n.labelY ? Math.round(n.labelY * 10) / 10 : Math.round(n.y * 10) / 10
     })),
     getSelectedTaskId: () => doubleClickedSubtreeId || focusedTaskId || inspectorSelectedTaskId,
+    getZoneVisibility: () => ({ showPastLabels, showFutureLabels, hoveredEyeZone }),
+    togglePastLabels,
+    toggleFutureLabels,
     getCanvasMetrics: () => {
       const rect = canvas ? canvas.getBoundingClientRect() : { width: 0, height: 0, top: 0, bottom: 0, left: 0, right: 0 };
       const inspectorRect = obsidianInspector && !obsidianInspector.classList.contains('hidden')

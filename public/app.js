@@ -1106,20 +1106,15 @@
             ctx.save();
 
             if (isTimelineMode && isSubtreeEdge) {
-              // Smooth Bézier curve for timeline connections
+              // Straight line edge connection for timeline mode (Parent -> Child)
               const metrics = getTimelineLayoutMetrics(width);
               const isNodeOutside = node.x < metrics.timelineStartX || node.x > metrics.timelineEndX;
               const isParentOutside = parentNode.x < metrics.timelineStartX || parentNode.x > metrics.timelineEndX;
               const isCrossZone = isNodeOutside || isParentOutside;
 
-              const cp1x = node.x + dx * 0.45;
-              const cp1y = node.y;
-              const cp2x = parentNode.x - dx * 0.45;
-              const cp2y = parentNode.y;
-
               ctx.beginPath();
-              ctx.moveTo(node.x, node.y);
-              ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, parentNode.x, parentNode.y);
+              ctx.moveTo(parentNode.x, parentNode.y);
+              ctx.lineTo(node.x, node.y);
 
               let edgeColor = '#f59e0b';
               let edgeWidth = 2.2;
@@ -1146,33 +1141,24 @@
               ctx.stroke();
               ctx.setLineDash([]);
 
-              // Directional arrow on Bézier curve pointing Parent -> Child
-              // Sample at t = 0.62 along Parent(t=0) -> Child(t=1)
-              const t = 0.62;
-              const u = 1 - t;
-              const q0x = parentNode.x, q0y = parentNode.y;
-              const q1x = cp2x, q1y = cp2y;
-              const q2x = cp1x, q2y = cp1y;
-              const q3x = node.x, q3y = node.y;
+              // Directional arrow on straight edge pointing Parent -> Child
+              const dist = Math.hypot(node.x - parentNode.x, node.y - parentNode.y) || 1;
+              if (dist > 35) {
+                const sux = (node.x - parentNode.x) / dist;
+                const suy = (node.y - parentNode.y) / dist;
+                const snx = -suy;
+                const sny = sux;
+                const sax = parentNode.x + (node.x - parentNode.x) * 0.6;
+                const say = parentNode.y + (node.y - parentNode.y) * 0.6;
 
-              const ax = u*u*u*q0x + 3*u*u*t*q1x + 3*u*t*t*q2x + t*t*t*q3x;
-              const ay = u*u*u*q0y + 3*u*u*t*q1y + 3*u*t*t*q2y + t*t*t*q3y;
-
-              const dtx = 3*u*u*(q1x - q0x) + 6*u*t*(q2x - q1x) + 3*t*t*(q3x - q2x);
-              const dty = 3*u*u*(q1y - q0y) + 6*u*t*(q2y - q1y) + 3*t*t*(q3y - q2y);
-              const dlen = Math.hypot(dtx, dty) || 1;
-              const tux = dtx / dlen;
-              const tuy = dty / dlen;
-              const tnx = -tuy;
-              const tny = tux;
-
-              ctx.beginPath();
-              ctx.moveTo(ax + tux * 4, ay + tuy * 4);
-              ctx.lineTo(ax - tux * 6 + tnx * 3.5, ay - tuy * 6 + tny * 3.5);
-              ctx.lineTo(ax - tux * 6 - tnx * 3.5, ay - tuy * 6 - tny * 3.5);
-              ctx.closePath();
-              ctx.fillStyle = edgeColor;
-              ctx.fill();
+                ctx.beginPath();
+                ctx.moveTo(sax + sux * 4, say + suy * 4);
+                ctx.lineTo(sax - sux * 6 + snx * 3.5, say - suy * 6 + sny * 3.5);
+                ctx.lineTo(sax - sux * 6 - snx * 3.5, say - suy * 6 - sny * 3.5);
+                ctx.closePath();
+                ctx.fillStyle = edgeColor;
+                ctx.fill();
+              }
 
             } else {
               // Standard graph edge (Parent -> Child)
@@ -1265,20 +1251,35 @@
         }
       }
 
-      // Draw Nodes
-      graphNodes.forEach((node) => {
+      // Draw Nodes (sorted so hovered/closest node is rendered last, i.e., on top of z-axis)
+      const sortedNodes = [...graphNodes].sort((a, b) => {
+        const aIsHovered = a.task.id === hoveredNodeId;
+        const bIsHovered = b.task.id === hoveredNodeId;
+        if (aIsHovered && !bIsHovered) return 1;
+        if (!aIsHovered && bIsHovered) return -1;
+
+        const aIsSelected = a.task.id === selectedId;
+        const bIsSelected = b.task.id === selectedId;
+        if (aIsSelected && !bIsSelected) return 1;
+        if (!aIsSelected && bIsSelected) return -1;
+
+        return 0;
+      });
+
+      sortedNodes.forEach((node) => {
         let nodeColor = isLight ? '#64748b' : '#a1a1aa';
         if (node.task.status === 'IN_PROGRESS') nodeColor = '#f59e0b';
         if (node.task.status === 'DONE') nodeColor = '#10b981';
 
         const isSelectedRoot = selectedId === node.task.id;
+        const isHovered = hoveredNodeId === node.task.id;
         const isInSubtree = activeTreeSet ? activeTreeSet.has(node.task.id) : true;
         const isDimmed = activeTreeSet && !isInSubtree;
 
         const childCount = currentTasks.filter((t) => t.parentId === node.task.id).length;
         const baseRadius = 9;
         const coreRadius = baseRadius + Math.min(childCount * 4, 16);
-        const haloRadius = coreRadius + (isSelectedRoot ? 12 : (isInSubtree && activeTreeSet ? 8 : 5));
+        const haloRadius = coreRadius + (isSelectedRoot ? 12 : (isHovered ? 10 : (isInSubtree && activeTreeSet ? 8 : 5)));
 
         ctx.globalAlpha = isDimmed ? 0.2 : 1.0;
 
@@ -1286,7 +1287,7 @@
         ctx.beginPath();
         ctx.arc(node.x, node.y, haloRadius, 0, Math.PI * 2);
         ctx.fillStyle = isSelectedRoot ? '#f59e0b' : nodeColor;
-        ctx.globalAlpha = isDimmed ? 0.08 : (isSelectedRoot ? 0.45 : 0.18);
+        ctx.globalAlpha = isDimmed ? 0.08 : (isSelectedRoot ? 0.45 : (isHovered ? 0.35 : 0.18));
         ctx.fill();
 
         // Core Circle
@@ -1296,9 +1297,9 @@
         ctx.fillStyle = nodeColor;
         ctx.fill();
 
-        if (isSelectedRoot || (isInSubtree && activeTreeSet)) {
+        if (isSelectedRoot || isHovered || (isInSubtree && activeTreeSet)) {
           ctx.strokeStyle = isSelectedRoot ? (isLight ? '#18181b' : '#ffffff') : '#f59e0b';
-          ctx.lineWidth = isSelectedRoot ? 2.8 : 1.8;
+          ctx.lineWidth = (isSelectedRoot || isHovered) ? 2.8 : 1.8;
           ctx.stroke();
         }
 
@@ -1313,7 +1314,7 @@
 
         // Label with background plate scaled to current font size selection
         const fontSize = getGraphFontSize(isSelectedRoot);
-        const fontWeight = isSelectedRoot ? 'bold' : (isInSubtree && activeTreeSet ? '500' : '400');
+        const fontWeight = (isSelectedRoot || isHovered) ? '600' : (isInSubtree && activeTreeSet ? '500' : '400');
         ctx.font = `${fontWeight} ${fontSize}px Inter, sans-serif`;
 
         let labelText = node.task.title;
@@ -1383,10 +1384,17 @@
         const ly = node.labelY;
 
         // Label Background Plate rendered at physical label coordinates (lx, ly)
-        ctx.fillStyle = isLight ? 'rgba(250, 250, 250, 0.94)' : 'rgba(9, 9, 11, 0.94)';
-        ctx.globalAlpha = isDimmed ? 0.2 : 0.94;
-        ctx.strokeStyle = isSelectedRoot ? 'rgba(245, 158, 11, 0.6)' : (isLight ? 'rgba(0, 0, 0, 0.12)' : 'rgba(255, 255, 255, 0.12)');
-        ctx.lineWidth = 1;
+        ctx.save();
+        if (isHovered) {
+          ctx.shadowColor = isLight ? 'rgba(0, 0, 0, 0.28)' : 'rgba(0, 0, 0, 0.7)';
+          ctx.shadowBlur = 12;
+          ctx.shadowOffsetY = 2;
+        }
+
+        ctx.fillStyle = isLight ? 'rgba(250, 250, 250, 0.96)' : 'rgba(9, 9, 11, 0.96)';
+        ctx.globalAlpha = isDimmed ? 0.2 : (isHovered ? 1.0 : 0.94);
+        ctx.strokeStyle = isHovered ? '#f59e0b' : (isSelectedRoot ? 'rgba(245, 158, 11, 0.6)' : (isLight ? 'rgba(0, 0, 0, 0.12)' : 'rgba(255, 255, 255, 0.12)'));
+        ctx.lineWidth = isHovered ? 1.8 : 1;
 
         if (timelineZone === 'future') {
           ctx.beginPath();
@@ -1434,6 +1442,7 @@
           ctx.textBaseline = 'alphabetic';
           ctx.fillText(labelText, lx, ly - 2);
         }
+        ctx.restore();
         ctx.globalAlpha = 1.0;
       });
 
@@ -1521,7 +1530,25 @@
       clickStartX = e.clientX;
       clickStartY = e.clientY;
 
-      const hitNode = graphNodes.find((n) => Math.hypot(n.x - mouseX, n.y - mouseY) <= 28);
+      // Prioritize the hovered/proximity frontmost node if mouse is within interaction range
+      let hitNode = null;
+      if (hoveredNodeId) {
+        const candidate = graphNodes.find((n) => n.task.id === hoveredNodeId);
+        if (candidate) {
+          const distCenter = Math.hypot(candidate.x - mouseX, candidate.y - mouseY);
+          let distLabel = Infinity;
+          if (candidate.labelX !== undefined && candidate.labelY !== undefined) {
+            distLabel = Math.hypot(candidate.labelX - mouseX, candidate.labelY - mouseY);
+          }
+          if (Math.min(distCenter, distLabel) <= 65) {
+            hitNode = candidate;
+          }
+        }
+      }
+      if (!hitNode) {
+        hitNode = graphNodes.find((n) => Math.hypot(n.x - mouseX, n.y - mouseY) <= 28);
+      }
+
       if (hitNode) {
         isMouseDown = true;
         draggedGraphNode = hitNode;
@@ -1552,9 +1579,31 @@
         canvasPanOffsetX += deltaX;
         panStartX = e.clientX;
       } else {
-        const hit = graphNodes.find((n) => Math.hypot(n.x - mouseX, n.y - mouseY) <= 28);
-        hoveredNodeId = hit ? hit.task.id : null;
-        canvas.style.cursor = hit ? 'pointer' : 'default';
+        // Find closest node considering both node circle center and label plate coordinates
+        let closestNode = null;
+        let minEffectiveDist = Infinity;
+
+        for (const n of graphNodes) {
+          const distCenter = Math.hypot(n.x - mouseX, n.y - mouseY);
+          let distLabel = Infinity;
+          if (n.labelX !== undefined && n.labelY !== undefined) {
+            distLabel = Math.hypot(n.labelX - mouseX, n.labelY - mouseY);
+          }
+          const effectiveDist = Math.min(distCenter, distLabel);
+          if (effectiveDist < minEffectiveDist) {
+            minEffectiveDist = effectiveDist;
+            closestNode = n;
+          }
+        }
+
+        // Within 65px radius of node center or label plate: prioritize as hovered/frontmost
+        if (closestNode && minEffectiveDist <= 65) {
+          hoveredNodeId = closestNode.task.id;
+          canvas.style.cursor = 'pointer';
+        } else {
+          hoveredNodeId = null;
+          canvas.style.cursor = 'default';
+        }
       }
     };
 

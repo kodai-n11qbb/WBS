@@ -278,10 +278,11 @@
         const curTask = tasksAtDepth[i];
         let prevX = xPosMap.get(prevTask.id) || 0;
         let curX = xPosMap.get(curTask.id) || 0;
-        const curW = (curTask.title || '').length * 10 + 24;
+        const charWidth = currentFontSizeMode === 'large' ? 14 : (currentFontSizeMode === 'small' ? 8 : 10);
+        const curW = (curTask.title || '').length * charWidth + 24;
 
         // Adjacent tasks (different tier)
-        const prevW = (prevTask.title || '').length * 10 + 24;
+        const prevW = (prevTask.title || '').length * charWidth + 24;
         const desiredSpacing = Math.min(maxAllowedSpacing, Math.max(55, (prevW + curW) / 2 + 16));
         if (curX - prevX < desiredSpacing) {
           curX = prevX + desiredSpacing;
@@ -292,7 +293,7 @@
         if (i >= 2) {
           const prev2Task = tasksAtDepth[i - 2];
           const prev2X = xPosMap.get(prev2Task.id) || 0;
-          const prev2W = (prev2Task.title || '').length * 10 + 24;
+          const prev2W = (prev2Task.title || '').length * charWidth + 24;
           const desiredSameTierSpacing = Math.min(maxAllowedSpacing * 2, (prev2W + curW) / 2 + 20);
           if (curX - prev2X < desiredSameTierSpacing) {
             curX = prev2X + desiredSameTierSpacing;
@@ -1256,7 +1257,10 @@
                 const stepY = Math.min(95, Math.max(68, availH / Math.max(maxRel, totalInDate - 1)));
 
                 if (totalInDate === 1) {
-                  targetY = 110 + relDepth * stepY;
+                  const timelineStagger = currentFontSizeMode === 'large' ? 24 : 16;
+                  const isTopTier = Math.abs(diffDays) % 2 === 0;
+                  targetY = 110 + relDepth * stepY + (isTopTier ? -timelineStagger : timelineStagger);
+                  node.labelPosition = isTopTier ? 'top' : 'bottom';
                 } else {
                   // Sibling vertical offset for same-depth tasks on same date to ensure zero overlap
                   const sameDepthTasks = list.filter((id) => {
@@ -1265,6 +1269,7 @@
                   });
                   const siblingOffsetIdx = sameDepthTasks.indexOf(node.task.id);
                   targetY = 110 + relDepth * stepY + siblingOffsetIdx * 68;
+                  node.labelPosition = siblingOffsetIdx % 2 === 0 ? 'bottom' : 'top';
                 }
               }
             } else {
@@ -1286,13 +1291,20 @@
             const targetYRatio = computeDynamicYRatio(depth, maxVisibleDepth, false, isInspectorOpen);
             let targetY = height * targetYRatio;
 
-            // Stagger dense layers in 2 tiers (32px vertical separation) to prevent label collision
+            // Stagger dense layers in 2 tiers to prevent horizontal label collision
             const tasksAtDepth = tasksByDepthMap.get(depth);
-            if (tasksAtDepth && tasksAtDepth.length >= 5) {
+            if (tasksAtDepth && tasksAtDepth.length >= 2) {
               const depthIdx = tasksAtDepth.findIndex((t) => t.id === node.task.id);
               if (depthIdx >= 0) {
-                targetY += (depthIdx % 2 === 0 ? -16 : 16);
+                const staggerAmount = currentFontSizeMode === 'large' ? 28 : (currentFontSizeMode === 'small' ? 14 : 18);
+                const isTopTier = depthIdx % 2 === 0;
+                targetY += (isTopTier ? -staggerAmount : staggerAmount);
+                node.labelPosition = isTopTier ? 'top' : 'bottom';
+              } else {
+                node.labelPosition = 'bottom';
               }
+            } else {
+              node.labelPosition = 'bottom';
             }
 
             const hierarchicalGravityY = (targetY - node.y) * 0.055;
@@ -1606,7 +1618,19 @@
           targetLX = Math.min(width - platePad - textWidth - 4, targetLX);
         } else {
           targetLX = node.x;
-          targetLY = node.y + haloRadius + fontSize + 3;
+          let prefPos = node.labelPosition || 'bottom';
+          // Upper/lower canvas boundary checks
+          if (prefPos === 'top' && (node.y - haloRadius - plateHeight) < 45) {
+            prefPos = 'bottom';
+          } else if (prefPos === 'bottom' && (node.y + haloRadius + plateHeight) > (height - 65)) {
+            prefPos = 'top';
+          }
+
+          if (prefPos === 'top') {
+            targetLY = node.y - haloRadius - plateHeight / 2 - 4;
+          } else {
+            targetLY = node.y + haloRadius + plateHeight / 2 + 4;
+          }
           const halfW = textWidth / 2 + 4;
           targetLX = Math.max(platePad + halfW, Math.min(width - platePad - halfW, targetLX));
         }
@@ -1706,9 +1730,9 @@
           } else {
             ctx.beginPath();
             if (ctx.roundRect) {
-              ctx.roundRect(lx - textWidth / 2 - 4, ly - fontSize, textWidth + 8, plateHeight, 4);
+              ctx.roundRect(lx - textWidth / 2 - 4, ly - plateHeight / 2, textWidth + 8, plateHeight, 4);
             } else {
-              ctx.rect(lx - textWidth / 2 - 4, ly - fontSize, textWidth + 8, plateHeight);
+              ctx.rect(lx - textWidth / 2 - 4, ly - plateHeight / 2, textWidth + 8, plateHeight);
             }
             ctx.fill();
             ctx.stroke();
@@ -1716,8 +1740,8 @@
             ctx.fillStyle = isDimmed ? (isLight ? '#94a3b8' : '#52525b') : (isLight ? '#18181b' : '#f4f4f5');
             ctx.globalAlpha = isDimmed ? 0.3 : 1.0;
             ctx.textAlign = 'center';
-            ctx.textBaseline = 'alphabetic';
-            ctx.fillText(labelText, lx, ly - 2);
+            ctx.textBaseline = 'middle';
+            ctx.fillText(labelText, lx, ly);
           }
           ctx.restore();
           ctx.globalAlpha = 1.0;

@@ -124,11 +124,17 @@
     }
     return null;
   }
+ 
+  function isIsolatedTask(task) {
+    if (!task || task.parentId) return false;
+    return !currentTasks.some((t) => t.parentId === task.id);
+  }
+
 
   // Dynamic Y Ratio calculation automatically adjusting to the max visible nest depth & inspector panel
   function computeDynamicYRatio(depth, maxTreeDepth, isSelectedTree = false, isInspectorOpen = false) {
     const topY = 0.18;
-    const bottomY = isInspectorOpen ? 0.65 : (isSelectedTree ? 0.82 : 0.85);
+    const bottomY = isInspectorOpen ? 0.65 : (isSelectedTree ? 0.80 : 0.77);
 
     if (maxTreeDepth <= 0) {
       return isInspectorOpen ? 0.35 : 0.45; // Center single-level tasks vertically, slightly higher if inspector open
@@ -227,7 +233,7 @@
     });
     totalLeaves = Math.max(1, totalLeaves);
 
-    const padX = Math.min(100, width * 0.1);
+    const padX = Math.min(65, width * 0.06);
     const usableWidth = Math.max(300, width - 2 * padX);
     let currentLeafIndex = 0;
 
@@ -253,7 +259,7 @@
       assignX(root.id);
     });
 
-    // Ensure minimum horizontal spacing (135px) between tasks at the same depth to prevent label overlap
+    // Ensure reasonable horizontal spacing between tasks at the same depth, strictly bounded within [padX, width - padX]
     const tasksByDepth = new Map();
     visibleTasks.forEach((t) => {
       const d = getTaskDepth(t);
@@ -264,17 +270,48 @@
     tasksByDepth.forEach((tasksAtDepth) => {
       if (tasksAtDepth.length <= 1) return;
       tasksAtDepth.sort((a, b) => (xPosMap.get(a.id) || 0) - (xPosMap.get(b.id) || 0));
+
+      const maxAllowedSpacing = usableWidth / Math.max(1, tasksAtDepth.length - 1);
+
       for (let i = 1; i < tasksAtDepth.length; i++) {
         const prevTask = tasksAtDepth[i - 1];
         const curTask = tasksAtDepth[i];
-        const prevX = xPosMap.get(prevTask.id) || 0;
-        const curX = xPosMap.get(curTask.id) || 0;
-        const prevW = (prevTask.title || '').length * 11 + 36;
-        const curW = (curTask.title || '').length * 11 + 36;
-        const minSpacing = Math.max(145, (prevW + curW) / 2 + 30);
-        if (curX - prevX < minSpacing) {
-          xPosMap.set(curTask.id, prevX + minSpacing);
+        let prevX = xPosMap.get(prevTask.id) || 0;
+        let curX = xPosMap.get(curTask.id) || 0;
+        const curW = (curTask.title || '').length * 10 + 24;
+
+        // Adjacent tasks (different tier)
+        const prevW = (prevTask.title || '').length * 10 + 24;
+        const desiredSpacing = Math.min(maxAllowedSpacing, Math.max(55, (prevW + curW) / 2 + 16));
+        if (curX - prevX < desiredSpacing) {
+          curX = prevX + desiredSpacing;
+          xPosMap.set(curTask.id, curX);
         }
+
+        // Same-tier tasks (i and i-2): ensure horizontal separation so labels at same Y never overlap
+        if (i >= 2) {
+          const prev2Task = tasksAtDepth[i - 2];
+          const prev2X = xPosMap.get(prev2Task.id) || 0;
+          const prev2W = (prev2Task.title || '').length * 10 + 24;
+          const desiredSameTierSpacing = Math.min(maxAllowedSpacing * 2, (prev2W + curW) / 2 + 20);
+          if (curX - prev2X < desiredSameTierSpacing) {
+            curX = prev2X + desiredSameTierSpacing;
+            xPosMap.set(curTask.id, curX);
+          }
+        }
+      }
+
+      // Strictly rescale/normalize tasks at this depth to fit cleanly within [padX, width - padX]
+      const firstX = xPosMap.get(tasksAtDepth[0].id) || padX;
+      const lastX = xPosMap.get(tasksAtDepth[tasksAtDepth.length - 1].id) || (width - padX);
+      if (lastX > width - padX || firstX < padX) {
+        const currentSpan = Math.max(1, lastX - firstX);
+        const targetSpan = width - 2 * padX;
+        tasksAtDepth.forEach((t) => {
+          const cur = xPosMap.get(t.id) || firstX;
+          const ratio = (cur - firstX) / currentSpan;
+          xPosMap.set(t.id, padX + ratio * targetSpan);
+        });
       }
     });
 
@@ -286,6 +323,7 @@
   let canvasAnimationId = null;
   let graphNodes = [];
   let draggedGraphNode = null;
+  let isMouseDown = false;
 
   // DOM Elements
   const nodeDisplay = document.getElementById('node-id-display');
@@ -858,21 +896,28 @@
 
     updateFilterControlsState();
 
-    const selectedId = doubleClickedSubtreeId || focusedTaskId || inspectorSelectedTaskId;
+    const initialSelectedId = doubleClickedSubtreeId || focusedTaskId || inspectorSelectedTaskId;
     let visibleTasks = currentTasks;
 
-    if (selectedId) {
-      const activeSubtreeSet = getDescendantIds(selectedId);
-      if (activeSubtreeSet) {
-        visibleTasks = visibleTasks.filter((t) => activeSubtreeSet.has(t.id));
-      }
-      if (currentMaxDepth !== 'all') {
-        const maxRelDepth = typeof currentMaxDepth === 'number' ? currentMaxDepth : parseInt(currentMaxDepth, 10);
-        visibleTasks = visibleTasks.filter((t) => {
-          const rDepth = getRelativeDepth(t, selectedId);
+    if (initialSelectedId) {
+      const activeSubtreeSet = getDescendantIds(initialSelectedId);
+      const filteredTreeTasks = currentTasks.filter((t) => {
+        if (!activeSubtreeSet || !activeSubtreeSet.has(t.id)) return false;
+        if (currentMaxDepth !== 'all') {
+          const maxRelDepth = typeof currentMaxDepth === 'number' ? currentMaxDepth : parseInt(currentMaxDepth, 10);
+          const rDepth = getRelativeDepth(t, initialSelectedId);
           return rDepth !== null && rDepth <= maxRelDepth;
-        });
-      }
+        }
+        return true;
+      });
+
+      // Resident unscheduled isolated tasks (no parent, no children, dueDate == null)
+      const residentIsolatedTasks = currentTasks.filter((t) => {
+        if (t.id === initialSelectedId) return false;
+        return isIsolatedTask(t) && !t.dueDate;
+      });
+
+      visibleTasks = [...filteredTreeTasks, ...residentIsolatedTasks];
     } else {
       if (currentMaxDepth !== 'all') {
         const maxDepth = typeof currentMaxDepth === 'number' ? currentMaxDepth : parseInt(currentMaxDepth, 10);
@@ -880,21 +925,25 @@
       }
     }
 
-    const maxVisibleDepth = visibleTasks.reduce((max, t) => Math.max(max, getTaskDepth(t)), 0);
+    const initialMaxVisibleDepth = visibleTasks.reduce((max, t) => Math.max(max, getTaskDepth(t)), 0);
     const existingNodeMap = new Map(graphNodes.map((n) => [n.task.id, n]));
-    const activeInitialSelectedId = doubleClickedSubtreeId || focusedTaskId || inspectorSelectedTaskId;
-    const sugiyamaXMap = computeSugiyamaTreeXPositions(visibleTasks, width, activeInitialSelectedId);
+    const initialSugiyamaXMap = computeSugiyamaTreeXPositions(visibleTasks, width, initialSelectedId);
 
     graphNodes = visibleTasks.map((task, idx) => {
       const existing = existingNodeMap.get(task.id);
       if (existing) {
         existing.task = task;
+        ctx.font = '11px Inter, sans-serif';
+        existing.titleWidth = ctx.measureText(task.title).width;
         return existing;
       }
 
       const depth = getTaskDepth(task);
-      const initX = sugiyamaXMap.get(task.id) || width / 2;
-      const initY = height * computeDynamicYRatio(depth, maxVisibleDepth, false);
+      const initX = initialSugiyamaXMap.get(task.id) || width / 2;
+      const initY = height * computeDynamicYRatio(depth, initialMaxVisibleDepth, false);
+
+      ctx.font = '11px Inter, sans-serif';
+      const titleWidth = ctx.measureText(task.title).width;
 
       return {
         task,
@@ -902,11 +951,134 @@
         y: initY,
         vx: 0,
         vy: 0,
+        titleWidth,
         isPinned: false,
       };
     });
 
     const nodeMap = new Map(graphNodes.map((n) => [n.task.id, n]));
+
+    let layoutDirty = true;
+    let selectedId = null;
+    let activeTreeSet = null;
+    let isTimelineMode = false;
+    let activeTimelineSet = null;
+    let maxVisibleDepth = 0;
+    let maxSubtreeRelDepth = 0;
+    let sugiyamaXMap = new Map();
+    let metrics = getTimelineLayoutMetrics(width);
+    let dateGroups = new Map();
+    let unscheduledList = [];
+    let pastList = [];
+    let futureList = [];
+    let tasksByDepthMap = new Map();
+    let today = new Date();
+    today.setHours(0, 0, 0, 0);
+    let settledFrames = 0;
+    let idleTicks = 0;
+
+    function updateLayoutState() {
+      selectedId = doubleClickedSubtreeId || focusedTaskId || inspectorSelectedTaskId;
+      activeTreeSet = selectedId ? getDescendantIds(selectedId) : null;
+      isTimelineMode = Boolean(selectedId && activeTreeSet);
+      activeTimelineSet = isTimelineMode ? new Set(activeTreeSet || []) : null;
+      if (isTimelineMode && activeTimelineSet) {
+        visibleTasks.forEach((t) => {
+          if (isIsolatedTask(t) && !t.dueDate) {
+            activeTimelineSet.add(t.id);
+          }
+        });
+      }
+      maxVisibleDepth = visibleTasks.reduce((max, t) => Math.max(max, getTaskDepth(t)), 0);
+      sugiyamaXMap = computeSugiyamaTreeXPositions(visibleTasks, width, selectedId);
+      metrics = getTimelineLayoutMetrics(width);
+
+      today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      dateGroups = new Map();
+      unscheduledList = [];
+      pastList = [];
+      futureList = [];
+
+      if (isTimelineMode) {
+        visibleTasks.forEach((t) => {
+          if (activeTimelineSet.has(t.id)) {
+            if (t.dueDate) {
+              const d = new Date(t.dueDate);
+              d.setHours(0, 0, 0, 0);
+              const diffDays = Math.round((d.getTime() - today.getTime()) / 86400000);
+              const colX = metrics.timelineStartX + canvasPanOffsetX + (diffDays + 0.5) * metrics.dayWidth;
+              if (colX < metrics.timelineStartX) {
+                pastList.push(t.id);
+              } else if (colX > metrics.timelineEndX) {
+                futureList.push(t.id);
+              } else {
+                const key = d.getTime();
+                if (!dateGroups.has(key)) dateGroups.set(key, []);
+                dateGroups.get(key).push(t.id);
+              }
+            } else {
+              unscheduledList.push(t.id);
+            }
+          }
+        });
+
+        const sortTaskIds = (ids) => {
+          ids.sort((a, b) => {
+            const taskA = currentTasks.find((t) => t.id === a);
+            const taskB = currentTasks.find((t) => t.id === b);
+            const isTreeA = activeTreeSet && activeTreeSet.has(a);
+            const isTreeB = activeTreeSet && activeTreeSet.has(b);
+            if (isTreeA && !isTreeB) return -1;
+            if (!isTreeA && isTreeB) return 1;
+            const rA = taskA ? getRelativeDepth(taskA, selectedId) ?? 0 : 0;
+            const rB = taskB ? getRelativeDepth(taskB, selectedId) ?? 0 : 0;
+            if (rA !== rB) return rA - rB;
+            return (taskA?.orderIndex || 0) - (taskB?.orderIndex || 0);
+          });
+        };
+        sortTaskIds(unscheduledList);
+        sortTaskIds(pastList);
+        sortTaskIds(futureList);
+        dateGroups.forEach((ids) => sortTaskIds(ids));
+      }
+
+      maxSubtreeRelDepth = 0;
+      if (selectedId && activeTreeSet) {
+        visibleTasks.forEach((t) => {
+          if (activeTreeSet.has(t.id)) {
+            const rDepth = getRelativeDepth(t, selectedId);
+            if (rDepth !== null) {
+              maxSubtreeRelDepth = Math.max(maxSubtreeRelDepth, rDepth);
+            }
+          }
+        });
+      }
+
+      tasksByDepthMap = new Map();
+      visibleTasks.forEach((t) => {
+        const d = getTaskDepth(t);
+        if (!tasksByDepthMap.has(d)) tasksByDepthMap.set(d, []);
+        tasksByDepthMap.get(d).push(t);
+      });
+      tasksByDepthMap.forEach((tasksAtDepth) => {
+        tasksAtDepth.sort((a, b) => (sugiyamaXMap.get(a.id) || 0) - (sugiyamaXMap.get(b.id) || 0));
+      });
+
+      layoutDirty = false;
+    }
+
+    updateLayoutState();
+
+    function wakeAnimation() {
+      idleTicks = 0;
+      settledFrames = 0;
+      if (!canvasAnimationId) {
+        canvasAnimationId = requestAnimationFrame(animate);
+      }
+    }
+    canvas.__wakeAnimation = wakeAnimation;
 
     function animate() {
       ctx.save();
@@ -943,72 +1115,20 @@
         ctx.fillText('[ ここにドロップでルート要素 (親なし) に昇格 ]', width / 2, 35);
       }
 
+      if (layoutDirty || isPanningCanvas || draggedGraphNode) {
+        updateLayoutState();
+      }
+
       const isInspectorOpen = obsidianInspector && !obsidianInspector.classList.contains('hidden');
-      const selectedId = doubleClickedSubtreeId || focusedTaskId || inspectorSelectedTaskId;
-      const activeTreeSet = selectedId ? getDescendantIds(selectedId) : null;
-      const isTimelineMode = Boolean(selectedId && activeTreeSet);
-      const maxVisibleDepth = visibleTasks.reduce((max, t) => Math.max(max, getTaskDepth(t)), 0);
 
       // If Timeline Mode (Element Clicked): Render top Date Axis
       if (isTimelineMode) {
         drawCanvasDateAxis(ctx, width, height, isLight);
       }
 
-      // Sugiyama Layered Layout Alignment Force & Timeline Date-Axis Mapping
-      const sugiyamaXMap = computeSugiyamaTreeXPositions(visibleTasks, width, selectedId);
-
-      const metrics = getTimelineLayoutMetrics(width);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-
-      const dateGroups = new Map();
-      let unscheduledList = [];
-      let pastList = [];
-      let futureList = [];
-
-      if (isTimelineMode) {
-        visibleTasks.forEach((t) => {
-          if (activeTreeSet.has(t.id)) {
-            if (t.dueDate) {
-              const d = new Date(t.dueDate);
-              d.setHours(0, 0, 0, 0);
-              const diffDays = Math.round((d.getTime() - today.getTime()) / 86400000);
-              const colX = metrics.timelineStartX + canvasPanOffsetX + (diffDays + 0.5) * metrics.dayWidth;
-              if (colX < metrics.timelineStartX) {
-                pastList.push(t.id);
-              } else if (colX > metrics.timelineEndX) {
-                futureList.push(t.id);
-              } else {
-                const key = d.getTime();
-                if (!dateGroups.has(key)) dateGroups.set(key, []);
-                dateGroups.get(key).push(t.id);
-              }
-            } else {
-              unscheduledList.push(t.id);
-            }
-          }
-        });
-
-        // Consistent sorting by relative depth, then orderIndex
-        const sortTaskIds = (ids) => {
-          ids.sort((a, b) => {
-            const taskA = currentTasks.find((t) => t.id === a);
-            const taskB = currentTasks.find((t) => t.id === b);
-            const rA = taskA ? getRelativeDepth(taskA, selectedId) ?? 0 : 0;
-            const rB = taskB ? getRelativeDepth(taskB, selectedId) ?? 0 : 0;
-            if (rA !== rB) return rA - rB;
-            return (taskA?.orderIndex || 0) - (taskB?.orderIndex || 0);
-          });
-        };
-        sortTaskIds(unscheduledList);
-        sortTaskIds(pastList);
-        sortTaskIds(futureList);
-        dateGroups.forEach((ids) => sortTaskIds(ids));
-      }
-
       graphNodes.forEach((node) => {
         if (!node.isPinned) {
-          if (isTimelineMode && activeTreeSet.has(node.task.id)) {
+          if (isTimelineMode && activeTimelineSet.has(node.task.id)) {
             let targetX;
             if (node.task.dueDate) {
               const dObj = new Date(node.task.dueDate);
@@ -1030,14 +1150,14 @@
             const targetX = sugiyamaXMap.get(node.task.id);
             if (targetX !== undefined) {
               const isSubtreeNode = activeTreeSet && activeTreeSet.has(node.task.id);
-              const springK = isSubtreeNode ? 0.055 : 0.035;
+              const springK = isSubtreeNode ? 0.065 : 0.055;
               node.vx += (targetX - node.x) * springK;
             }
           }
         }
       });
 
-      const minRepelDist = 120;
+      const minRepelDist = 55;
       for (let i = 0; i < graphNodes.length; i++) {
         for (let j = i + 1; j < graphNodes.length; j++) {
           const nodeA = graphNodes[i];
@@ -1050,7 +1170,7 @@
 
           // 1. Center Circle Repulsion
           if (dist < minRepelDist) {
-            const force = ((minRepelDist - dist) / minRepelDist) * 0.6;
+            const force = ((minRepelDist - dist) / minRepelDist) * 0.4;
             const fx = (dx / dist) * force;
             const fy = (dy / dist) * force;
 
@@ -1061,7 +1181,7 @@
           }
 
           // 2. Strict vertical clearance for nodes in the same date column
-          if (isTimelineMode && activeTreeSet && activeTreeSet.has(nodeA.task.id) && activeTreeSet.has(nodeB.task.id)) {
+          if (isTimelineMode && activeTimelineSet && activeTimelineSet.has(nodeA.task.id) && activeTimelineSet.has(nodeB.task.id)) {
             if (Math.abs(dx) < 24) {
               const minDistY = 66;
               const curDistY = Math.abs(dy);
@@ -1074,13 +1194,12 @@
             }
           }
 
-          // 3. Sibling & Text Label Overlap Prevention
-          ctx.font = `11px Inter, sans-serif`;
-          const textWA = ctx.measureText(nodeA.task.title).width;
-          const textWB = ctx.measureText(nodeB.task.title).width;
+          // 3. Sibling & Text Label Overlap Prevention (vertical only, using cached text width)
+          const textWA = nodeA.titleWidth || 80;
+          const textWB = nodeB.titleWidth || 80;
 
-          const reqLabelWidth = (textWA + textWB) / 2 + 28;
-          const reqLabelHeight = 52;
+          const reqLabelWidth = (textWA + textWB) / 2 + 16;
+          const reqLabelHeight = 44;
 
           const absDx = Math.abs(dx);
           const absDy = Math.abs(dy);
@@ -1088,31 +1207,13 @@
           if (absDx < reqLabelWidth && absDy < reqLabelHeight) {
             const overlapX = (reqLabelWidth - absDx) / reqLabelWidth;
             const overlapY = (reqLabelHeight - absDy) / reqLabelHeight;
-            const repelStrength = Math.min(overlapX, overlapY) * 0.75;
-
-            const signX = dx >= 0 ? 1 : -1;
+            const repelStrength = Math.min(overlapX, overlapY) * 0.35;
             const signY = dy >= 0 ? 1 : -1;
 
-            if (!isTimelineMode) {
-              nodeA.vx -= signX * overlapX * repelStrength;
-              nodeB.vx += signX * overlapX * repelStrength;
-            }
             nodeA.vy -= signY * overlapY * repelStrength;
             nodeB.vy += signY * overlapY * repelStrength;
           }
         }
-      }
-
-      let maxSubtreeRelDepth = 0;
-      if (selectedId && activeTreeSet) {
-        visibleTasks.forEach((t) => {
-          if (activeTreeSet.has(t.id)) {
-            const rDepth = getRelativeDepth(t, selectedId);
-            if (rDepth !== null) {
-              maxSubtreeRelDepth = Math.max(maxSubtreeRelDepth, rDepth);
-            }
-          }
-        });
       }
 
       // Physics Repulsion Shield from Inspector Bottom Modal
@@ -1131,7 +1232,7 @@
         if (!node.isPinned) {
           let targetY;
 
-          if (isTimelineMode && activeTreeSet.has(node.task.id)) {
+          if (isTimelineMode && activeTimelineSet.has(node.task.id)) {
             const relDepth = getRelativeDepth(node.task, selectedId) ?? 0;
             if (node.task.dueDate) {
               const dObj = new Date(node.task.dueDate);
@@ -1165,7 +1266,7 @@
               }
             } else {
               const uIdx = Math.max(0, unscheduledList.indexOf(node.task.id));
-              targetY = 110 + uIdx * 54;
+              targetY = 135 + uIdx * 54;
             }
             const hierarchicalGravityY = (targetY - node.y) * 0.07;
             node.vy += hierarchicalGravityY;
@@ -1180,21 +1281,32 @@
             // Normal view with dynamic vertical scaling according to maxVisibleDepth
             const depth = getTaskDepth(node.task);
             const targetYRatio = computeDynamicYRatio(depth, maxVisibleDepth, false, isInspectorOpen);
-            targetY = height * targetYRatio;
-            const hierarchicalGravityY = (targetY - node.y) * 0.04;
+            let targetY = height * targetYRatio;
+
+            // Stagger dense layers in 2 tiers (32px vertical separation) to prevent label collision
+            const tasksAtDepth = tasksByDepthMap.get(depth);
+            if (tasksAtDepth && tasksAtDepth.length >= 5) {
+              const depthIdx = tasksAtDepth.findIndex((t) => t.id === node.task.id);
+              if (depthIdx >= 0) {
+                targetY += (depthIdx % 2 === 0 ? -16 : 16);
+              }
+            }
+
+            const hierarchicalGravityY = (targetY - node.y) * 0.055;
             node.vy += hierarchicalGravityY;
           }
 
-          // Zero floating drift for active timeline nodes to keep them steady
-          const isNodeActive = activeTreeSet && activeTreeSet.has(node.task.id);
-          const driftMult = isNodeActive ? (isTimelineMode ? 0 : 0.005) : 0.03;
+          // Subtle organic drift that smoothly fades as physics settles
+          const isNodeActive = activeTimelineSet && activeTimelineSet.has(node.task.id);
+          const driftFactor = Math.max(0, 1 - idleTicks / 60);
+          const driftMult = (isNodeActive ? (isTimelineMode ? 0 : 0.005) : 0.02) * driftFactor;
           const driftX = Math.cos(nowTime * 0.8 + idx * 1.5) * driftMult;
           const driftY = Math.sin(nowTime * 0.7 + idx * 2.1) * driftMult;
 
           node.vx += driftX;
           node.vy += driftY;
 
-          // Strong velocity damping (0.78) prevents oscillation & wobble
+          // Strong velocity damping prevents oscillation & wobble
           node.vx *= 0.78;
           node.vy *= 0.78;
 
@@ -1214,8 +1326,10 @@
         if (node.task.parentId) {
           const parentNode = nodeMap.get(node.task.parentId);
           if (parentNode) {
-            const isSubtreeEdge = activeTreeSet && activeTreeSet.has(node.task.id) && activeTreeSet.has(parentNode.task.id);
-            const isDimmedEdge = activeTreeSet && !isSubtreeEdge;
+            const isSubtreeEdge = isTimelineMode
+              ? Boolean(activeTreeSet && activeTreeSet.has(node.task.id) && activeTreeSet.has(parentNode.task.id))
+              : true;
+            const isDimmedEdge = isTimelineMode && Boolean(activeTreeSet) && !isSubtreeEdge;
 
             // Check if this edge belongs to the active lineage (hovered or focused node)
             const activeLineageId = hoveredNodeId || focusedTaskId;
@@ -1290,10 +1404,10 @@
               ctx.moveTo(parentNode.x, parentNode.y);
               ctx.lineTo(node.x, node.y);
 
-              let edgeColor = isSubtreeEdge
+              let edgeColor = (isTimelineMode && isSubtreeEdge)
                 ? '#f59e0b'
-                : (isLight ? 'rgba(0, 0, 0, 0.22)' : 'rgba(255, 255, 255, 0.25)');
-              let edgeWidth = isSubtreeEdge ? 2.5 : 1.5;
+                : (isLight ? 'rgba(100, 116, 139, 0.65)' : 'rgba(255, 255, 255, 0.45)');
+              let edgeWidth = (isTimelineMode && isSubtreeEdge) ? 2.5 : 1.6;
 
               if (isLineageEdge) {
                 edgeColor = '#f59e0b';
@@ -1301,14 +1415,16 @@
                 ctx.shadowColor = '#f59e0b';
                 ctx.shadowBlur = 10;
               } else if (activeLineageId) {
-                ctx.globalAlpha = 0.2;
+                ctx.globalAlpha = 0.25;
               } else if (isDimmedEdge) {
                 ctx.globalAlpha = 0.12;
+              } else {
+                ctx.globalAlpha = 1.0;
               }
 
               ctx.strokeStyle = edgeColor;
               ctx.lineWidth = edgeWidth;
-              ctx.setLineDash(isSubtreeEdge ? [] : [4, 4]);
+              ctx.setLineDash((isTimelineMode && !isSubtreeEdge) ? [4, 4] : []);
               ctx.stroke();
               ctx.setLineDash([]);
 
@@ -1397,13 +1513,13 @@
 
         const isSelectedRoot = selectedId === node.task.id;
         const isHovered = hoveredNodeId === node.task.id;
-        const isInSubtree = activeTreeSet ? activeTreeSet.has(node.task.id) : true;
-        const isDimmed = activeTreeSet && !isInSubtree;
+        const isInSubtree = isTimelineMode ? (activeTimelineSet ? activeTimelineSet.has(node.task.id) : true) : true;
+        const isDimmed = isTimelineMode && Boolean(activeTimelineSet) && !isInSubtree;
 
         const childCount = currentTasks.filter((t) => t.parentId === node.task.id).length;
         const baseRadius = 9;
         const coreRadius = baseRadius + Math.min(childCount * 4, 16);
-        const haloRadius = coreRadius + (isSelectedRoot ? 12 : (isHovered ? 10 : (isInSubtree && activeTreeSet ? 8 : 5)));
+        const haloRadius = coreRadius + (isSelectedRoot ? 12 : (isHovered ? 10 : (isTimelineMode && isInSubtree ? 8 : 5)));
 
         ctx.globalAlpha = isDimmed ? 0.2 : 1.0;
 
@@ -1411,7 +1527,7 @@
         ctx.beginPath();
         ctx.arc(node.x, node.y, haloRadius, 0, Math.PI * 2);
         ctx.fillStyle = isSelectedRoot ? '#f59e0b' : nodeColor;
-        ctx.globalAlpha = isDimmed ? 0.08 : (isSelectedRoot ? 0.45 : (isHovered ? 0.35 : 0.18));
+        ctx.globalAlpha = isDimmed ? 0.08 : (isSelectedRoot ? 0.45 : (isHovered ? 0.35 : 0.22));
         ctx.fill();
 
         // Core Circle
@@ -1421,11 +1537,11 @@
         ctx.fillStyle = nodeColor;
         ctx.fill();
 
-        if (isSelectedRoot || isHovered || (isInSubtree && activeTreeSet)) {
-          ctx.strokeStyle = isSelectedRoot ? (isLight ? '#18181b' : '#ffffff') : '#f59e0b';
-          ctx.lineWidth = (isSelectedRoot || isHovered) ? 2.8 : 1.8;
-          ctx.stroke();
-        }
+        ctx.strokeStyle = isSelectedRoot
+          ? (isLight ? '#18181b' : '#ffffff')
+          : (isHovered ? '#f59e0b' : (isLight ? 'rgba(0, 0, 0, 0.25)' : 'rgba(255, 255, 255, 0.35)'));
+        ctx.lineWidth = (isSelectedRoot || isHovered) ? 2.8 : 1.6;
+        ctx.stroke();
 
         if (childCount > 0) {
           ctx.font = 'bold 10px Inter, sans-serif';
@@ -1438,7 +1554,7 @@
 
         // Label with background plate scaled to current font size selection
         const fontSize = getGraphFontSize(isSelectedRoot);
-        const fontWeight = (isSelectedRoot || isHovered) ? '600' : (isInSubtree && activeTreeSet ? '500' : '400');
+        const fontWeight = (isSelectedRoot || isHovered) ? '600' : (isInSubtree && activeTimelineSet ? '500' : '400');
         ctx.font = `${fontWeight} ${fontSize}px Inter, sans-serif`;
 
         let labelText = node.task.title;
@@ -1476,15 +1592,20 @@
         // - past (Zone 2) / unscheduled (Zone 1 left edge): right of node circle
         // - timeline (Zone 3 visible range) or normal mode: bottom of node circle
         let targetLX, targetLY;
+        const platePad = 8;
         if (timelineZone === 'future') {
           targetLX = node.x - haloRadius - 8;
           targetLY = node.y;
+          targetLX = Math.max(platePad + textWidth + 4, targetLX);
         } else if (timelineZone === 'past' || timelineZone === 'unscheduled') {
           targetLX = node.x + haloRadius + 8;
           targetLY = node.y;
+          targetLX = Math.min(width - platePad - textWidth - 4, targetLX);
         } else {
           targetLX = node.x;
           targetLY = node.y + haloRadius + fontSize + 3;
+          const halfW = textWidth / 2 + 4;
+          targetLX = Math.max(platePad + halfW, Math.min(width - platePad - halfW, targetLX));
         }
 
         if (node.labelX === undefined) node.labelX = targetLX;
@@ -1504,6 +1625,28 @@
         node.labelX += node.labelVx;
         node.labelY += node.labelVy;
 
+        // Visual screen boundary clamp for labels so text never extends off-screen
+        if (timelineZone === 'future') {
+          if (node.labelX - textWidth - 4 < platePad) {
+            node.labelX = platePad + textWidth + 4;
+            node.labelVx = 0;
+          }
+        } else if (timelineZone === 'past' || timelineZone === 'unscheduled') {
+          if (node.labelX + textWidth + 4 > width - platePad) {
+            node.labelX = width - platePad - textWidth - 4;
+            node.labelVx = 0;
+          }
+        } else {
+          const halfW = textWidth / 2 + 4;
+          if (node.labelX - halfW < platePad) {
+            node.labelX = platePad + halfW;
+            node.labelVx = 0;
+          } else if (node.labelX + halfW > width - platePad) {
+            node.labelX = width - platePad - halfW;
+            node.labelVx = 0;
+          }
+        }
+
         const lx = node.labelX;
         const ly = node.labelY;
 
@@ -1520,9 +1663,11 @@
             ctx.shadowOffsetY = 2;
           }
 
-          ctx.fillStyle = isLight ? 'rgba(250, 250, 250, 0.96)' : 'rgba(9, 9, 11, 0.96)';
-          ctx.globalAlpha = isDimmed ? 0.2 : (isHovered ? 1.0 : 0.94);
-          ctx.strokeStyle = isHovered ? '#f59e0b' : (isSelectedRoot ? 'rgba(245, 158, 11, 0.6)' : (isLight ? 'rgba(0, 0, 0, 0.12)' : 'rgba(255, 255, 255, 0.12)'));
+          ctx.fillStyle = isLight ? 'rgba(255, 255, 255, 0.98)' : 'rgba(20, 20, 26, 0.96)';
+          ctx.globalAlpha = isDimmed ? 0.2 : (isHovered ? 1.0 : 0.96);
+          ctx.strokeStyle = isHovered
+            ? '#f59e0b'
+            : (isSelectedRoot ? 'rgba(245, 158, 11, 0.7)' : (isLight ? 'rgba(0, 0, 0, 0.16)' : 'rgba(255, 255, 255, 0.22)'));
           ctx.lineWidth = isHovered ? 1.8 : 1;
 
           if (timelineZone === 'future') {
@@ -1681,6 +1826,35 @@
       }
 
       ctx.restore();
+
+      // Check maximum velocity of nodes to decide if physics simulation can sleep
+      let maxVelocity = 0;
+      graphNodes.forEach((node) => {
+        const v = Math.hypot(node.vx, node.vy);
+        if (v > maxVelocity) maxVelocity = v;
+        const lv = Math.hypot(node.labelVx || 0, node.labelVy || 0);
+        if (lv > maxVelocity) maxVelocity = lv;
+      });
+
+      const isInteracting = Boolean(draggedGraphNode || isPanningCanvas || isMouseDown);
+      if (isInteracting) {
+        idleTicks = 0;
+        settledFrames = 0;
+      } else {
+        idleTicks++;
+      }
+
+      if (!isInteracting && idleTicks > 40 && maxVelocity < 0.02) {
+        settledFrames++;
+      } else if (!isInteracting && maxVelocity >= 0.02) {
+        settledFrames = 0;
+      }
+
+      if (settledFrames > 25) {
+        canvasAnimationId = null;
+        return;
+      }
+
       canvasAnimationId = requestAnimationFrame(animate);
     }
 
@@ -1689,13 +1863,13 @@
   }
 
   function setupCanvasInteractivity() {
-    let isMouseDown = false;
     let clickStartX = 0;
     let clickStartY = 0;
     let lastClickTime = 0;
     let lastClickNodeId = null;
 
     canvas.onmousedown = (e) => {
+      if (canvas.__wakeAnimation) canvas.__wakeAnimation();
       const rect = canvas.getBoundingClientRect();
       const mouseX = e.clientX - rect.left;
       const mouseY = e.clientY - rect.top;
@@ -1750,6 +1924,7 @@
     };
 
     canvas.onmousemove = (e) => {
+      if (canvas.__wakeAnimation) canvas.__wakeAnimation();
       const rect = canvas.getBoundingClientRect();
       const mouseX = e.clientX - rect.left;
       const mouseY = e.clientY - rect.top;
@@ -1757,6 +1932,14 @@
       const selectedId = doubleClickedSubtreeId || focusedTaskId || inspectorSelectedTaskId;
       const activeTreeSet = selectedId ? getDescendantIds(selectedId) : null;
       const isTimelineMode = Boolean(selectedId && activeTreeSet);
+      const activeTimelineSet = isTimelineMode ? new Set(activeTreeSet || []) : null;
+      if (isTimelineMode && activeTimelineSet) {
+        currentTasks.forEach((t) => {
+          if (isIsolatedTask(t) && !t.dueDate) {
+            activeTimelineSet.add(t.id);
+          }
+        });
+      }
       const cssWidth = canvas.width / (window.devicePixelRatio || 1);
       const metrics = getTimelineLayoutMetrics(cssWidth);
 
@@ -1786,9 +1969,11 @@
       }
 
       if (isMouseDown && draggedGraphNode) {
+        if (canvas.__wakeAnimation) canvas.__wakeAnimation();
         draggedGraphNode.x = mouseX;
         draggedGraphNode.y = mouseY;
       } else if (isPanningCanvas) {
+        if (canvas.__wakeAnimation) canvas.__wakeAnimation();
         const deltaX = e.clientX - panStartX;
         if (Math.abs(e.clientX - clickStartX) > 4) {
           hasPanned = true;
@@ -1806,7 +1991,7 @@
           const distCenter = Math.hypot(n.x - mouseX, n.y - mouseY);
           let distLabel = Infinity;
           let nodeLabelVisible = true;
-          if (isTimelineMode && activeTreeSet && activeTreeSet.has(n.task.id)) {
+          if (isTimelineMode && activeTimelineSet && activeTimelineSet.has(n.task.id)) {
             if (n.task.dueDate) {
               const d = new Date(n.task.dueDate);
               d.setHours(0, 0, 0, 0);
@@ -1830,18 +2015,22 @@
         }
 
         // Within 65px radius of node center or label plate: prioritize as hovered/frontmost
-        if (closestNode && minEffectiveDist <= 65) {
-          hoveredNodeId = closestNode.task.id;
-          canvas.style.cursor = 'pointer';
-        } else {
-          hoveredNodeId = null;
-          canvas.style.cursor = 'default';
+        const newHoveredId = (closestNode && minEffectiveDist <= 65) ? closestNode.task.id : null;
+        if (newHoveredId !== hoveredNodeId) {
+          hoveredNodeId = newHoveredId;
+          canvas.style.cursor = hoveredNodeId ? 'pointer' : 'default';
+          if (canvas.__wakeAnimation) canvas.__wakeAnimation();
         }
       }
     };
 
     canvas.onmouseleave = () => {
-      hoveredNodeId = null;
+      isMouseDown = false;
+      draggedGraphNode = null;
+      if (hoveredNodeId !== null) {
+        hoveredNodeId = null;
+        if (canvas.__wakeAnimation) canvas.__wakeAnimation();
+      }
       if (hoveredEyeZone !== null) {
         hoveredEyeZone = null;
         renderCurrentView();
@@ -1850,6 +2039,7 @@
     };
 
     canvas.onmouseup = (e) => {
+      if (canvas.__wakeAnimation) canvas.__wakeAnimation();
       const rect = canvas.getBoundingClientRect();
       const mouseX = e.clientX - rect.left;
       const mouseY = e.clientY - rect.top;

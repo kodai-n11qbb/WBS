@@ -18,6 +18,8 @@ temp_test_config/
 
 # Test outputs & audits
 tests/display_audit/
+tests/deep_audit/
+tests/**/*.png
 test-results/
 playwright-report/
 blob-report/

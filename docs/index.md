@@ -151,7 +151,7 @@
 | 10.2 | scope.md | ★★★★☆ | `未作成` | 10.1 | スコープ定義、In-Scope / Out-of-Scope |
 | 10.3 | mvp-definition.md | ★★★★☆ | `未作成` | 10.2 | 最初に作る最小機能範囲の定義 |
 | 10.4 | risk-management.md | ★★★☆☆ | `未作成` | 10.1 | リスク一覧、影響度・確率、対策 |
-| 10.5 | decision-log.md | ★★★☆☆ | `未作成` | - | ADR（Architecture Decision Records）。技術選定の理由を記録 |
+| 10.5 | decision-log.md | ★★★☆☆ | `草案` | - | ADR（Architecture Decision Records）。技術選定・ツール判定の記録 |
 | 10.6 | meeting-notes/ | ★★☆☆☆ | `不要` | - | 個人開発・ペアプロのため不要 |
 | 10.7 | retrospectives/ | ★★☆☆☆ | `不要` | - | 振り返り記録ディレクトリ |
 

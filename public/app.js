@@ -441,7 +441,7 @@
 
   // Helper to sync overlay control panel states (Relative Nest & Days Filter)
   function updateFilterControlsState() {
-    const selectedId = doubleClickedSubtreeId || focusedTaskId || inspectorSelectedTaskId;
+    const selectedId = doubleClickedSubtreeId || focusedTaskId;
     const activeTreeSet = selectedId ? getDescendantIds(selectedId) : null;
     const isTimelineMode = Boolean(selectedId && activeTreeSet);
 
@@ -897,7 +897,7 @@
 
     updateFilterControlsState();
 
-    const initialSelectedId = doubleClickedSubtreeId || focusedTaskId || inspectorSelectedTaskId;
+    const initialSelectedId = doubleClickedSubtreeId || focusedTaskId;
     let visibleTasks = currentTasks;
 
     if (initialSelectedId) {
@@ -981,7 +981,7 @@
     let lastWheelTime = 0;
 
     function updateLayoutState() {
-      selectedId = doubleClickedSubtreeId || focusedTaskId || inspectorSelectedTaskId;
+      selectedId = doubleClickedSubtreeId || focusedTaskId;
       activeTreeSet = selectedId ? getDescendantIds(selectedId) : null;
       isTimelineMode = Boolean(selectedId && activeTreeSet);
       activeTimelineSet = isTimelineMode ? new Set(activeTreeSet || []) : null;
@@ -1527,6 +1527,7 @@
         if (node.task.status === 'DONE') nodeColor = '#10b981';
 
         const isSelectedRoot = selectedId === node.task.id;
+        const isInspectorSelected = inspectorSelectedTaskId === node.task.id;
         const isHovered = hoveredNodeId === node.task.id;
         const isInSubtree = isTimelineMode ? (activeTimelineSet ? activeTimelineSet.has(node.task.id) : true) : true;
         const isDimmed = isTimelineMode && Boolean(activeTimelineSet) && !isInSubtree;
@@ -1534,15 +1535,15 @@
         const childCount = currentTasks.filter((t) => t.parentId === node.task.id).length;
         const baseRadius = 9;
         const coreRadius = baseRadius + Math.min(childCount * 4, 16);
-        const haloRadius = coreRadius + (isSelectedRoot ? 12 : (isHovered ? 10 : (isTimelineMode && isInSubtree ? 8 : 5)));
+        const haloRadius = coreRadius + (isSelectedRoot ? 12 : (isInspectorSelected ? 11 : (isHovered ? 10 : (isTimelineMode && isInSubtree ? 8 : 5))));
 
         ctx.globalAlpha = isDimmed ? 0.2 : 1.0;
 
         // Halo
         ctx.beginPath();
         ctx.arc(node.x, node.y, haloRadius, 0, Math.PI * 2);
-        ctx.fillStyle = isSelectedRoot ? '#f59e0b' : nodeColor;
-        ctx.globalAlpha = isDimmed ? 0.08 : (isSelectedRoot ? 0.45 : (isHovered ? 0.35 : 0.22));
+        ctx.fillStyle = isSelectedRoot ? '#f59e0b' : (isInspectorSelected ? '#38bdf8' : nodeColor);
+        ctx.globalAlpha = isDimmed ? 0.08 : (isSelectedRoot ? 0.45 : (isInspectorSelected ? 0.38 : (isHovered ? 0.35 : 0.22)));
         ctx.fill();
 
         // Core Circle
@@ -1554,8 +1555,8 @@
 
         ctx.strokeStyle = isSelectedRoot
           ? (isLight ? '#18181b' : '#ffffff')
-          : (isHovered ? '#f59e0b' : (isLight ? 'rgba(0, 0, 0, 0.25)' : 'rgba(255, 255, 255, 0.35)'));
-        ctx.lineWidth = (isSelectedRoot || isHovered) ? 2.8 : 1.6;
+          : (isInspectorSelected ? '#38bdf8' : (isHovered ? '#f59e0b' : (isLight ? 'rgba(0, 0, 0, 0.25)' : 'rgba(255, 255, 255, 0.35)')));
+        ctx.lineWidth = (isSelectedRoot || isInspectorSelected || isHovered) ? 2.8 : 1.6;
         ctx.stroke();
 
         if (childCount > 0) {
@@ -1694,8 +1695,12 @@
           ctx.globalAlpha = isDimmed ? 0.2 : (isHovered ? 1.0 : 0.96);
           ctx.strokeStyle = isHovered
             ? '#f59e0b'
-            : (isSelectedRoot ? 'rgba(245, 158, 11, 0.7)' : (isLight ? 'rgba(0, 0, 0, 0.16)' : 'rgba(255, 255, 255, 0.22)'));
-          ctx.lineWidth = isHovered ? 1.8 : 1;
+            : (isSelectedRoot
+                ? 'rgba(245, 158, 11, 0.85)'
+                : (isInspectorSelected
+                    ? (isLight ? '#0284c7' : '#38bdf8')
+                    : (isLight ? 'rgba(0, 0, 0, 0.16)' : 'rgba(255, 255, 255, 0.22)')));
+          ctx.lineWidth = (isHovered || isSelectedRoot || isInspectorSelected) ? 1.8 : 1;
 
           if (timelineZone === 'future') {
             ctx.beginPath();
@@ -1909,7 +1914,7 @@
       clickStartX = e.clientX;
       clickStartY = e.clientY;
 
-      const selectedId = doubleClickedSubtreeId || focusedTaskId || inspectorSelectedTaskId;
+      const selectedId = doubleClickedSubtreeId || focusedTaskId;
       const activeTreeSet = selectedId ? getDescendantIds(selectedId) : null;
       const isTimelineMode = Boolean(selectedId && activeTreeSet);
       const cssWidth = canvas.width / (window.devicePixelRatio || 1);
@@ -1961,7 +1966,7 @@
       const mouseX = e.clientX - rect.left;
       const mouseY = e.clientY - rect.top;
 
-      const selectedId = doubleClickedSubtreeId || focusedTaskId || inspectorSelectedTaskId;
+      const selectedId = doubleClickedSubtreeId || focusedTaskId;
       const activeTreeSet = selectedId ? getDescendantIds(selectedId) : null;
       const isTimelineMode = Boolean(selectedId && activeTreeSet);
       const activeTimelineSet = isTimelineMode ? new Set(activeTreeSet || []) : null;
@@ -2086,7 +2091,7 @@
       }
 
       // Check click on eye toggle buttons in timeline mode
-      const selectedId = doubleClickedSubtreeId || focusedTaskId || inspectorSelectedTaskId;
+      const selectedId = doubleClickedSubtreeId || focusedTaskId;
       const activeTreeSet = selectedId ? getDescendantIds(selectedId) : null;
       const isTimelineMode = Boolean(selectedId && activeTreeSet);
       const cssWidth = canvas.width / (window.devicePixelRatio || 1);
@@ -2127,8 +2132,10 @@
           const task = draggedGraphNode.task;
 
           if (lastClickNodeId === task.id && now - lastClickTime < 350) {
-            // DOUBLE CLICK: Subtree Focus Mode!
+            // DOUBLE CLICK: Subtree Focus Mode! 即座にその要素を中心としたタイムラインを展開
             doubleClickedSubtreeId = task.id;
+            focusedTaskId = task.id;
+            inspectorSelectedTaskId = task.id;
             lastClickTime = 0;
             lastClickNodeId = null;
             canvasPanOffsetX = 0;
@@ -2139,7 +2146,31 @@
 
           lastClickTime = now;
           lastClickNodeId = task.id;
-          canvasPanOffsetX = 0;
+
+          const currentTimelineRoot = doubleClickedSubtreeId || focusedTaskId;
+
+          if (!currentTimelineRoot) {
+            // ① 全表示からクリックされた要素: その要素を中心とした日付表示を開始
+            focusedTaskId = task.id;
+            inspectorSelectedTaskId = task.id;
+            canvasPanOffsetX = 0;
+          } else {
+            // ② すでに日付表示中の場合:
+            if (inspectorSelectedTaskId === task.id) {
+              // ★すでに選択されている要素をもう一度クリックされた場合:
+              // その要素を中心とした日付表示へ昇格・切り替え！
+              if (currentTimelineRoot !== task.id) {
+                focusedTaskId = task.id;
+                doubleClickedSubtreeId = null;
+                canvasPanOffsetX = 0;
+              }
+            } else {
+              // ★小要素をクリックした時:
+              // タイムラインの親（focusedTaskId）は変えず、小要素の進行状況編集（インスペクター選択）で止まる！
+              inspectorSelectedTaskId = task.id;
+            }
+          }
+
           openObsidianNodeInspector(task);
           renderCurrentView();
         } else if (!droppedOnTopStrip) {
@@ -2199,7 +2230,7 @@
     };
 
     canvas.onwheel = (e) => {
-      const selectedId = doubleClickedSubtreeId || focusedTaskId || inspectorSelectedTaskId;
+      const selectedId = doubleClickedSubtreeId || focusedTaskId;
       if (selectedId) {
         e.preventDefault();
         let delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
@@ -2223,7 +2254,6 @@
     if (!obsidianInspector) return;
 
     inspectorSelectedTaskId = task.id;
-    focusedTaskId = task.id;
 
     if (inspectorBreadcrumb) {
       inspectorBreadcrumb.innerHTML = '';
@@ -2259,9 +2289,10 @@
           ancSpan.title = `親タスク「${anc.title}」へ移動`;
           ancSpan.onclick = (e) => {
             e.stopPropagation();
-            if (doubleClickedSubtreeId) {
-              doubleClickedSubtreeId = anc.id;
-            }
+            focusedTaskId = anc.id;
+            inspectorSelectedTaskId = anc.id;
+            doubleClickedSubtreeId = null;
+            canvasPanOffsetX = 0;
             openObsidianNodeInspector(anc);
             renderCurrentView();
           };
@@ -2798,6 +2829,13 @@
     clickNode: (taskId) => {
       const node = graphNodes.find((n) => n.task.id === taskId);
       if (node) {
+        if (!focusedTaskId && !doubleClickedSubtreeId) {
+          focusedTaskId = node.task.id;
+        } else if (inspectorSelectedTaskId === node.task.id) {
+          focusedTaskId = node.task.id;
+          doubleClickedSubtreeId = null;
+        }
+        inspectorSelectedTaskId = node.task.id;
         openObsidianNodeInspector(node.task);
         renderCurrentView();
         return true;

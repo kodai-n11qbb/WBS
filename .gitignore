@@ -15,8 +15,13 @@ data/*.json
 config.json
 temp_test_data/
 temp_test_config/
-tests/display_audit/
 
+# Test outputs & audits
+tests/display_audit/
+test-results/
+playwright-report/
+blob-report/
+coverage/
 
 # Logs
 *.log
@@ -24,9 +29,19 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# System files
+# Environment & local settings
+.env
+.env.*
+!.env.example
+
+# TypeScript cache
+*.tsbuildinfo
+
+# System & OS files
 .DS_Store
+**/.DS_Store
 Thumbs.db
+._*
 
 # IDE and temporary files
 .vscode/

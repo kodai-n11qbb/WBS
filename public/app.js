@@ -323,6 +323,7 @@
   // Canvas Animation Frame & Physics State
   let canvasAnimationId = null;
   let graphNodes = [];
+  let timelineSlotMap = new Map();
   let draggedGraphNode = null;
   let isMouseDown = false;
 
@@ -980,6 +981,126 @@
     let lastPanOffsetX = canvasPanOffsetX;
     let lastWheelTime = 0;
 
+    function updateTimelineSlots() {
+      timelineSlotMap.clear();
+      if (!isTimelineMode || !activeTimelineSet) return;
+
+      const zone3Items = [];
+      visibleTasks.forEach((t) => {
+        if (activeTimelineSet.has(t.id) && t.dueDate) {
+          const d = new Date(t.dueDate);
+          d.setHours(0, 0, 0, 0);
+          const diffDays = Math.round((d.getTime() - today.getTime()) / 86400000);
+          const colX = metrics.timelineStartX + canvasPanOffsetX + (diffDays + 0.5) * metrics.dayWidth;
+          if (colX >= metrics.timelineStartX && colX <= metrics.timelineEndX) {
+            const n = nodeMap.get(t.id);
+            const textW = (n && n.titleWidth) ? n.titleWidth : 80;
+            const fullLabelW = textW + 48;
+            zone3Items.push({
+              id: t.id,
+              colX: (draggedGraphNode && draggedGraphNode.task.id === t.id) ? draggedGraphNode.x : colX,
+              diffDays,
+              fullLabelW,
+              orderIndex: t.orderIndex || 0,
+              relDepth: getRelativeDepth(t, selectedId) ?? 0,
+            });
+          }
+        }
+      });
+
+      // Primary sort: diffDays (date) ascending.
+      // Secondary sort: colX ascending.
+      // Tertiary sort: relDepth ascending (shallower / parent tasks get higher slots).
+      // Quaternary sort: orderIndex ascending.
+      zone3Items.sort((a, b) => a.diffDays - b.diffDays || a.colX - b.colX || a.relDepth - b.relDepth || a.orderIndex - b.orderIndex);
+
+      const SLOT_COUNT = 7;
+      const slotHeight = 20;
+      const slotBaseY = 78;
+      // Track list of placed intervals [left, right] in each slot
+      const slotIntervals = Array.from({ length: SLOT_COUNT }, () => []);
+      const placedItems = [];
+
+      zone3Items.forEach((item) => {
+        const halfW = item.fullLabelW / 2 + 5;
+        const itemLeft = item.colX - halfW;
+        const itemRight = item.colX + halfW;
+
+        // Find overlapping prior items (which have earlier or equal date)
+        const overlappingPrior = placedItems.filter((p) => {
+          return itemLeft < p.right && itemRight > p.left;
+        });
+
+        // "上であるほど 過去の日程のものが固まる":
+        // For any horizontally overlapping earlier task, this task must be placed strictly below it (greater slot index).
+        const minAllowedSlot = overlappingPrior.length > 0
+          ? Math.max(...overlappingPrior.map((p) => p.slot + 1))
+          : 0;
+
+        let chosenSlot = -1;
+
+        // 1. Try finding a slot from minAllowedSlot to SLOT_COUNT - 1 with NO physical overlap
+        for (let s = Math.min(minAllowedSlot, SLOT_COUNT - 1); s < SLOT_COUNT; s++) {
+          const intervals = slotIntervals[s];
+          const hasOverlap = intervals.some(([iLeft, iRight]) => itemLeft < iRight && itemRight > iLeft);
+          if (!hasOverlap) {
+            chosenSlot = s;
+            break;
+          }
+        }
+
+        // 2. If minAllowedSlot exceeds available slots or downstream slots are occupied,
+        // find any non-overlapping slot, preferring higher slot indices to keep earlier tasks above.
+        if (chosenSlot === -1) {
+          for (let s = SLOT_COUNT - 1; s >= 0; s--) {
+            const intervals = slotIntervals[s];
+            const hasOverlap = intervals.some(([iLeft, iRight]) => itemLeft < iRight && itemRight > iLeft);
+            if (!hasOverlap) {
+              chosenSlot = s;
+              break;
+            }
+          }
+        }
+
+        // 3. Fallback: if all slots collide, pick the slot with minimal overlap area
+        if (chosenSlot === -1) {
+          let minOverlapScore = Infinity;
+          chosenSlot = SLOT_COUNT - 1;
+          for (let s = 0; s < SLOT_COUNT; s++) {
+            let totalOverlap = 0;
+            for (const [iLeft, iRight] of slotIntervals[s]) {
+              const overlap = Math.max(0, Math.min(itemRight, iRight) - Math.max(itemLeft, iLeft));
+              totalOverlap += overlap;
+            }
+            if (totalOverlap < minOverlapScore) {
+              minOverlapScore = totalOverlap;
+              chosenSlot = s;
+            }
+          }
+        }
+
+        // Target LX is ALWAYS strictly colX (directly under the date column, NO diagonal shift!)
+        const targetLX = item.colX;
+        const targetLY = slotBaseY + chosenSlot * slotHeight;
+
+        slotIntervals[chosenSlot].push([itemLeft, itemRight]);
+        placedItems.push({
+          id: item.id,
+          diffDays: item.diffDays,
+          colX: item.colX,
+          left: itemLeft,
+          right: itemRight,
+          slot: chosenSlot,
+        });
+
+        timelineSlotMap.set(item.id, {
+          slot: chosenSlot,
+          lx: targetLX,
+          ly: targetLY,
+        });
+      });
+    }
+
     function updateLayoutState() {
       selectedId = doubleClickedSubtreeId || focusedTaskId;
       activeTreeSet = selectedId ? getDescendantIds(selectedId) : null;
@@ -1045,6 +1166,10 @@
         sortTaskIds(pastList);
         sortTaskIds(futureList);
         dateGroups.forEach((ids) => sortTaskIds(ids));
+
+        updateTimelineSlots();
+      } else {
+        timelineSlotMap.clear();
       }
 
       maxSubtreeRelDepth = 0;
@@ -1187,7 +1312,7 @@
           // 2. Strict vertical clearance for nodes in the same date column
           if (isTimelineMode && activeTimelineSet && activeTimelineSet.has(nodeA.task.id) && activeTimelineSet.has(nodeB.task.id)) {
             if (Math.abs(dx) < 24) {
-              const minDistY = 66;
+              const minDistY = 50;
               const curDistY = Math.abs(dy);
               if (curDistY < minDistY) {
                 const pushY = ((minDistY - curDistY) / minDistY) * 1.5;
@@ -1198,24 +1323,26 @@
             }
           }
 
-          // 3. Sibling & Text Label Overlap Prevention (vertical only, using cached text width)
-          const textWA = nodeA.titleWidth || 80;
-          const textWB = nodeB.titleWidth || 80;
+          // 3. Sibling & Text Label Overlap Prevention (vertical only, normal mode only)
+          if (!isTimelineMode) {
+            const textWA = nodeA.titleWidth || 80;
+            const textWB = nodeB.titleWidth || 80;
 
-          const reqLabelWidth = (textWA + textWB) / 2 + 16;
-          const reqLabelHeight = 44;
+            const reqLabelWidth = (textWA + textWB) / 2 + 16;
+            const reqLabelHeight = 44;
 
-          const absDx = Math.abs(dx);
-          const absDy = Math.abs(dy);
+            const absDx = Math.abs(dx);
+            const absDy = Math.abs(dy);
 
-          if (absDx < reqLabelWidth && absDy < reqLabelHeight) {
-            const overlapX = (reqLabelWidth - absDx) / reqLabelWidth;
-            const overlapY = (reqLabelHeight - absDy) / reqLabelHeight;
-            const repelStrength = Math.min(overlapX, overlapY) * 0.35;
-            const signY = dy >= 0 ? 1 : -1;
+            if (absDx < reqLabelWidth && absDy < reqLabelHeight) {
+              const overlapX = (reqLabelWidth - absDx) / reqLabelWidth;
+              const overlapY = (reqLabelHeight - absDy) / reqLabelHeight;
+              const repelStrength = Math.min(overlapX, overlapY) * 0.35;
+              const signY = dy >= 0 ? 1 : -1;
 
-            nodeA.vy -= signY * overlapY * repelStrength;
-            nodeB.vy += signY * overlapY * repelStrength;
+              nodeA.vy -= signY * overlapY * repelStrength;
+              nodeB.vy += signY * overlapY * repelStrength;
+            }
           }
         }
       }
@@ -1245,36 +1372,28 @@
               const colX = metrics.timelineStartX + canvasPanOffsetX + (diffDays + 0.5) * metrics.dayWidth;
               if (colX < metrics.timelineStartX) {
                 const pIdx = Math.max(0, pastList.indexOf(node.task.id));
-                targetY = 110 + pIdx * 54;
+                targetY = 228 + pIdx * 50;
               } else if (colX > metrics.timelineEndX) {
                 const fIdx = Math.max(0, futureList.indexOf(node.task.id));
-                targetY = 110 + fIdx * 54;
+                targetY = 228 + fIdx * 50;
               } else {
-                const list = dateGroups.get(dObj.getTime()) || [node.task.id];
-                const totalInDate = list.length;
+                // Zone 3: Timeline Area (Lower tier for graph nodes & arrows)
+                const lowerTierTopY = 228;
                 const maxRel = Math.max(1, maxSubtreeRelDepth);
-                const availH = (isInspectorOpen ? (height - 180) : (height - 85)) - 110;
-                const stepY = Math.min(95, Math.max(68, availH / Math.max(maxRel, totalInDate - 1)));
+                const availH = (isInspectorOpen ? (height - 180) : (height - 85)) - lowerTierTopY;
+                const stepY = Math.min(85, Math.max(48, availH / Math.max(1, maxRel)));
 
-                if (totalInDate === 1) {
-                  const timelineStagger = currentFontSizeMode === 'large' ? 24 : 16;
-                  const isTopTier = Math.abs(diffDays) % 2 === 0;
-                  targetY = 110 + relDepth * stepY + (isTopTier ? -timelineStagger : timelineStagger);
-                  node.labelPosition = isTopTier ? 'top' : 'bottom';
-                } else {
-                  // Sibling vertical offset for same-depth tasks on same date to ensure zero overlap
-                  const sameDepthTasks = list.filter((id) => {
-                    const t = currentTasks.find((x) => x.id === id);
-                    return (t ? (getRelativeDepth(t, selectedId) ?? 0) : 0) === relDepth;
-                  });
-                  const siblingOffsetIdx = sameDepthTasks.indexOf(node.task.id);
-                  targetY = 110 + relDepth * stepY + siblingOffsetIdx * 68;
-                  node.labelPosition = siblingOffsetIdx % 2 === 0 ? 'bottom' : 'top';
-                }
+                const list = dateGroups.get(dObj.getTime()) || [node.task.id];
+                const sameDepthTasks = list.filter((id) => {
+                  const t = currentTasks.find((x) => x.id === id);
+                  return (t ? (getRelativeDepth(t, selectedId) ?? 0) : 0) === relDepth;
+                });
+                const siblingOffsetIdx = Math.max(0, sameDepthTasks.indexOf(node.task.id));
+                targetY = lowerTierTopY + relDepth * stepY + siblingOffsetIdx * 45;
               }
             } else {
               const uIdx = Math.max(0, unscheduledList.indexOf(node.task.id));
-              targetY = 135 + uIdx * 54;
+              targetY = 228 + uIdx * 50;
             }
             const hierarchicalGravityY = (targetY - node.y) * 0.07;
             node.vy += hierarchicalGravityY;
@@ -1506,6 +1625,66 @@
         }
       }
 
+        // Draw Leader Line helper (Canvas 2D: node top anchor -> label plate bottom anchor)
+      function drawLeaderLine(ctx, node, isHighlighted, isLight) {
+        const slotInfo = timelineSlotMap.get(node.task.id);
+        if (!slotInfo) return;
+
+        const childCount = currentTasks.filter((t) => t.parentId === node.task.id).length;
+        const baseRadius = 9;
+        const coreRadius = baseRadius + Math.min(childCount * 4, 16);
+
+        const fontSize = getGraphFontSize(selectedId === node.task.id);
+        const plateHeight = fontSize + 4;
+
+        // Perfectly vertical leader line: startX === endX === lineX (zero diagonal tilt)
+        const lineX = (node.labelX !== undefined) ? node.labelX : node.x;
+        const startY = node.y - coreRadius;
+        const endY = (node.labelY !== undefined ? node.labelY : slotInfo.ly) + plateHeight / 2;
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(lineX, startY);
+        ctx.lineTo(lineX, endY);
+
+        if (isHighlighted) {
+          ctx.strokeStyle = '#f59e0b';
+          ctx.lineWidth = 2.0;
+          ctx.setLineDash([]);
+          ctx.shadowColor = '#f59e0b';
+          ctx.shadowBlur = 10;
+        } else {
+          ctx.strokeStyle = isLight ? 'rgba(0, 0, 0, 0.22)' : 'rgba(255, 255, 255, 0.25)';
+          ctx.lineWidth = 1.0;
+          ctx.setLineDash([3, 3]);
+          ctx.shadowBlur = 0;
+        }
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Origin dot at node circle top
+        ctx.beginPath();
+        ctx.arc(lineX, startY, isHighlighted ? 2.8 : 2.0, 0, Math.PI * 2);
+        ctx.fillStyle = isHighlighted
+          ? '#f59e0b'
+          : (isLight ? 'rgba(0, 0, 0, 0.35)' : 'rgba(255, 255, 255, 0.45)');
+        ctx.fill();
+
+        ctx.restore();
+      }
+
+      // Draw Standard Leader Lines for Zone 3 timeline nodes (rendered beneath node circles and plates)
+      if (isTimelineMode && activeTimelineSet) {
+        graphNodes.forEach((node) => {
+          if (timelineSlotMap.has(node.task.id)) {
+            const isNodeHovered = (hoveredNodeId === node.task.id);
+            if (!isNodeHovered) {
+              drawLeaderLine(ctx, node, false, isLight);
+            }
+          }
+        });
+      }
+
       // Draw Nodes (sorted so hovered/closest node is rendered last, i.e., on top of z-axis)
       const sortedNodes = [...graphNodes].sort((a, b) => {
         const aIsHovered = a.task.id === hoveredNodeId;
@@ -1536,6 +1715,11 @@
         const baseRadius = 9;
         const coreRadius = baseRadius + Math.min(childCount * 4, 16);
         const haloRadius = coreRadius + (isSelectedRoot ? 12 : (isInspectorSelected ? 11 : (isHovered ? 10 : (isTimelineMode && isInSubtree ? 8 : 5))));
+
+        // Frontmost glowing leader line for hovered Zone 3 node
+        if (isHovered && timelineSlotMap.has(node.task.id)) {
+          drawLeaderLine(ctx, node, true, isLight);
+        }
 
         ctx.globalAlpha = isDimmed ? 0.2 : 1.0;
 
@@ -1606,7 +1790,8 @@
         // Label position:
         // - future (Zone 4 right edge): left of node circle
         // - past (Zone 2) / unscheduled (Zone 1 left edge): right of node circle
-        // - timeline (Zone 3 visible range) or normal mode: bottom of node circle
+        // - timeline (Zone 3 upper slot area): top multi-tier slot
+        // - normal mode: bottom of node circle
         let targetLX, targetLY;
         const platePad = 8;
         if (timelineZone === 'future') {
@@ -1617,6 +1802,15 @@
           targetLX = node.x + haloRadius + 8;
           targetLY = node.y;
           targetLX = Math.min(width - platePad - textWidth - 4, targetLX);
+        } else if (timelineZone === 'timeline') {
+          const slotInfo = timelineSlotMap.get(node.task.id);
+          if (slotInfo) {
+            targetLX = slotInfo.lx;
+            targetLY = slotInfo.ly;
+          } else {
+            targetLX = node.x;
+            targetLY = 78;
+          }
         } else {
           targetLX = node.x;
           let prefPos = node.labelPosition || 'bottom';
@@ -1664,6 +1858,15 @@
             node.labelX = width - platePad - textWidth - 4;
             node.labelVx = 0;
           }
+        } else if (timelineZone === 'timeline') {
+          const halfW = textWidth / 2 + 4;
+          if (node.labelX - halfW < platePad) {
+            node.labelX = platePad + halfW;
+            node.labelVx = 0;
+          } else if (node.labelX + halfW > width - platePad) {
+            node.labelX = width - platePad - halfW;
+            node.labelVx = 0;
+          }
         } else {
           const halfW = textWidth / 2 + 4;
           if (node.labelX - halfW < platePad) {
@@ -1686,9 +1889,9 @@
           // Label Background Plate rendered at physical label coordinates (lx, ly)
           ctx.save();
           if (isHovered) {
-            ctx.shadowColor = isLight ? 'rgba(0, 0, 0, 0.28)' : 'rgba(0, 0, 0, 0.7)';
+            ctx.shadowColor = (timelineZone === 'timeline') ? '#f59e0b' : (isLight ? 'rgba(0, 0, 0, 0.28)' : 'rgba(0, 0, 0, 0.7)');
             ctx.shadowBlur = 12;
-            ctx.shadowOffsetY = 2;
+            ctx.shadowOffsetY = (timelineZone === 'timeline') ? 0 : 2;
           }
 
           ctx.fillStyle = isLight ? 'rgba(255, 255, 255, 0.98)' : 'rgba(20, 20, 26, 0.96)';
@@ -1700,7 +1903,7 @@
                 : (isInspectorSelected
                     ? (isLight ? '#0284c7' : '#38bdf8')
                     : (isLight ? 'rgba(0, 0, 0, 0.16)' : 'rgba(255, 255, 255, 0.22)')));
-          ctx.lineWidth = (isHovered || isSelectedRoot || isInspectorSelected) ? 1.8 : 1;
+          ctx.lineWidth = (isHovered || isSelectedRoot || isInspectorSelected) ? 2.0 : 1;
 
           if (timelineZone === 'future') {
             ctx.beginPath();
@@ -1733,16 +1936,21 @@
             ctx.textBaseline = 'middle';
             ctx.fillText(labelText, lx, ly);
           } else {
+            const isTimelineSlot = (timelineZone === 'timeline');
             ctx.beginPath();
             if (ctx.roundRect) {
-              ctx.roundRect(lx - textWidth / 2 - 4, ly - plateHeight / 2, textWidth + 8, plateHeight, 4);
+              ctx.roundRect(lx - textWidth / 2 - 5, ly - plateHeight / 2, textWidth + 10, plateHeight, isTimelineSlot ? 5 : 4);
             } else {
-              ctx.rect(lx - textWidth / 2 - 4, ly - plateHeight / 2, textWidth + 8, plateHeight);
+              ctx.rect(lx - textWidth / 2 - 5, ly - plateHeight / 2, textWidth + 10, plateHeight);
             }
             ctx.fill();
             ctx.stroke();
 
-            ctx.fillStyle = isDimmed ? (isLight ? '#94a3b8' : '#52525b') : (isLight ? '#18181b' : '#f4f4f5');
+            ctx.fillStyle = isDimmed
+              ? (isLight ? '#94a3b8' : '#52525b')
+              : (isHovered && isTimelineSlot
+                  ? (isLight ? '#b45309' : '#fef3c7')
+                  : (isLight ? '#18181b' : '#f4f4f5'));
             ctx.globalAlpha = isDimmed ? 0.3 : 1.0;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
@@ -1902,8 +2110,20 @@
   function setupCanvasInteractivity() {
     let clickStartX = 0;
     let clickStartY = 0;
+    let dragOffsetX = 0;
+    let dragOffsetY = 0;
     let lastClickTime = 0;
     let lastClickNodeId = null;
+
+    function distToSegment(px, py, x1, y1, x2, y2) {
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      const l2 = dx * dx + dy * dy;
+      if (l2 === 0) return Math.hypot(px - x1, py - y1);
+      let t = ((px - x1) * dx + (py - y1) * dy) / l2;
+      t = Math.max(0, Math.min(1, t));
+      return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
+    }
 
     canvas.onmousedown = (e) => {
       if (canvas.__wakeAnimation) canvas.__wakeAnimation();
@@ -1950,6 +2170,8 @@
       if (hitNode) {
         isMouseDown = true;
         draggedGraphNode = hitNode;
+        dragOffsetX = mouseX - hitNode.x;
+        dragOffsetY = mouseY - hitNode.y;
         hitNode.isPinned = true;
       } else {
         if (selectedId) {
@@ -2007,8 +2229,8 @@
 
       if (isMouseDown && draggedGraphNode) {
         if (canvas.__wakeAnimation) canvas.__wakeAnimation();
-        draggedGraphNode.x = mouseX;
-        draggedGraphNode.y = mouseY;
+        draggedGraphNode.x = mouseX - dragOffsetX;
+        draggedGraphNode.y = mouseY - dragOffsetY;
       } else if (isPanningCanvas) {
         if (canvas.__wakeAnimation) canvas.__wakeAnimation();
         const deltaX = e.clientX - panStartX;
@@ -2018,7 +2240,7 @@
         canvasPanOffsetX += deltaX;
         panStartX = e.clientX;
       } else {
-        // Find closest node considering both node circle center and label plate coordinates
+        // Find closest node considering node circle center, label plate, and leader line segment
         let closestNode = null;
         let minEffectiveDist = Infinity;
         const today = new Date();
@@ -2044,14 +2266,26 @@
           if (nodeLabelVisible && n.labelX !== undefined && n.labelY !== undefined) {
             distLabel = Math.hypot(n.labelX - mouseX, n.labelY - mouseY);
           }
-          const effectiveDist = Math.min(distCenter, distLabel);
+          let effectiveDist = Math.min(distCenter, distLabel);
+
+          // Proximity detection along leader line in timeline mode
+          if (isTimelineMode && n.labelX !== undefined && n.labelY !== undefined) {
+            const childCount = currentTasks.filter((t) => t.parentId === n.task.id).length;
+            const coreRadius = 9 + Math.min(childCount * 4, 16);
+            const lineX = (n.labelX !== undefined) ? n.labelX : n.x;
+            const lineDist = distToSegment(mouseX, mouseY, lineX, n.y - coreRadius, lineX, n.labelY + 12);
+            if (lineDist < 12) {
+              effectiveDist = Math.min(effectiveDist, lineDist);
+            }
+          }
+
           if (effectiveDist < minEffectiveDist) {
             minEffectiveDist = effectiveDist;
             closestNode = n;
           }
         }
 
-        // Within 65px radius of node center or label plate: prioritize as hovered/frontmost
+        // Within 65px radius of node center, label plate, or along leader line: prioritize as hovered/frontmost
         const newHoveredId = (closestNode && minEffectiveDist <= 65) ? closestNode.task.id : null;
         if (newHoveredId !== hoveredNodeId) {
           hoveredNodeId = newHoveredId;
@@ -2805,6 +3039,7 @@
     })),
     getSelectedTaskId: () => doubleClickedSubtreeId || focusedTaskId || inspectorSelectedTaskId,
     getZoneVisibility: () => ({ showPastLabels, showFutureLabels, hoveredEyeZone }),
+    getTimelineSlots: () => Array.from(timelineSlotMap.entries()).map(([taskId, info]) => ({ taskId, ...info })),
     togglePastLabels,
     toggleFutureLabels,
     getCanvasMetrics: () => {

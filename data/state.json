@@ -1,7 +1,7 @@
 {
   "projectId": "default-project",
   "projectName": "リアルタイム・コラボレーション機能",
-  "updatedAt": 1792365117824,
+  "updatedAt": 1792425593911,
   "totalTasks": 23,
   "tasks": [
     {
@@ -104,8 +104,8 @@
       "priority": "HIGH",
       "orderIndex": 1900,
       "isCollapsed": false,
-      "updatedAt": 1792283102763,
-      "dueDate": 1792335599999,
+      "updatedAt": 1792425593910,
+      "dueDate": 1792421999999,
       "authorNodeId": "node-181c2b"
     },
     {
@@ -260,7 +260,7 @@
       "priority": "MEDIUM",
       "orderIndex": 1792365090024,
       "isCollapsed": false,
-      "updatedAt": 1792365090024,
+      "updatedAt": 1792421332930,
       "dueDate": null,
       "authorNodeId": "node-181c2b"
     },

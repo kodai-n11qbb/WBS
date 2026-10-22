@@ -42,18 +42,10 @@ export class JsonConfigAdapter implements ConfigPort {
     const isPkg = (process as any).pkg !== undefined;
     const execDir = this.getExecDir();
 
-    // Default data directory: './WBS_data' for pkg binary, 'data' for development
-    let initialDataDir: string;
-    if (isPkg) {
-      initialDataDir = path.resolve(execDir, 'WBS_data');
-    } else {
-      initialDataDir = path.resolve(process.cwd(), 'data');
-      try {
-        if (!fs.existsSync(initialDataDir) && fs.existsSync(path.resolve(process.cwd(), './.wbser_data'))) {
-          initialDataDir = path.resolve(process.cwd(), './.wbser_data');
-        }
-      } catch {}
-    }
+    // Default data directory: './WBS_data' for both dev and binary
+    const initialDataDir = isPkg
+      ? path.resolve(execDir, 'WBS_data')
+      : path.resolve(process.cwd(), 'WBS_data');
 
     const defaultConfig: AppConfig = {
       mode: 'P2P',
@@ -119,12 +111,9 @@ export class JsonConfigAdapter implements ConfigPort {
 
   public async saveConfig(config: Partial<AppConfig>): Promise<AppConfig> {
     const current = await this.loadConfig();
-    const isPkg = (process as any).pkg !== undefined;
-    const execDir = this.getExecDir();
-    let dataDir = config.dataDir || current.dataDir;
-    if (dataDir && !path.isAbsolute(dataDir)) {
-      dataDir = path.resolve(isPkg ? execDir : process.cwd(), dataDir);
-    }
+    // Keep dataDir as relative path (e.g. './WBS_data')
+    const rawDataDir = config.dataDir;
+    let dataDir = rawDataDir || './WBS_data';
 
     const updated: AppConfig = {
       ...current,

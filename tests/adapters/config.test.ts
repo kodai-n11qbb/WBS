@@ -26,7 +26,7 @@ describe('JsonConfigAdapter', () => {
 
     expect(config.mode).toBe('P2P');
     expect(config.port).toBe(3000);
-    expect(config.dataDir).toContain('data');
+    expect(config.dataDir).toContain('WBS_data');
     expect(path.isAbsolute(config.dataDir)).toBe(true);
     expect(config.autoOpen).toBe(true);
   });
@@ -44,6 +44,10 @@ describe('JsonConfigAdapter', () => {
     expect(reloaded.port).toBe(8080);
     expect(reloaded.dataDir).toContain(path.normalize('custom/data'));
     expect(path.isAbsolute(reloaded.dataDir)).toBe(true);
+
+    // Verify config.json file keeps relative path
+    const savedRaw = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    expect(savedRaw.dataDir).toBe('./custom/data');
   });
 
   it('should override config with CLI arguments including --data-dir resolved to absolute path', async () => {

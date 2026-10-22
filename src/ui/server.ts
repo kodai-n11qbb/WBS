@@ -475,13 +475,8 @@ async function main() {
   server.listen(PORT, async () => {
     await bootstrap();
     const url = `http://localhost:${PORT}`;
-    console.log(`[WBSer Mode: ${config.mode}] Server running at ${url}`);
-    if (config.mode === 'CLIENT' && config.hostAddress) {
-      console.log(`[WBSer CLIENT Mode] Configured Host Address: ${config.hostAddress}`);
-    }
-    if (config.mode !== 'CLIENT') {
-      console.log(`[WBSer State Data] Snapshot File: ${SNAPSHOT_FILE}`);
-    }
+    console.log(`[WBSer] Server running at ${url}`);
+    console.log(`[WBSer Data] Snapshot File: ${SNAPSHOT_FILE}`);
 
     if (config.autoOpen && process.env.AUTO_OPEN !== 'false') {
       await browserLauncher.open(url);

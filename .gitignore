@@ -6,6 +6,7 @@ dist/
 bin/
 
 # Local data & storage files
+WBS_data/
 data/*.jsonl
 data/*.json
 !data/state.json

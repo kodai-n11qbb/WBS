@@ -67,4 +67,24 @@ describe('JsonConfigAdapter', () => {
     expect(config.dataDir).toContain('legacy');
     expect(path.isAbsolute(config.dataDir)).toBe(true);
   });
+
+  it('should resolve default dataDir to WBS_data when packaged with pkg', async () => {
+    const originalPkg = (process as any).pkg;
+    try {
+      (process as any).pkg = {};
+      const adapter = new JsonConfigAdapter(configPath, [], testDir);
+      const config = await adapter.loadConfig();
+
+      const expectedDir = path.resolve(testDir, 'WBS_data');
+      expect(config.dataDir).toBe(expectedDir);
+      expect(fs.existsSync(config.dataDir)).toBe(true);
+    } finally {
+      if (originalPkg !== undefined) {
+        (process as any).pkg = originalPkg;
+      } else {
+        delete (process as any).pkg;
+      }
+    }
+  });
 });
+

@@ -6,23 +6,26 @@ import { crypto } from '../core/crypto_util.js';
 export class JsonConfigAdapter implements ConfigPort {
   private configPath: string;
   private cliArgs: string[];
+  private execDirOverride?: string;
 
-  constructor(configPath?: string, cliArgs?: string[]) {
+  constructor(configPath?: string, cliArgs?: string[], execDir?: string) {
+    this.execDirOverride = execDir;
     this.configPath = configPath || this.resolveConfigPath();
     this.cliArgs = cliArgs || process.argv.slice(2);
   }
 
+  private getExecDir(): string {
+    return this.execDirOverride || path.dirname(process.execPath);
+  }
+
   private resolveConfigPath(): string {
     const isPkg = (process as any).pkg !== undefined;
-    const execDir = path.dirname(process.execPath);
+    const execDir = this.getExecDir();
 
-    const candidates = [
-      path.join(process.cwd(), 'config.json'),
-      path.join(execDir, 'config.json'),
-      '/snapshot/WBSer/config.json',
-      '/snapshot/share-log/config.json',
-      '/snapshot/config.json',
-    ];
+    // In packaged binary mode, look strictly in execDir first
+    const candidates = isPkg
+      ? [path.join(execDir, 'config.json')]
+      : [path.join(process.cwd(), 'config.json'), path.join(execDir, 'config.json')];
 
     for (const cand of candidates) {
       try {
@@ -36,13 +39,21 @@ export class JsonConfigAdapter implements ConfigPort {
   }
 
   public async loadConfig(): Promise<AppConfig> {
-    // Default to terminal-relative absolute path of standard 'data' directory
-    let initialDataDir = path.resolve(process.cwd(), 'data');
-    try {
-      if (!fs.existsSync(initialDataDir) && fs.existsSync(path.resolve(process.cwd(), './.wbser_data'))) {
-        initialDataDir = path.resolve(process.cwd(), './.wbser_data');
-      }
-    } catch {}
+    const isPkg = (process as any).pkg !== undefined;
+    const execDir = this.getExecDir();
+
+    // Default data directory: './WBS_data' for pkg binary, 'data' for development
+    let initialDataDir: string;
+    if (isPkg) {
+      initialDataDir = path.resolve(execDir, 'WBS_data');
+    } else {
+      initialDataDir = path.resolve(process.cwd(), 'data');
+      try {
+        if (!fs.existsSync(initialDataDir) && fs.existsSync(path.resolve(process.cwd(), './.wbser_data'))) {
+          initialDataDir = path.resolve(process.cwd(), './.wbser_data');
+        }
+      } catch {}
+    }
 
     const defaultConfig: AppConfig = {
       mode: 'P2P',
@@ -86,28 +97,33 @@ export class JsonConfigAdapter implements ConfigPort {
 
     // Ensure dataDir is resolved relative to the config file or binary location
     if (finalConfig.dataDir && !path.isAbsolute(finalConfig.dataDir)) {
-      let baseDir = process.cwd();
+      let baseDir = isPkg ? execDir : process.cwd();
       if (fs.existsSync(this.configPath)) {
         const dir = path.dirname(this.configPath);
         if (!dir.startsWith('/snapshot')) {
           baseDir = dir;
-        } else if ((process as any).pkg) {
-          baseDir = path.dirname(process.execPath);
         }
-      } else if ((process as any).pkg) {
-        baseDir = path.dirname(process.execPath);
       }
       finalConfig.dataDir = path.resolve(baseDir, finalConfig.dataDir);
     }
+
+    // Ensure data directory exists
+    try {
+      if (finalConfig.dataDir && !fs.existsSync(finalConfig.dataDir)) {
+        fs.mkdirSync(finalConfig.dataDir, { recursive: true });
+      }
+    } catch {}
 
     return finalConfig;
   }
 
   public async saveConfig(config: Partial<AppConfig>): Promise<AppConfig> {
     const current = await this.loadConfig();
+    const isPkg = (process as any).pkg !== undefined;
+    const execDir = this.getExecDir();
     let dataDir = config.dataDir || current.dataDir;
     if (dataDir && !path.isAbsolute(dataDir)) {
-      dataDir = path.resolve(process.cwd(), dataDir);
+      dataDir = path.resolve(isPkg ? execDir : process.cwd(), dataDir);
     }
 
     const updated: AppConfig = {

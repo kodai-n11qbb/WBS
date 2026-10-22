@@ -1,6 +1,7 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import net from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer, WebSocket } from 'ws';
 import { NodeService } from '../core/node_service.js';
@@ -44,6 +45,27 @@ function getPublicDir(currentDir: string): string {
   return path.join(process.cwd(), 'public');
 }
 
+function checkPortAvailable(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const tester = net.createServer()
+      .once('error', () => {
+        resolve(false);
+      })
+      .once('listening', () => {
+        tester.close(() => resolve(true));
+      })
+      .listen(port);
+  });
+}
+
+async function findAvailablePort(startPort: number, maxPort: number): Promise<number> {
+  for (let port = startPort; port <= maxPort; port++) {
+    const isAvail = await checkPortAvailable(port);
+    if (isAvail) return port;
+  }
+  throw new Error(`利用可能なポートが見つかりませんでした (${startPort} - ${maxPort})`);
+}
+
 const PUBLIC_DIR = getPublicDir(currentDirname);
 
 async function main() {
@@ -57,7 +79,11 @@ async function main() {
   const SNAPSHOT_FILE = path.join(DATA_DIR, 'state.json');
   const DATA_FILE = path.join(DATA_DIR, 'events.jsonl');
 
-  const PORT = config.port;
+  const requestedPort = config.port;
+  const PORT = await findAvailablePort(requestedPort, Math.max(requestedPort + 50, 3050));
+  if (PORT !== requestedPort) {
+    console.log(`[WBSer Port] ポート ${requestedPort} は使用中のため、空きポート ${PORT} で起動します。`);
+  }
   const NODE_ID = config.nodeName;
   const UDP_PORT = config.udpPort;
 
@@ -268,11 +294,43 @@ async function main() {
     }
   });
 
+  const isPkg = (process as any).pkg !== undefined;
+  const enableAutoExit = isPkg || process.env.AUTO_EXIT === 'true';
+  let exitTimer: NodeJS.Timeout | null = null;
+  let hasEverConnected = false;
+
+  const cancelExitTimer = () => {
+    if (exitTimer) {
+      clearTimeout(exitTimer);
+      exitTimer = null;
+    }
+  };
+
+  const scheduleExit = () => {
+    if (!enableAutoExit) return;
+    if (!hasEverConnected) return;
+    if (connectedClients.size > 0) return;
+
+    cancelExitTimer();
+    console.log('[WBSer Auto-Exit] ブラウザ切断を検知しました。4秒後にプロセスを終了します（再接続待機中）...');
+    exitTimer = setTimeout(async () => {
+      if (connectedClients.size === 0) {
+        console.log('[WBSer Auto-Exit] ブラウザが終了したため、サーバープロセスを安全にシャットダウンします。');
+        try {
+          await nodeService.stop();
+        } catch {}
+        process.exit(0);
+      }
+    }, 4000);
+  };
+
   const wss = new WebSocketServer({ server });
   const connectedClients = new Set<WebSocket>();
 
   wss.on('connection', async (ws) => {
     connectedClients.add(ws);
+    hasEverConnected = true;
+    cancelExitTimer();
 
     const state = await nodeService.getProjectState(activeProjectId);
     const events = await nodeService.getAllEvents();
@@ -383,6 +441,9 @@ async function main() {
 
     ws.on('close', () => {
       connectedClients.delete(ws);
+      if (connectedClients.size === 0) {
+        scheduleExit();
+      }
     });
   });
 

@@ -31,7 +31,7 @@ npm run build:exe
 ### 出力ターゲット (`bin/`)
 | プラットフォーム | 出力ファイル名 | 対象環境 |
 | :--- | :--- | :--- |
-| **Windows** | `bin/wbser-win.exe` | Windows 10 / 11 (64bit) |
+| **Windows** | `bin/wbser-win-x64.exe` | Windows 10 / 11 (64bit) |
 | **macOS (Apple Silicon)** | `bin/wbser-macos-arm64` | Mac M1 / M2 / M3 / M4 |
 | **macOS (Intel)** | `bin/wbser-macos-x64` | Intel Mac |
 
@@ -40,9 +40,10 @@ npm run build:exe
 ## 3. 実行メカニズム
 
 1. **メモリ展開**: バイナリをダブルクリックすると、内部の VFS（Virtual File System: `/snapshot/...`）上にNode.jsおよび静的資産が展開されます。
-2. **ローカルサーバー立ち上げ**: ローカルポート（デフォルト: `3000`）にて HTTP/WebSocket サーバーが自動起動します。
-3. **ブラウザ自動オープン**: OSの既定のWebブラウザが起動し、`http://localhost:3000` が全画面表示されます（`config.autoOpen: true` 時）。
-4. **外部ストレージへの安全書き出し**: データの永続化（`data/events.jsonl` および `data/state.json`）は、バイナリ内部ではなく実行ディレクトリの外部ストレージへ安全に書き込まれます。
+2. **ポート自動探索＆サーバー起動**: ポート番号（デフォルト: `3000`）から探索を開始し、使用中（`EADDRINUSE`）の場合は `3001`〜`3050` の範囲で利用可能な空きポートを自動探索して HTTP/WebSocket サーバーを立ち上げます。
+3. **ブラウザ自動オープン**: OSの既定のWebブラウザが起動し、自動検出されたポート（`http://localhost:<port>`）が全画面表示されます（`config.autoOpen: true` 時）。
+4. **外部ストレージへの安全書き出し (`./WBS_data/`)**: バイナリ実行時、データの永続化（`events.jsonl` および `state.json`）のデフォルト保存先はバイナリ配置ディレクトリ直下の `./WBS_data/` となり、外部ストレージへ安全に書き込まれます（開発実行環境では従来の `./data/` を維持）。
+5. **ブラウザ切断時の自動終了 (Auto-Exit)**: バイナリ実行時、ブラウザのタブまたはウィンドウが閉じられWebSocket接続数が 0 になったことを検知すると、誤終了（ページリロード）防止のための猶予時間（4秒間）を経て、プロセスを安全に自動終了します（開発実行時はプロセス維持）。
 
 ---
 

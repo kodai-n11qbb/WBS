@@ -80,7 +80,7 @@
 
 | # | 書類名 | 重要度 | ステータス | 依存 | 備考 |
 |---|--------|--------|-----------|------|------|
-| 5.1 | [database-schema.md](./database-schema.md) | ★★★★☆ | `確定` | 3.3 | events.jsonl, state.json, 絶対パス解決, 旧フォルダ互換, pkg VFS 分離 |
+| 5.1 | [database-schema.md](./database-schema.md) | ★★★★☆ | `確定` | 3.3 | events.jsonl, state.json, 絶対パス解決, pkg VFS 分離, 初期ブートストラップ |
 | 5.2 | data-lifecycle.md | ★★★★☆ | `不要` | 3.3 | 5.1 および 5.4 に集約 |
 | 5.3 | backup-recovery.md | ★★★★☆ | `不要` | 5.1 | 単一ローカルファイル管理のため不要 |
 | 5.4 | [sync-mechanism.md](./sync-mechanism.md) | ★★★★☆ | `確定` | 3.3 | 3動作モード、イベント重複排除、Live Watcher (4ステップ)、端末単位Undo |
@@ -163,7 +163,7 @@
 |---|--------|--------|-----------|------|------|
 | 11.1 | [README.md](../README.md) | ★★★★★ | `確定` | - | プロジェクト概要、クイックスタート、動作モード、配布バイナリ説明 |
 | 11.2 | CONTRIBUTING.md | ★★★☆☆ | `未作成` | - | コントリビューションガイドライン |
-| 11.3 | [CHANGELOG.md](./CHANGELOG.md) | ★★★★☆ | `確定` | 8.2 | v1.0.0〜v1.10.0 の仕様策定・改善変更履歴 |
+| 11.3 | [CHANGELOG.md](./CHANGELOG.md) | ★★★★☆ | `確定` | 8.2 | v1.0.0〜v1.17.0 の仕様策定・改善変更履歴 |
 | 11.4 | roadmap.md | ★★★☆☆ | `未作成` | 10.1 | 今後の機能計画（WebRTC、高度ガント等） |
 | 11.5 | pitch-deck.md | ★★☆☆☆ | `不要` | 1.1 | 投資家向け資料は不要 |
 

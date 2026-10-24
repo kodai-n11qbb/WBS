@@ -20,9 +20,9 @@ WBSer は、開発方針 [`DEV_POLICY.md`](./DEV_POLICY.md) および [`CODING_R
 +-------------------+---------------------------------------+-----------------------------+
 | (Interfaces)      | (Interfaces)                          | (Interfaces)
 +-------------------v-------------+         +---------------+-----------------------------+
-|       P2P Transport Layer       |         | Data Storage & File Watcher Storage Layer   |
-|    (Discovery, Socket, Mesh)    |         | (data/state.json, events.jsonl, FileWatcher)|
-+---------------------------------+         +---------------------------------------------+
+|       P2P Transport Layer       |         | Data Storage & File Watcher Storage Layer       |
+|    (Discovery, Socket, Mesh)    |         | (WBS_data/state.json, events.jsonl, FileWatcher)|
++---------------------------------+         +-------------------------------------------------+
 ```
 
 ---

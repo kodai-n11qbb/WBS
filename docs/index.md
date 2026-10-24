@@ -30,9 +30,9 @@
 
 | # | 書類名 | 重要度 | ステータス | 依存 | 備考 |
 |---|--------|--------|-----------|------|------|
-| 1.1 | [concept.md](./concept.md) | ★★★★★ | `確定` | - | プロジェクトの目的、解決する課題、Local-First、Obsidianグラフ＆ガント特化 |
+| 1.1 | [concept.md](./concept.md) | ★★★★★ | `確定` | - | プロジェクトの目的、解決する課題、WBS共有＆副産物ガント、スプシ連携 |
 | 1.2 | target-users.md | ★★★☆☆ | `不要` | 1.1 | concept.md および usecases.md に包含 |
-| 1.3 | [usecases.md](./usecases.md) | ★★★★☆ | `確定` | 1.1 | 個人オフライン、LAN内P2P、共有ストレージ非同期、コアユースケース7選 |
+| 1.3 | [usecases.md](./usecases.md) | ★★★★☆ | `確定` | 1.1 | 個人オフライン、LAN内P2P、非同期協業、スプシ進捗共有、コアユースケース8選 |
 | 1.4 | [glossary.md](./glossary.md) | ★★★☆☆ | `確定` | - | プロジェクト固有の用語（Local-First, authorNodeId, Sugiyama等）定義集 |
 
 ---

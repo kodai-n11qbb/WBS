@@ -7,11 +7,6 @@ bin/
 
 # Local data & storage files
 WBS_data/
-data/*.jsonl
-data/*.json
-!data/state.json
-!data/events.jsonl
-!data/.gitkeep
 .wbser_data/
 config.json
 temp_test_data/

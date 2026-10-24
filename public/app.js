@@ -393,6 +393,11 @@
  * WBSer - Googleスプレッドシート一方通行連携スクリプト (Google Apps Script)
  * =========================================================================
  * 
+ * 【重要: シートの安全性】
+ * 本スクリプトは、スプレッドシート内の「WBS」という名前のシートのみを編集します。
+ * - 「WBS」シートが存在しない場合は自動で新規作成されます。
+ * - 既存の他のシートタブ（「シート1」「議事録」「メモ」等）は一切改変・削除されません。
+ * 
  * 【使い方】
  * 1. Googleスプレッドシートを新規作成（または既存のシートを開く）
  * 2. メニュー「拡張機能」>「Apps Script」を開き、本コードをすべて貼り付けて保存
@@ -412,7 +417,6 @@ function doPost(e) {
 
     var payload = JSON.parse(e.postData.contents);
     var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var sheet = ss.getActiveSheet();
 
     if (payload.action === 'PING') {
       return ContentService.createTextOutput(JSON.stringify({ status: 'OK', message: 'WBSer Connected successfully' }))
@@ -420,10 +424,19 @@ function doPost(e) {
     }
 
     if (payload.action === 'SYNC_MATRIX' && payload.matrix && payload.matrix.length > 0) {
+      // 「WBS」シートのみを取得（存在しない場合は自動新規作成）
+      var targetSheetName = payload.sheetName || 'WBS';
+      var sheet = ss.getSheetByName(targetSheetName);
+      if (!sheet) {
+        sheet = ss.insertSheet(targetSheetName);
+      }
+
       var numRows = payload.matrix.length;
       var numCols = payload.matrix[0].length;
 
+      // 「WBS」シートの内容・書式のみをクリア（他のシートには一切影響しません）
       sheet.clear();
+
       var range = sheet.getRange(1, 1, numRows, numCols);
       range.setValues(payload.matrix);
 
@@ -439,12 +452,13 @@ function doPost(e) {
       sheet.setFrozenColumns(2);
 
       sheet.setColumnWidth(1, 45);  // No
-      sheet.setColumnWidth(2, 280); // WBS階層ツリー
+      sheet.setColumnWidth(2, 280); // WBSタスク階層ツリー
       sheet.setColumnWidth(3, 85);  // ステータス
       sheet.setColumnWidth(4, 95);  // 完了予定日
 
       return ContentService.createTextOutput(JSON.stringify({
         status: 'OK',
+        sheetName: targetSheetName,
         updatedRows: numRows,
         updatedCols: numCols,
         timestamp: new Date().toISOString()

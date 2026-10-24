@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 
 export interface SpreadsheetSyncPayload {
   action: 'SYNC_MATRIX';
+  sheetName?: string;
   matrix: string[][];
   backgrounds: string[][];
   fontColors: string[][];
@@ -226,6 +227,7 @@ export function buildSpreadsheetMatrix(
 
   return {
     action: 'SYNC_MATRIX',
+    sheetName: 'WBS',
     matrix: [headerRow, ...dataRows],
     backgrounds: [headerBgRow, ...bgRows],
     fontColors: [headerFontRow, ...fontRows],

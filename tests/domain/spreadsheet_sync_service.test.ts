@@ -60,6 +60,7 @@ describe('SpreadsheetSyncService', () => {
     const payload = buildSpreadsheetMatrix(sampleTasks, baseDate, 14);
 
     expect(payload.action).toBe('SYNC_MATRIX');
+    expect(payload.sheetName).toBe('WBS');
     expect(payload.matrix.length).toBe(5); // ヘッダー + 4タスク
     expect(payload.backgrounds.length).toBe(5);
     expect(payload.fontColors.length).toBe(5);

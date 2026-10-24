@@ -136,6 +136,11 @@ async function runVerification() {
     console.log(`      - 列数: ${payload.matrix[0].length} 列`);
     console.log(`      - ヘッダー例: [${payload.matrix[0].slice(0, 6).join(', ')}...]`);
 
+    if (payload.sheetName !== 'WBS') {
+      throw new Error(`Expected payload.sheetName to be 'WBS', got: ${payload.sheetName}`);
+    }
+    console.log('   ✅ 送信対象シート名 (WBS) 検証一致');
+
     // Verify header structure
     const headers = payload.matrix[0];
     if (headers[0] !== 'No' || headers[1] !== 'WBSタスク階層ツリー' || headers[2] !== 'ステータス' || headers[3] !== '完了予定日') {

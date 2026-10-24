@@ -117,50 +117,53 @@
         </div>
       </section>
 
-      <!-- Node Click Quick Inspector Dock (Docked directly above input section) -->
-      <div id="obsidian-inspector" class="obsidian-inspector-dock glass-card hidden">
-        <div class="inspector-header">
-          <div id="inspector-breadcrumb" class="inspector-breadcrumb"></div>
-          <span class="inspector-badge" id="inspector-status-badge">TODO</span>
-          <input type="text" id="inspector-title-input" class="inspector-title-input" placeholder="タスクタイトル..." />
-          <div class="inspector-due-date-group">
-            <label for="inspector-due-date-input" class="due-date-label">完了予定日:</label>
-            <input type="date" id="inspector-due-date-input" class="inspector-due-date-input" title="完了予定日を設定" />
+      <!-- Bottom Controls Dock: Stacks Inspector above Input Bar -->
+      <footer id="bottom-controls-dock" class="bottom-controls-dock">
+        <!-- Node Click Quick Inspector Dock (Docked directly above input section) -->
+        <div id="obsidian-inspector" class="obsidian-inspector-dock hidden">
+          <div class="inspector-header">
+            <div id="inspector-breadcrumb" class="inspector-breadcrumb"></div>
+            <span class="inspector-badge" id="inspector-status-badge">TODO</span>
+            <input type="text" id="inspector-title-input" class="inspector-title-input" placeholder="タスクタイトル..." />
+            <div class="inspector-due-date-group">
+              <label for="inspector-due-date-input" class="due-date-label">完了予定日:</label>
+              <input type="date" id="inspector-due-date-input" class="inspector-due-date-input" title="完了予定日を設定" />
+            </div>
+            <div class="status-btn-group">
+              <button class="btn-status-toggle" data-status="TODO">未着手</button>
+              <button class="btn-status-toggle" data-status="IN_PROGRESS">進行中</button>
+              <button class="btn-status-toggle" data-status="DONE">完了</button>
+            </div>
+            <div class="action-btn-group">
+              <button id="btn-inspector-elevate" class="btn-inspector-action btn-elevate" title="親タスクから切り離してルート要素化">
+                ルート化
+              </button>
+              <button id="btn-inspector-delete" class="btn-inspector-action btn-delete" title="タスクを削除">
+                削除
+              </button>
+            </div>
+            <button id="btn-inspector-close" class="btn-inspector-close" title="閉じる">✕</button>
           </div>
-          <div class="status-btn-group">
-            <button class="btn-status-toggle" data-status="TODO">未着手</button>
-            <button class="btn-status-toggle" data-status="IN_PROGRESS">進行中</button>
-            <button class="btn-status-toggle" data-status="DONE">完了</button>
-          </div>
-          <div class="action-btn-group">
-            <button id="btn-inspector-elevate" class="btn-inspector-action btn-elevate" title="親タスクから切り離してルート要素化">
-              ルート化
-            </button>
-            <button id="btn-inspector-delete" class="btn-inspector-action btn-delete" title="タスクを削除">
-              削除
-            </button>
-          </div>
-          <button id="btn-inspector-close" class="btn-inspector-close" title="閉じる">✕</button>
         </div>
-      </div>
 
-      <!-- Task Input Bar (Docked at the bottom) -->
-      <section class="task-input-section" id="input-section">
-        <form id="quick-task-form" class="chatgpt-prompt-bar">
-          <div class="prompt-pill-select">
-            <select id="select-quick-parent" title="親タスクを指定 (任意)">
-              <option value="">ルートタスク (親指定なし)</option>
-            </select>
-          </div>
+        <!-- Task Input Bar (Docked at the bottom) -->
+        <section class="task-input-section" id="input-section">
+          <form id="quick-task-form" class="chatgpt-prompt-bar">
+            <div class="prompt-pill-select">
+              <select id="select-quick-parent" title="親タスクを指定 (任意)">
+                <option value="">ルートタスク (親指定なし)</option>
+              </select>
+            </div>
 
-          <input type="text" id="quick-title-input" placeholder="新しいタスクを入力... (Enterで即時作成)" required
-            autocomplete="off" />
+            <input type="text" id="quick-title-input" placeholder="新しいタスクを入力... (Enterで即時作成)" required
+              autocomplete="off" />
 
-          <button type="submit" class="btn-send-prompt" title="タスクを作成">
-            作成
-          </button>
-        </form>
-      </section>
+            <button type="submit" class="btn-send-prompt" title="タスクを作成">
+              作成
+            </button>
+          </form>
+        </section>
+      </footer>
     </main>
   </div>
 

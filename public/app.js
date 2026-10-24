@@ -913,10 +913,10 @@
         return true;
       });
 
-      // Resident unscheduled isolated tasks (no parent, no children, dueDate == null)
+      // Resident isolated tasks (no parent, no children)
       const residentIsolatedTasks = currentTasks.filter((t) => {
         if (t.id === initialSelectedId) return false;
-        return isIsolatedTask(t) && !t.dueDate;
+        return isIsolatedTask(t);
       });
 
       visibleTasks = [...filteredTreeTasks, ...residentIsolatedTasks];
@@ -1108,7 +1108,7 @@
       activeTimelineSet = isTimelineMode ? new Set(activeTreeSet || []) : null;
       if (isTimelineMode && activeTimelineSet) {
         visibleTasks.forEach((t) => {
-          if (isIsolatedTask(t) && !t.dueDate) {
+          if (isIsolatedTask(t)) {
             activeTimelineSet.add(t.id);
           }
         });
@@ -2194,7 +2194,7 @@
       const activeTimelineSet = isTimelineMode ? new Set(activeTreeSet || []) : null;
       if (isTimelineMode && activeTimelineSet) {
         currentTasks.forEach((t) => {
-          if (isIsolatedTask(t) && !t.dueDate) {
+          if (isIsolatedTask(t)) {
             activeTimelineSet.add(t.id);
           }
         });
@@ -2614,6 +2614,7 @@
     doubleClickedSubtreeId = null;
     canvasPanOffsetX = 0;
     updateFilterControlsState();
+    renderCurrentView();
   }
 
   if (btnInspectorClose) {

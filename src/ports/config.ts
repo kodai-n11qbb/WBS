@@ -9,6 +9,7 @@ export interface AppConfig {
   nodeName: string;        // Node display name
   autoOpen: boolean;       // Automatically open browser on startup
   udpPort: number;         // UDP discovery port for P2P mode (default 41234)
+  spreadsheetWebhookUrl?: string; // Optional Google Apps Script Webhook URL for one-way sync
 }
 
 export interface ConfigPort {

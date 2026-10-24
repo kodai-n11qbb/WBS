@@ -14,6 +14,11 @@ import { StructuredTaskValidator } from '../domain/task_validator.js';
 import { crypto } from '../core/crypto_util.js';
 import { JsonConfigAdapter } from '../adapters/config.js';
 import { FsFileWatcherAdapter } from '../adapters/fs_file_watcher.js';
+import {
+  buildSpreadsheetMatrix,
+  computeMatrixHash,
+  pushToGoogleSpreadsheet,
+} from '../domain/spreadsheet_sync_service.js';
 
 const getFilename = () => {
   if (typeof __filename !== 'undefined') return __filename;
@@ -382,6 +387,74 @@ async function main() {
   const wss = new WebSocketServer({ server });
   const connectedClients = new Set<WebSocket>();
 
+  // Spreadsheet one-way push synchronization state
+  let currentSpreadsheetUrl: string = config.spreadsheetWebhookUrl || '';
+  let lastSentMatrixHash: string = '';
+  let spreadsheetSyncTimer: NodeJS.Timeout | null = null;
+  let spreadsheetSyncStatus: 'UNCONFIGURED' | 'IDLE' | 'SYNCING' | 'SUCCESS' | 'ERROR' = currentSpreadsheetUrl ? 'IDLE' : 'UNCONFIGURED';
+  let spreadsheetSyncMessage: string = currentSpreadsheetUrl ? '待機中' : '未設定';
+  let lastSpreadsheetSyncTime: number = 0;
+
+  function broadcastSpreadsheetStatus() {
+    const payload = JSON.stringify({
+      type: 'SPREADSHEET_STATUS_UPDATE',
+      configured: Boolean(currentSpreadsheetUrl),
+      webhookUrl: currentSpreadsheetUrl,
+      status: spreadsheetSyncStatus,
+      message: spreadsheetSyncMessage,
+      lastSyncTime: lastSpreadsheetSyncTime,
+    });
+    for (const client of connectedClients) {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(payload);
+      }
+    }
+  }
+
+  function triggerSpreadsheetSyncDebounced(delayMs = 3000) {
+    if (!currentSpreadsheetUrl) return;
+    if (spreadsheetSyncTimer) {
+      clearTimeout(spreadsheetSyncTimer);
+    }
+    spreadsheetSyncTimer = setTimeout(async () => {
+      await executeSpreadsheetSync(false);
+    }, delayMs);
+  }
+
+  async function executeSpreadsheetSync(force = false) {
+    if (!currentSpreadsheetUrl) return;
+    try {
+      const state = await nodeService.getProjectState(activeProjectId);
+      const tasks = Array.from(state.tasks.values());
+      const payload = buildSpreadsheetMatrix(tasks);
+      const hash = computeMatrixHash(payload.matrix);
+
+      if (!force && hash === lastSentMatrixHash) {
+        return;
+      }
+
+      spreadsheetSyncStatus = 'SYNCING';
+      spreadsheetSyncMessage = 'スプレッドシートに送信中...';
+      broadcastSpreadsheetStatus();
+
+      const result = await pushToGoogleSpreadsheet(currentSpreadsheetUrl, payload);
+      if (result.success) {
+        lastSentMatrixHash = hash;
+        spreadsheetSyncStatus = 'SUCCESS';
+        lastSpreadsheetSyncTime = Date.now();
+        spreadsheetSyncMessage = `同期完了 (${result.updatedRows || payload.matrix.length}行)`;
+      } else {
+        spreadsheetSyncStatus = 'ERROR';
+        spreadsheetSyncMessage = result.message || '同期エラー';
+      }
+    } catch (err: any) {
+      spreadsheetSyncStatus = 'ERROR';
+      spreadsheetSyncMessage = err.message || '同期エラー';
+    } finally {
+      broadcastSpreadsheetStatus();
+    }
+  }
+
   wss.on('connection', async (ws) => {
     connectedClients.add(ws);
     hasEverConnected = true;
@@ -400,6 +473,17 @@ async function main() {
           project: state.project,
           tasks: Array.from(state.tasks.values()),
         },
+      })
+    );
+
+    ws.send(
+      JSON.stringify({
+        type: 'SPREADSHEET_STATUS_UPDATE',
+        configured: Boolean(currentSpreadsheetUrl),
+        webhookUrl: currentSpreadsheetUrl,
+        status: spreadsheetSyncStatus,
+        message: spreadsheetSyncMessage,
+        lastSyncTime: lastSpreadsheetSyncTime,
       })
     );
 
@@ -488,6 +572,24 @@ async function main() {
               })
             );
           }
+        } else if (data.action === 'UPDATE_SPREADSHEET_CONFIG') {
+          currentSpreadsheetUrl = (data.webhookUrl || '').trim();
+          await configAdapter.saveConfig({ spreadsheetWebhookUrl: currentSpreadsheetUrl });
+          lastSentMatrixHash = '';
+          if (currentSpreadsheetUrl) {
+            spreadsheetSyncStatus = 'IDLE';
+            spreadsheetSyncMessage = 'URL設定完了';
+            broadcastSpreadsheetStatus();
+            await executeSpreadsheetSync(true);
+          } else {
+            spreadsheetSyncStatus = 'UNCONFIGURED';
+            spreadsheetSyncMessage = '未設定';
+            broadcastSpreadsheetStatus();
+          }
+        } else if (data.action === 'FORCE_SPREADSHEET_SYNC') {
+          if (currentSpreadsheetUrl) {
+            await executeSpreadsheetSync(true);
+          }
         }
       } catch (e) {
         console.error('[WS Message Error]', e);
@@ -521,6 +623,9 @@ async function main() {
         client.send(payload);
       }
     }
+
+    // Trigger debounced spreadsheet synchronization
+    triggerSpreadsheetSyncDebounced(3000);
   }
 
   transport.onMessage(async () => {

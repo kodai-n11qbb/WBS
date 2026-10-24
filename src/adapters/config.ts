@@ -166,6 +166,11 @@ export class JsonConfigAdapter implements ConfigPort {
         parsed.dataDir = (rawPath.endsWith('.json') || rawPath.endsWith('.jsonl')) ? path.dirname(rawPath) : rawPath;
       } else if (arg === '--no-auto-open' || arg === '--auto-open=false') {
         parsed.autoOpen = false;
+      } else if ((arg === '--spreadsheet-url' || arg === '--sheets-url') && args[i + 1]) {
+        parsed.spreadsheetWebhookUrl = args[i + 1];
+        i++;
+      } else if (arg.startsWith('--spreadsheet-url=') || arg.startsWith('--sheets-url=')) {
+        parsed.spreadsheetWebhookUrl = arg.split('=')[1];
       }
     }
 

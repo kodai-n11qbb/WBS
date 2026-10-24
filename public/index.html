@@ -59,6 +59,53 @@
       </div>
     </div>
 
+    <!-- Google Spreadsheet Sync Settings Modal Dialog -->
+    <div id="spreadsheet-sync-modal" class="modal-backdrop hidden">
+      <div class="modal-card spreadsheet-modal-card">
+        <div class="modal-header-with-close">
+          <h3>📊 Googleスプレッドシート連携 (一方通行)</h3>
+          <button id="btn-spreadsheet-modal-close" class="btn-inspector-close" title="閉じる">✕</button>
+        </div>
+        <p class="modal-desc">
+          タスク更新時に「横軸：日程 × 縦軸：WBSツリー」の最新ガント行列をGoogleスプレッドシートへ自動プッシュします。<br>
+          WBSer側で書式・色を最適化して一括送信するため、スプレッドシート側の負荷は実質ゼロ・料金も完全無料（GAS）です。
+        </p>
+
+        <div class="sync-status-banner" id="spreadsheet-sync-banner">
+          <span class="sync-status-dot unconfigured" id="modal-sync-dot"></span>
+          <span id="spreadsheet-status-msg">未設定 (URLを入力してください)</span>
+        </div>
+
+        <div class="form-group-sheets">
+          <label for="spreadsheet-url-input">Google Apps Script (GAS) ウェブアプリURL:</label>
+          <input type="url" id="spreadsheet-url-input" class="modal-text-input" placeholder="https://script.google.com/macros/s/.../exec" />
+        </div>
+
+        <div class="gas-setup-guide">
+          <div class="guide-title">
+            <span>💡 導入手順 (1分・完全無料)</span>
+            <button type="button" id="btn-copy-gas-code" class="btn-copy-code" title="GASコードをクリップボードにコピー">
+              📋 GASコードをコピー
+            </button>
+          </div>
+          <ol class="guide-steps">
+            <li>Googleスプレッドシートを新規作成（または既存シートを開く）</li>
+            <li>メニュー <strong>[拡張機能] → [Apps Script]</strong> を開く</li>
+            <li>上の「GASコードをコピー」を押してコードを貼り付けて保存</li>
+            <li>右上の <strong>[デプロイ] → [新しいデプロイ]</strong> を選択</li>
+            <li>種類「ウェブアプリ」、次のユーザーとして実行「自分」、アクセスできるユーザー「全員」でデプロイ</li>
+            <li>発行された <strong>ウェブアプリURL</strong> を上に貼り付けて「保存」をクリック</li>
+          </ol>
+        </div>
+
+        <div class="modal-actions">
+          <button id="btn-spreadsheet-modal-cancel" class="btn-modal btn-cancel">閉じる</button>
+          <button id="btn-spreadsheet-sync-now" class="btn-modal btn-secondary">今すぐ手動同期</button>
+          <button id="btn-spreadsheet-save" class="btn-modal btn-confirm">設定を保存</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Error Toast Notification -->
     <div id="error-toast" class="toast hidden"></div>
 
@@ -105,6 +152,13 @@
               <button type="button" class="fontsize-btn" data-size="large">大</button>
             </div>
           </div>
+
+          <!-- Google Spreadsheet Sync Button -->
+          <button id="btn-spreadsheet-sync-modal" class="btn-icon-sheets" title="Googleスプレッドシート連携設定">
+            <span class="sheets-icon">📊</span>
+            <span class="sheets-btn-text">スプシ連携</span>
+            <span id="sync-status-indicator" class="sync-dot unconfigured" title="連携状態: 未設定"></span>
+          </button>
 
           <!-- Theme Switcher Button -->
           <button id="btn-theme-toggle" class="btn-icon-theme" title="ダーク/ライトモード切り替え">

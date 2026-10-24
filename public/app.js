@@ -367,6 +367,146 @@
   const btnInProgressCancel = document.getElementById('btn-in-progress-cancel');
   const btnInProgressConfirm = document.getElementById('btn-in-progress-confirm');
 
+  // Spreadsheet Sync Modal Elements
+  const btnSpreadsheetSyncModal = document.getElementById('btn-spreadsheet-sync-modal');
+  const syncStatusIndicator = document.getElementById('sync-status-indicator');
+  const spreadsheetSyncModal = document.getElementById('spreadsheet-sync-modal');
+  const btnSpreadsheetModalClose = document.getElementById('btn-spreadsheet-modal-close');
+  const btnSpreadsheetModalCancel = document.getElementById('btn-spreadsheet-modal-cancel');
+  const btnSpreadsheetSave = document.getElementById('btn-spreadsheet-save');
+  const btnSpreadsheetSyncNow = document.getElementById('btn-spreadsheet-sync-now');
+  const btnCopyGasCode = document.getElementById('btn-copy-gas-code');
+  const spreadsheetUrlInput = document.getElementById('spreadsheet-url-input');
+  const spreadsheetStatusMsg = document.getElementById('spreadsheet-status-msg');
+  const modalSyncDot = document.getElementById('modal-sync-dot');
+
+  let currentSpreadsheetState = {
+    configured: false,
+    webhookUrl: '',
+    status: 'UNCONFIGURED',
+    message: '未設定',
+    lastSyncTime: 0
+  };
+
+  const GAS_TEMPLATE_CODE = `/**
+ * =========================================================================
+ * WBSer - Googleスプレッドシート一方通行連携スクリプト (Google Apps Script)
+ * =========================================================================
+ * 
+ * 【使い方】
+ * 1. Googleスプレッドシートを新規作成（または既存のシートを開く）
+ * 2. メニュー「拡張機能」>「Apps Script」を開き、本コードをすべて貼り付けて保存
+ * 3. 画面右上の「デプロイ」>「新しいデプロイ」をクリック
+ *    - 種類の選択: 「ウェブアプリ」
+ *    - 次のユーザーとして実行: 「自分」
+ *    - アクセスできるユーザー: 「全員」
+ * 4. 発行された「ウェブアプリのURL」をコピーし、WBSerの連携設定に貼り付ける
+ */
+
+function doPost(e) {
+  try {
+    if (!e || !e.postData || !e.postData.contents) {
+      return ContentService.createTextOutput(JSON.stringify({ status: 'ERROR', message: 'No payload received' }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    var payload = JSON.parse(e.postData.contents);
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getActiveSheet();
+
+    if (payload.action === 'PING') {
+      return ContentService.createTextOutput(JSON.stringify({ status: 'OK', message: 'WBSer Connected successfully' }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    if (payload.action === 'SYNC_MATRIX' && payload.matrix && payload.matrix.length > 0) {
+      var numRows = payload.matrix.length;
+      var numCols = payload.matrix[0].length;
+
+      sheet.clear();
+      var range = sheet.getRange(1, 1, numRows, numCols);
+      range.setValues(payload.matrix);
+
+      if (payload.backgrounds && payload.backgrounds.length === numRows) {
+        range.setBackgrounds(payload.backgrounds);
+      }
+
+      if (payload.fontColors && payload.fontColors.length === numRows) {
+        range.setFontColors(payload.fontColors);
+      }
+
+      sheet.setFrozenRows(1);
+      sheet.setFrozenColumns(2);
+
+      sheet.setColumnWidth(1, 45);  // No
+      sheet.setColumnWidth(2, 280); // WBS階層ツリー
+      sheet.setColumnWidth(3, 85);  // ステータス
+      sheet.setColumnWidth(4, 95);  // 完了予定日
+
+      return ContentService.createTextOutput(JSON.stringify({
+        status: 'OK',
+        updatedRows: numRows,
+        updatedCols: numCols,
+        timestamp: new Date().toISOString()
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    return ContentService.createTextOutput(JSON.stringify({ status: 'ERROR', message: 'Invalid action' }))
+      .setMimeType(ContentService.MimeType.JSON);
+
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ status: 'ERROR', error: err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+`;
+
+  function updateSpreadsheetUI(data) {
+    currentSpreadsheetState = { ...currentSpreadsheetState, ...data };
+    const statusLower = (currentSpreadsheetState.status || 'UNCONFIGURED').toLowerCase();
+
+    if (syncStatusIndicator) {
+      syncStatusIndicator.className = `sync-dot ${statusLower}`;
+      const timeStr = currentSpreadsheetState.lastSyncTime
+        ? ` (${new Date(currentSpreadsheetState.lastSyncTime).toLocaleTimeString()})`
+        : '';
+      syncStatusIndicator.title = `スプレッドシート連携: ${currentSpreadsheetState.message}${timeStr}`;
+    }
+
+    if (modalSyncDot) {
+      modalSyncDot.className = `sync-status-dot ${statusLower}`;
+    }
+
+    if (spreadsheetStatusMsg) {
+      const timeStr = currentSpreadsheetState.lastSyncTime
+        ? ` (最終: ${new Date(currentSpreadsheetState.lastSyncTime).toLocaleTimeString()})`
+        : '';
+      spreadsheetStatusMsg.textContent = `${currentSpreadsheetState.message}${timeStr}`;
+    }
+
+    if (spreadsheetUrlInput && document.activeElement !== spreadsheetUrlInput) {
+      spreadsheetUrlInput.value = currentSpreadsheetState.webhookUrl || '';
+    }
+
+    if (btnSpreadsheetSyncNow) {
+      btnSpreadsheetSyncNow.disabled = !currentSpreadsheetState.configured || currentSpreadsheetState.status === 'SYNCING';
+    }
+  }
+
+  function openSpreadsheetModal() {
+    if (!spreadsheetSyncModal) return;
+    spreadsheetSyncModal.classList.remove('hidden');
+    if (spreadsheetUrlInput) {
+      spreadsheetUrlInput.value = currentSpreadsheetState.webhookUrl || '';
+      spreadsheetUrlInput.focus();
+    }
+  }
+
+  function closeSpreadsheetModal() {
+    if (!spreadsheetSyncModal) return;
+    spreadsheetSyncModal.classList.add('hidden');
+  }
+
   // WebSocket Setup
   function initWebSocket() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -387,6 +527,8 @@
           updateParentTaskOptions();
           updateInspectorViewIfNeeded();
           renderCurrentView();
+        } else if (data.type === 'SPREADSHEET_STATUS_UPDATE') {
+          updateSpreadsheetUI(data);
         } else if (data.type === 'ERROR') {
           showErrorToast(data.message);
         }
@@ -2798,6 +2940,14 @@
         return;
       }
 
+      if (spreadsheetSyncModal && !spreadsheetSyncModal.classList.contains('hidden')) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          closeSpreadsheetModal();
+          return;
+        }
+      }
+
       if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter', 'Escape'].includes(e.key)) {
         return;
       }
@@ -3023,6 +3173,86 @@
     quickInputTitle.value = '';
   });
 
+  // Spreadsheet Modal Event Listeners
+  if (btnSpreadsheetSyncModal) {
+    btnSpreadsheetSyncModal.addEventListener('click', () => {
+      openSpreadsheetModal();
+    });
+  }
+
+  if (btnSpreadsheetModalClose) {
+    btnSpreadsheetModalClose.addEventListener('click', closeSpreadsheetModal);
+  }
+  if (btnSpreadsheetModalCancel) {
+    btnSpreadsheetModalCancel.addEventListener('click', closeSpreadsheetModal);
+  }
+
+  if (spreadsheetSyncModal) {
+    spreadsheetSyncModal.addEventListener('click', (e) => {
+      if (e.target === spreadsheetSyncModal) {
+        closeSpreadsheetModal();
+      }
+    });
+  }
+
+  if (btnCopyGasCode) {
+    btnCopyGasCode.addEventListener('click', async () => {
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(GAS_TEMPLATE_CODE);
+        } else {
+          const ta = document.createElement('textarea');
+          ta.value = GAS_TEMPLATE_CODE;
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          document.body.removeChild(ta);
+        }
+        showNotificationToast('📋 GASコードをクリップボードにコピーしました！', 'success');
+      } catch (err) {
+        showErrorToast('コピーに失敗しました');
+      }
+    });
+  }
+
+  if (btnSpreadsheetSave) {
+    btnSpreadsheetSave.addEventListener('click', () => {
+      const url = (spreadsheetUrlInput ? spreadsheetUrlInput.value : '').trim();
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(
+          JSON.stringify({
+            action: 'UPDATE_SPREADSHEET_CONFIG',
+            webhookUrl: url,
+          })
+        );
+        showNotificationToast('スプレッドシート設定を保存しました', 'success');
+        closeSpreadsheetModal();
+      }
+    });
+  }
+
+  if (spreadsheetUrlInput) {
+    spreadsheetUrlInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (btnSpreadsheetSave) btnSpreadsheetSave.click();
+      }
+    });
+  }
+
+  if (btnSpreadsheetSyncNow) {
+    btnSpreadsheetSyncNow.addEventListener('click', () => {
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(
+          JSON.stringify({
+            action: 'FORCE_SPREADSHEET_SYNC',
+          })
+        );
+        showNotificationToast('スプレッドシートへ送信中...', 'info');
+      }
+    });
+  }
+
   // Expose test/debug helper for Playwright layout verification
   window.__wbserDebug = {
     getGraphNodes: () => graphNodes.map((n) => ({
@@ -3043,6 +3273,9 @@
     getTimelineSlots: () => Array.from(timelineSlotMap.entries()).map(([taskId, info]) => ({ taskId, ...info })),
     togglePastLabels,
     toggleFutureLabels,
+    getSpreadsheetState: () => ({ ...currentSpreadsheetState }),
+    openSpreadsheetModal,
+    closeSpreadsheetModal,
     getCanvasMetrics: () => {
       const rect = canvas ? canvas.getBoundingClientRect() : { width: 0, height: 0, top: 0, bottom: 0, left: 0, right: 0 };
       const inspectorRect = obsidianInspector && !obsidianInspector.classList.contains('hidden')
@@ -3069,7 +3302,6 @@
           focusedTaskId = node.task.id;
         } else if (inspectorSelectedTaskId === node.task.id) {
           focusedTaskId = node.task.id;
-          doubleClickedSubtreeId = null;
         }
         inspectorSelectedTaskId = node.task.id;
         openObsidianNodeInspector(node.task);
